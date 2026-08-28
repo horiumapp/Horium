@@ -153,6 +153,15 @@ const App: React.FC = () => {
       setLoading(false);
     };
 
+    // Detect password recovery directly from URL hash or path
+    if (
+      window.location.hash.includes('type=recovery') ||
+      window.location.search.includes('type=recovery') ||
+      window.location.pathname.includes('reset-password')
+    ) {
+      setShowResetPasswordModal(true);
+    }
+
     checkSession();
 
     // Listen for auth changes
@@ -522,12 +531,16 @@ const App: React.FC = () => {
               setResetPasswordFeedback(null);
               try {
                 await authService.updatePassword(newPasswordInput);
-                setResetPasswordFeedback('Senha redefinida com sucesso! Você já pode utilizar sua nova senha.');
+                setResetPasswordFeedback('Senha redefinida com sucesso! Redirecionando...');
                 setTimeout(() => {
                   setShowResetPasswordModal(false);
                   setNewPasswordInput('');
                   setResetPasswordFeedback(null);
-                }, 2000);
+                  if (window.location.hash || window.location.pathname.includes('reset-password')) {
+                    window.history.replaceState(null, '', window.location.origin);
+                  }
+                  setView(AppView.DASHBOARD);
+                }, 1500);
               } catch (err: any) {
                 setResetPasswordFeedback(authService.translateError(err));
               } finally {
