@@ -45,6 +45,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   useEffect(() => {
+    if (hideNav || currentView === AppView.LOGIN) {
+      setIsAdmin(false);
+      setUserEmail('Usuário Horium');
+      setNotifications([]);
+      setPendingApprovalsCount(0);
+      return;
+    }
+
     const fetchUser = async (sessionUser?: any) => {
       try {
         let user = sessionUser;
@@ -62,7 +70,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
             const fetched = await notificationService.getNotifications(user.id);
             setNotifications(fetched);
           } catch (e) {
-            console.error("Error loading notifications", e);
+            setNotifications([]);
           }
 
           // If user is admin, fetch pending licenses
@@ -71,7 +79,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
               const count = await adminLicenseService.getPendingLicensesCount();
               setPendingApprovalsCount(count);
             } catch (e) {
-              console.error("Error loading pending licenses", e);
+              setPendingApprovalsCount(0);
             }
           }
 
@@ -86,9 +94,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
           setIsAdmin(false);
           setUserEmail('Usuário Horium');
           setNotifications([]);
+          setPendingApprovalsCount(0);
         }
       } catch (e) {
-        console.error("Error fetching user metadata:", e);
+        setIsAdmin(false);
+        setUserEmail('Usuário Horium');
+        setNotifications([]);
+        setPendingApprovalsCount(0);
       }
     };
 
@@ -97,7 +109,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
     let subscription: any;
     import('../services/supabaseClient').then(m => {
       const { data } = m.supabase.auth.onAuthStateChange((_event, session) => {
-        fetchUser(session?.user);
+        if (!hideNav && currentView !== AppView.LOGIN) {
+          fetchUser(session?.user);
+        }
       });
       subscription = data.subscription;
     });
@@ -105,7 +119,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
     return () => {
       if (subscription) subscription.unsubscribe();
     };
-  }, []);
+  }, [hideNav, currentView]);
 
   useEffect(() => {
     // Initial theme check

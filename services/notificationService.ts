@@ -11,17 +11,21 @@ export interface AppNotification {
 
 export const notificationService = {
     async getNotifications(userId: string): Promise<AppNotification[]> {
-        const { data, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+        try {
+            const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
 
-        if (error) {
-            console.error('Error fetching notifications:', error);
-            throw error;
+            if (error) {
+                console.warn('Could not fetch notifications:', error.message);
+                return [];
+            }
+            return data || [];
+        } catch (e) {
+            return [];
         }
-        return data || [];
     },
 
     async getUnreadCount(userId: string): Promise<number> {

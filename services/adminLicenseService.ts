@@ -143,25 +143,17 @@ export const adminLicenseService = {
      */
     async getPendingLicensesCount(): Promise<number> {
         try {
-            // Tenta primeiro via RPC segura
-            const { data: rpcCount, error: rpcError } = await supabase.rpc('get_pending_licenses_count_rpc');
-            if (!rpcError && typeof rpcCount === 'number') {
-                return rpcCount;
-            }
-
             const { count, error } = await supabase
                 .from('licenses')
                 .select('*', { count: 'exact', head: true })
                 .or('payment_status.eq.Aguardando,payment_status.eq.under_review');
 
             if (error) {
-                console.error("Error fetching pending licenses count:", error);
                 return 0;
             }
 
             return count || 0;
         } catch (err: any) {
-            console.error("Erro no adminLicenseService.getPendingLicensesCount:", err);
             return 0;
         }
     }

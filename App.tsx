@@ -63,7 +63,7 @@ const App: React.FC = () => {
 
   // Debounced Auto-save com proteção contra race conditions
   useEffect(() => {
-    if (!setupData.id || loading || currentView === AppView.PROCESSING) return;
+    if (!setupData.id || loading || currentView === AppView.PROCESSING || currentView === AppView.LOGIN || !session) return;
 
     const currentSeq = ++latestSaveSeq.current;
     const timer = setTimeout(async () => {
@@ -80,7 +80,9 @@ const App: React.FC = () => {
       } catch (err) {
         if (currentSeq === latestSaveSeq.current) {
           console.error('Auto-save failed:', err);
-          setSaveError('Erro ao salvar automaticamente. Verifique sua conexão.');
+          if (session && currentView !== AppView.LOGIN) {
+            setSaveError('Erro ao salvar automaticamente. Verifique sua conexão.');
+          }
         }
       } finally {
         if (currentSeq === latestSaveSeq.current) {
@@ -90,7 +92,7 @@ const App: React.FC = () => {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [setupData, loading, currentView]);
+  }, [setupData, loading, currentView, session]);
 
   const loadLicenseStatus = async (userId: string) => {
     try {
@@ -159,6 +161,9 @@ const App: React.FC = () => {
         }
       } else {
         setView(AppView.LOGIN);
+        setSetupData(INITIAL_SETUP);
+        setSaveError(null);
+        setIsSaving(false);
       }
       setLoading(false);
     };
@@ -191,6 +196,9 @@ const App: React.FC = () => {
       } else {
         setView(AppView.LOGIN);
         setSchedules([]);
+        setSetupData(INITIAL_SETUP);
+        setSaveError(null);
+        setIsSaving(false);
         setActiveLicenseStatus('Sem Licença');
         localStorage.removeItem('horium_last_view');
         localStorage.removeItem('horium_last_schedule_id');
@@ -230,6 +238,9 @@ const App: React.FC = () => {
     try {
       await authService.signOut();
       setSession(null);
+      setSetupData(INITIAL_SETUP);
+      setSaveError(null);
+      setIsSaving(false);
       localStorage.removeItem('horium_last_view');
       localStorage.removeItem('horium_last_schedule_id');
       setView(AppView.LOGIN);
@@ -494,28 +505,30 @@ const App: React.FC = () => {
       </Suspense>
 
       {/* Persistence Notifications */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-[9999] pointer-events-none">
-        {isSaving && (
-          <div className="bg-primary/95 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-2 pointer-events-auto">
-            <div className="size-1.5 bg-white rounded-full animate-pulse"></div>
-            Sincronizando...
-          </div>
-        )}
-        {saveError && (
-          <div className="bg-red-500 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold animate-in slide-in-from-right pointer-events-auto">
-            <span className="material-symbols-outlined text-lg">error</span>
-            <div>
-              <p>{saveError}</p>
-              <button
-                onClick={() => setSetupData({ ...setupData })}
-                className="underline mt-1 hover:text-white/80"
-              >
-                Tentar novamente
-              </button>
+      {session && currentView !== AppView.LOGIN && (
+        <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-[9999] pointer-events-none">
+          {isSaving && (
+            <div className="bg-primary/95 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-2 pointer-events-auto">
+              <div className="size-1.5 bg-white rounded-full animate-pulse"></div>
+              Sincronizando...
             </div>
-          </div>
-        )}
-      </div>
+          )}
+          {saveError && (
+            <div className="bg-red-500 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold animate-in slide-in-from-right pointer-events-auto">
+              <span className="material-symbols-outlined text-lg">error</span>
+              <div>
+                <p>{saveError}</p>
+                <button
+                  onClick={() => setSetupData({ ...setupData })}
+                  className="underline mt-1 hover:text-white/80"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modal de Redefinição de Senha (Password Recovery) */}
       <Modal
