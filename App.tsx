@@ -34,6 +34,7 @@ const App: React.FC = () => {
   const [setupData, setSetupData] = useState<SetupData>(INITIAL_SETUP);
   const [schedules, setSchedules] = useState<SetupData[]>([]);
   const [activeLicenseStatus, setActiveLicenseStatus] = useState<string>('Sem Licença');
+  const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -122,8 +123,9 @@ const App: React.FC = () => {
   useEffect(() => {
     // Initial session check
     const checkSession = async () => {
-      const session = await authService.getSession();
-      if (session) {
+      const currentSession = await authService.getSession();
+      setSession(currentSession);
+      if (currentSession) {
         // Restore session from localStorage
         const savedView = localStorage.getItem('horium_last_view') as AppView;
         const savedScheduleId = localStorage.getItem('horium_last_schedule_id');
@@ -134,7 +136,7 @@ const App: React.FC = () => {
           setSchedules(fetchedSchedules);
 
           // Fetch license status
-          await loadLicenseStatus(session.user.id);
+          await loadLicenseStatus(currentSession.user.id);
 
           if (savedView && Object.values(AppView).includes(savedView) && savedView !== AppView.LOGIN) {
             if (savedScheduleId) {
@@ -173,20 +175,19 @@ const App: React.FC = () => {
     checkSession();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      setSession(newSession);
       if (event === 'PASSWORD_RECOVERY') {
         setShowResetPasswordModal(true);
       }
-      if (session) {
+      if (newSession) {
         // Fetch license status immediately on auth change
-        loadLicenseStatus(session.user.id);
+        loadLicenseStatus(newSession.user.id);
 
         // If we don't have schedules yet, fetch them
-        if (schedules.length === 0) {
-          scheduleService.getSchedules()
-            .then(setSchedules)
-            .catch(err => console.error('Error loading schedules:', err));
-        }
+        scheduleService.getSchedules()
+          .then(setSchedules)
+          .catch(err => console.error('Error loading schedules:', err));
       } else {
         setView(AppView.LOGIN);
         setSchedules([]);
@@ -228,6 +229,7 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     try {
       await authService.signOut();
+      setSession(null);
       localStorage.removeItem('horium_last_view');
       localStorage.removeItem('horium_last_schedule_id');
       setView(AppView.LOGIN);
@@ -403,6 +405,10 @@ const App: React.FC = () => {
   const renderContent = () => {
     if (loading) return <PageLoader />;
 
+    if (!session || currentView === AppView.LOGIN) {
+      return <LoginPage onLogin={handleLogin} />;
+    }
+
     switch (currentView) {
       case AppView.LOGIN:
         return <LoginPage onLogin={handleLogin} />;
@@ -473,8 +479,12 @@ const App: React.FC = () => {
   return (
     <Layout
       currentView={currentView}
-      setView={(v) => { audio.playClick(); setView(v); }}
-      hideNav={currentView === AppView.LOGIN}
+      setView={(v) => {
+        if (!session && v !== AppView.LOGIN) return;
+        audio.playClick();
+        setView(v);
+      }}
+      hideNav={!session || currentView === AppView.LOGIN}
       onLogout={handleLogout}
       isMuted={isMuted}
       setIsMuted={handleSetMuted}

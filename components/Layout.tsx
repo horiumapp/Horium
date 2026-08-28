@@ -137,8 +137,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
     <div className="min-h-screen flex flex-col font-sans text-[#111418] dark:text-gray-100 bg-[#f8f9fa] dark:bg-[#1a2634] transition-colors duration-300">
       <header className="no-print flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-[#101822]/80 backdrop-blur-md px-6 lg:px-10 py-3 sticky top-0 z-50 transition-all">
         <div
-          className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity"
-          onClick={() => setView(AppView.DASHBOARD)}
+          className={`flex items-center gap-4 ${hideNav || currentView === AppView.LOGIN ? 'cursor-default' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
+          onClick={hideNav || currentView === AppView.LOGIN ? undefined : () => setView(AppView.DASHBOARD)}
         >
           <div className="size-8 text-primary animate-in spin-in-180 duration-700">
             {LOGO_SVG}
