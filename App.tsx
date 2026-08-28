@@ -94,7 +94,11 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [setupData, loading, currentView, session]);
 
-  const loadLicenseStatus = async (userId: string) => {
+  const loadLicenseStatus = async (userId?: string) => {
+    if (!userId) {
+      setActiveLicenseStatus('Sem Licença');
+      return;
+    }
     try {
       const { data: userLicenses, error: licenseError } = await supabase
         .from('licenses')
@@ -116,8 +120,7 @@ const App: React.FC = () => {
       } else {
         setActiveLicenseStatus('Sem Licença');
       }
-    } catch (err) {
-      console.error('Error loading license status:', err);
+    } catch {
       setActiveLicenseStatus('Sem Licença');
     }
   };
@@ -125,19 +128,16 @@ const App: React.FC = () => {
   useEffect(() => {
     // Initial session check
     const checkSession = async () => {
-      const currentSession = await authService.getSession();
-      setSession(currentSession);
-      if (currentSession) {
-        // Restore session from localStorage
-        const savedView = localStorage.getItem('horium_last_view') as AppView;
-        const savedScheduleId = localStorage.getItem('horium_last_schedule_id');
+      try {
+        const currentSession = await authService.getSession();
+        setSession(currentSession);
+        if (currentSession) {
+          const savedView = localStorage.getItem('horium_last_view') as AppView;
+          const savedScheduleId = localStorage.getItem('horium_last_schedule_id');
 
-        try {
-          // Fetch schedules
           const fetchedSchedules = await scheduleService.getSchedules();
           setSchedules(fetchedSchedules);
 
-          // Fetch license status
           await loadLicenseStatus(currentSession.user.id);
 
           if (savedView && Object.values(AppView).includes(savedView) && savedView !== AppView.LOGIN) {
@@ -155,17 +155,18 @@ const App: React.FC = () => {
           } else {
             setView(AppView.DASHBOARD);
           }
-        } catch (err) {
-          console.error('Error restoring session:', err);
-          setView(AppView.DASHBOARD);
+        } else {
+          setView(AppView.LOGIN);
+          setSetupData(INITIAL_SETUP);
+          setSaveError(null);
+          setIsSaving(false);
         }
-      } else {
+      } catch (err) {
+        console.error('Error during session check:', err);
         setView(AppView.LOGIN);
-        setSetupData(INITIAL_SETUP);
-        setSaveError(null);
-        setIsSaving(false);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     // Detect password recovery directly from URL hash or path
@@ -186,10 +187,7 @@ const App: React.FC = () => {
         setShowResetPasswordModal(true);
       }
       if (newSession) {
-        // Fetch license status immediately on auth change
         loadLicenseStatus(newSession.user.id);
-
-        // If we don't have schedules yet, fetch them
         scheduleService.getSchedules()
           .then(setSchedules)
           .catch(err => console.error('Error loading schedules:', err));
@@ -210,24 +208,15 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Refresh data when returning to Dashboard
+  // Refresh data when returning to Dashboard from other views
+  const prevViewRef = React.useRef<AppView>(currentView);
   useEffect(() => {
-    if (currentView === AppView.DASHBOARD) {
-      const refresh = async () => {
-        const session = await authService.getSession();
-        if (session) {
-          try {
-            const fetchedSchedules = await scheduleService.getSchedules();
-            setSchedules(fetchedSchedules);
-            await loadLicenseStatus(session.user.id);
-          } catch (err) {
-            console.error('Error refreshing dashboard data:', err);
-          }
-        }
-      };
-      refresh();
+    if (currentView === AppView.DASHBOARD && prevViewRef.current !== AppView.LOGIN && prevViewRef.current !== AppView.DASHBOARD && session) {
+      scheduleService.getSchedules().then(setSchedules).catch(console.error);
+      loadLicenseStatus(session.user?.id);
     }
-  }, [currentView]);
+    prevViewRef.current = currentView;
+  }, [currentView, session]);
 
   const handleLogin = () => {
     audio.playClick();
