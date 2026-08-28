@@ -1,14 +1,44 @@
-import ExcelJS from 'exceljs';
+import writeXlsxFile, { Row, Cell } from 'write-excel-file/browser';
 import { saveAs } from 'file-saver';
 import { SetupData } from '../types';
 import { DAYS_OF_WEEK } from '../constants';
+
+/**
+ * Formats a color string to valid 6-digit hex (#RRGGBB)
+ */
+const formatHexColor = (color?: string, fallback = '#FFFFFF'): string => {
+    if (!color) return fallback;
+    const clean = color.replace('#', '').trim();
+    if (clean.length === 3) {
+        return `#${clean[0]}${clean[0]}${clean[1]}${clean[1]}${clean[2]}${clean[2]}`;
+    }
+    if (clean.length === 6) {
+        return `#${clean}`;
+    }
+    return fallback;
+};
+
+/**
+ * Computes contrast text color (black or white) based on background luminance
+ */
+const getContrastTextColor = (hexColor: string): string => {
+    const hex = hexColor.replace('#', '');
+    if (hex.length === 6) {
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+        return yiq >= 150 ? '#000000' : '#FFFFFF';
+    }
+    return '#FFFFFF';
+};
 
 /**
  * Service to handle Export to Excel (XLSX) with styling
  */
 export const excelService = {
     /**
-     * Helper to convert HEX color to ARGB for ExcelJS
+     * Helper to convert HEX color to ARGB (maintained for backward compatibility)
      */
     hexToARGB: (hex: string) => {
         if (!hex) return 'FFFFFFFF';
@@ -19,55 +49,84 @@ export const excelService = {
      * Generates a styled Excel for the specified view mode (TEACHER or CLASS)
      */
     exportEntityView: async (viewMode: 'TEACHER' | 'CLASS', selectedId: string, data: SetupData) => {
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Horário');
-
         const entityName = viewMode === 'CLASS'
             ? data.classes.find(c => c.id === selectedId)?.name
             : data.teachers.find(t => t.id === selectedId)?.name;
 
-        // Title row
-        const titleCell = worksheet.getCell('A1');
-        titleCell.value = `HORÁRIO - ${entityName || 'GERAL'}`;
-        titleCell.font = { name: 'Arial Black', size: 16, color: { argb: 'FF136DEC' } };
-        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-        worksheet.mergeCells(`A1:${String.fromCharCode(65 + DAYS_OF_WEEK.length)}1`);
-        worksheet.getRow(1).height = 40;
+        const totalCols = 1 + DAYS_OF_WEEK.length;
 
-        // Header row
-        const headerRow = worksheet.getRow(3);
-        headerRow.values = ['HORA', ...DAYS_OF_WEEK];
-        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-        headerRow.height = 25;
+        // Title row (Row 1)
+        const titleRow: Row = [
+            {
+                value: `HORÁRIO - ${entityName || 'GERAL'}`,
+                fontWeight: 'bold',
+                fontSize: 16,
+                textColor: '#136DEC',
+                align: 'center',
+                alignVertical: 'center',
+                columnSpan: totalCols,
+                height: 40,
+            },
+            ...Array(totalCols - 1).fill(null)
+        ];
 
-        headerRow.eachCell((cell) => {
-            cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FF136DEC' }
+        // Empty spacing row (Row 2)
+        const emptyRow: Row = [
+            {
+                value: '',
+                columnSpan: totalCols,
+                height: 12,
+            },
+            ...Array(totalCols - 1).fill(null)
+        ];
+
+        // Header row (Row 3)
+        const headerRow: Row = [
+            {
+                value: 'HORA',
+                fontWeight: 'bold',
+                textColor: '#FFFFFF',
+                backgroundColor: '#136DEC',
+                align: 'center',
+                alignVertical: 'center',
+                borderColor: '#000000',
+                borderStyle: 'thin',
+                height: 25,
+            },
+            ...DAYS_OF_WEEK.map(day => ({
+                value: day,
+                fontWeight: 'bold' as const,
+                textColor: '#FFFFFF',
+                backgroundColor: '#136DEC',
+                align: 'center' as const,
+                alignVertical: 'center' as const,
+                borderColor: '#000000',
+                borderStyle: 'thin' as const,
+                height: 25,
+            }))
+        ];
+
+        const lessons = data.schedule?.[0]?.slots?.filter(s => s.type === 'AULA') || [];
+
+        const lessonRows: Row[] = lessons.map((lesson, idx) => {
+            const timeCell: Cell = {
+                value: `${lesson.start} - ${lesson.end}\n${idx + 1}ª AULA`,
+                fontWeight: 'bold',
+                align: 'center',
+                alignVertical: 'center',
+                wrap: true,
+                borderColor: '#000000',
+                borderStyle: 'thin',
+                height: 45,
+                fontSize: 10,
             };
-            cell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: 'thin', color: { argb: 'FF000000' } }
-            };
-        });
 
-        const lessons = data.schedule[0].slots.filter(s => s.type === 'AULA');
-
-        lessons.forEach((lesson, idx) => {
-            const excelRow = worksheet.getRow(idx + 4);
-
-            DAYS_OF_WEEK.forEach((day, dayIdx) => {
+            const dayCells: Cell[] = DAYS_OF_WEEK.map(day => {
                 const lessonData = data.fixedLessons?.find(fl =>
                     fl.day === day &&
                     fl.slotIndex === idx &&
                     (viewMode === 'CLASS' ? fl.classId === selectedId : fl.teacherId === selectedId)
                 );
-
-                const cell = excelRow.getCell(dayIdx + 2);
 
                 if (lessonData) {
                     const subject = data.subjects.find(s => s.id === lessonData.subjectId);
@@ -75,61 +134,50 @@ export const excelService = {
                         ? data.teachers.find(t => t.id === lessonData.teacherId)?.name
                         : data.classes.find(c => c.id === lessonData.classId)?.name;
 
-                    cell.value = `${subject?.shortName || subject?.name || ''}\n(${otherEntity || ''})`;
-                    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                    const subjectName = subject?.shortName || subject?.name || '';
+                    const entityLabel = otherEntity ? `\n(${otherEntity})` : '';
+                    const hasColor = Boolean(subject?.color);
+                    const bgColor = hasColor ? formatHexColor(subject!.color) : '#FFFFFF';
+                    const textColor = hasColor ? getContrastTextColor(bgColor) : '#000000';
 
-                    if (subject?.color) {
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: excelService.hexToARGB(subject.color) }
-                        };
-                        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
-                    }
-                } else {
-                    cell.value = '-';
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFF9FAFB' }
+                    return {
+                        value: `${subjectName}${entityLabel}`,
+                        align: 'center',
+                        alignVertical: 'center',
+                        wrap: true,
+                        backgroundColor: bgColor,
+                        textColor: textColor,
+                        fontWeight: 'bold',
+                        fontSize: 9,
+                        borderColor: '#000000',
+                        borderStyle: 'thin',
                     };
-                    cell.font = { color: { argb: 'FF9CA3AF' } };
                 }
 
-                cell.border = {
-                    top: { style: 'thin', color: { argb: 'FF000000' } },
-                    left: { style: 'thin', color: { argb: 'FF000000' } },
-                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                return {
+                    value: '-',
+                    align: 'center',
+                    alignVertical: 'center',
+                    backgroundColor: '#F9FAFB',
+                    textColor: '#9CA3AF',
+                    borderColor: '#000000',
+                    borderStyle: 'thin',
                 };
             });
 
-            const timeCell = excelRow.getCell(1);
-            timeCell.value = {
-                richText: [
-                    { font: { bold: true, size: 10, color: { argb: 'FF111418' } }, text: `${lesson.start} - ${lesson.end}\n` },
-                    { font: { bold: true, size: 8, color: { argb: 'FF9CA3AF' } }, text: `${idx + 1}º AULA` }
-                ]
-            };
-            timeCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-            timeCell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: 'thin', color: { argb: 'FF000000' } }
-            };
-            excelRow.height = 45;
+            return [timeCell, ...dayCells];
         });
 
-        // Column widths
-        worksheet.getColumn(1).width = 15;
-        for (let i = 2; i <= DAYS_OF_WEEK.length + 1; i++) {
-            worksheet.getColumn(i).width = 20;
-        }
+        const columns = [
+            { width: 15 },
+            ...DAYS_OF_WEEK.map(() => ({ width: 20 }))
+        ];
 
-        const buffer = await workbook.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const blob = await writeXlsxFile([titleRow, emptyRow, headerRow, ...lessonRows], {
+            sheet: 'Horário',
+            columns,
+        }).toBlob();
+
         saveAs(blob, `Horário - ${entityName || 'Geral'}.xlsx`);
     },
 
@@ -138,112 +186,130 @@ export const excelService = {
      */
     exportWeeklyView: async (dayIndex: number, data: SetupData) => {
         const dayName = DAYS_OF_WEEK[dayIndex];
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet(`Semanal - ${dayName}`);
-
         const sortedClasses = [...data.classes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-        const lessons = data.schedule[0].slots.filter(s => s.type === 'AULA');
+        const totalCols = 1 + sortedClasses.length;
 
-        // Title row
-        const titleCell = worksheet.getCell('A1');
-        titleCell.value = `RELATÓRIO SEMANAL - ${dayName.toUpperCase()}`;
-        titleCell.font = { name: 'Arial Black', size: 16, color: { argb: 'FF136DEC' } };
-        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-        worksheet.mergeCells(`A1:${String.fromCharCode(65 + sortedClasses.length)}1`);
-        worksheet.getRow(1).height = 40;
+        // Title row (Row 1)
+        const titleRow: Row = [
+            {
+                value: `RELATÓRIO SEMANAL - ${dayName.toUpperCase()}`,
+                fontWeight: 'bold',
+                fontSize: 16,
+                textColor: '#136DEC',
+                align: 'center',
+                alignVertical: 'center',
+                columnSpan: totalCols,
+                height: 40,
+            },
+            ...Array(totalCols - 1).fill(null)
+        ];
 
-        // Header row
-        const headerRow = worksheet.getRow(3);
-        headerRow.values = ['HORA', ...sortedClasses.map(c => c.name)];
-        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-        headerRow.height = 25;
+        // Empty spacing row (Row 2)
+        const emptyRow: Row = [
+            {
+                value: '',
+                columnSpan: totalCols,
+                height: 12,
+            },
+            ...Array(totalCols - 1).fill(null)
+        ];
 
-        headerRow.eachCell((cell) => {
-            cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FF136DEC' }
+        // Header row (Row 3)
+        const headerRow: Row = [
+            {
+                value: 'HORA',
+                fontWeight: 'bold',
+                textColor: '#FFFFFF',
+                backgroundColor: '#136DEC',
+                align: 'center',
+                alignVertical: 'center',
+                borderColor: '#000000',
+                borderStyle: 'thin',
+                height: 25,
+            },
+            ...sortedClasses.map(c => ({
+                value: c.name,
+                fontWeight: 'bold' as const,
+                textColor: '#FFFFFF',
+                backgroundColor: '#136DEC',
+                align: 'center' as const,
+                alignVertical: 'center' as const,
+                borderColor: '#000000',
+                borderStyle: 'thin' as const,
+                height: 25,
+            }))
+        ];
+
+        const lessons = data.schedule?.[0]?.slots?.filter(s => s.type === 'AULA') || [];
+
+        const lessonRows: Row[] = lessons.map((lesson, idx) => {
+            const timeCell: Cell = {
+                value: `${lesson.start} - ${lesson.end}\n${idx + 1}ª AULA`,
+                fontWeight: 'bold',
+                align: 'center',
+                alignVertical: 'center',
+                wrap: true,
+                borderColor: '#000000',
+                borderStyle: 'thin',
+                height: 45,
+                fontSize: 10,
             };
-            cell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: 'thin', color: { argb: 'FF000000' } }
-            };
-        });
 
-        lessons.forEach((lesson, idx) => {
-            const excelRow = worksheet.getRow(idx + 4);
-
-            sortedClasses.forEach((cls, clsIdx) => {
+            const classCells: Cell[] = sortedClasses.map(cls => {
                 const lessonData = data.fixedLessons?.find(fl =>
                     fl.day === dayName &&
                     fl.slotIndex === idx &&
                     fl.classId === cls.id
                 );
 
-                const cell = excelRow.getCell(clsIdx + 2);
-
                 if (lessonData) {
                     const subject = data.subjects.find(s => s.id === lessonData.subjectId);
                     const teacher = data.teachers.find(t => t.id === lessonData.teacherId);
 
-                    cell.value = `${subject?.shortName || subject?.name || ''}\n(${teacher?.name || ''})`;
-                    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                    const subjectName = subject?.shortName || subject?.name || '';
+                    const teacherName = teacher?.name ? `\n(${teacher.name})` : '';
+                    const hasColor = Boolean(subject?.color);
+                    const bgColor = hasColor ? formatHexColor(subject!.color) : '#FFFFFF';
+                    const textColor = hasColor ? getContrastTextColor(bgColor) : '#000000';
 
-                    if (subject?.color) {
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: excelService.hexToARGB(subject.color) }
-                        };
-                        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
-                    }
-                } else {
-                    cell.value = '-';
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFF9FAFB' }
+                    return {
+                        value: `${subjectName}${teacherName}`,
+                        align: 'center',
+                        alignVertical: 'center',
+                        wrap: true,
+                        backgroundColor: bgColor,
+                        textColor: textColor,
+                        fontWeight: 'bold',
+                        fontSize: 9,
+                        borderColor: '#000000',
+                        borderStyle: 'thin',
                     };
-                    cell.font = { color: { argb: 'FF9CA3AF' } };
                 }
 
-                cell.border = {
-                    top: { style: 'thin', color: { argb: 'FF000000' } },
-                    left: { style: 'thin', color: { argb: 'FF000000' } },
-                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                return {
+                    value: '-',
+                    align: 'center',
+                    alignVertical: 'center',
+                    backgroundColor: '#F9FAFB',
+                    textColor: '#9CA3AF',
+                    borderColor: '#000000',
+                    borderStyle: 'thin',
                 };
             });
 
-            const timeCell = excelRow.getCell(1);
-            timeCell.value = {
-                richText: [
-                    { font: { bold: true, size: 10, color: { argb: 'FF111418' } }, text: `${lesson.start} - ${lesson.end}\n` },
-                    { font: { bold: true, size: 8, color: { argb: 'FF9CA3AF' } }, text: `${idx + 1}º AULA` }
-                ]
-            };
-            timeCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-            timeCell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: 'thin', color: { argb: 'FF000000' } }
-            };
-            excelRow.height = 45;
+            return [timeCell, ...classCells];
         });
 
-        // Column widths
-        worksheet.getColumn(1).width = 15;
-        for (let i = 2; i <= sortedClasses.length + 1; i++) {
-            worksheet.getColumn(i).width = 18;
-        }
+        const columns = [
+            { width: 15 },
+            ...sortedClasses.map(() => ({ width: 18 }))
+        ];
 
-        const buffer = await workbook.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const blob = await writeXlsxFile([titleRow, emptyRow, headerRow, ...lessonRows], {
+            sheet: `Semanal - ${dayName}`,
+            columns,
+        }).toBlob();
+
         saveAs(blob, `Relatório Semanal - ${dayName}.xlsx`);
     }
 };
