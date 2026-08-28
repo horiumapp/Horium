@@ -6,11 +6,13 @@ import { excelService } from '../services/excelService';
 interface TimetableResultProps {
   data: SetupData;
   onReprocess: () => void;
+  onLicenseNeeded?: () => void;
 }
 
 type ViewMode = 'TEACHER' | 'CLASS' | 'WEEKLY';
 
-const TimetableResult: React.FC<TimetableResultProps> = ({ data, onReprocess }) => {
+const TimetableResult: React.FC<TimetableResultProps> = ({ data, onReprocess, onLicenseNeeded }) => {
+  const isLocked = !data.isLicensed;
   const [viewMode, setViewMode] = useState<ViewMode>('CLASS');
   const [selectedId, setSelectedId] = useState<string>(data.classes[0]?.id || '');
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
@@ -148,20 +150,37 @@ const TimetableResult: React.FC<TimetableResultProps> = ({ data, onReprocess }) 
               </button>
               <button
                 onClick={() => {
+                  if (isLocked) {
+                    onLicenseNeeded?.();
+                    return;
+                  }
                   if (viewMode === 'WEEKLY') {
                     excelService.exportWeeklyView(selectedDayIndex, data);
                   } else {
                     excelService.exportEntityView(viewMode, selectedId, data);
                   }
                 }}
-                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-lg shadow-emerald-200"
+                disabled={isLocked}
+                className={`bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-lg shadow-emerald-200 ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={isLocked ? 'Requer licença ativa para exportar' : 'Exportar para Excel'}
               >
                 <span className="material-symbols-outlined text-[18px]">table_view</span>
                 Excel
               </button>
-              <button className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-200 transition-all flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
-                PDF
+              <button
+                onClick={() => {
+                  if (isLocked) {
+                    onLicenseNeeded?.();
+                    return;
+                  }
+                  window.print();
+                }}
+                disabled={isLocked}
+                className={`bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-200 transition-all flex items-center gap-2 ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={isLocked ? 'Requer licença ativa para imprimir' : 'Imprimir grade'}
+              >
+                <span className="material-symbols-outlined text-[18px]">print</span>
+                Imprimir
               </button>
             </div>
             {data.failures && data.failures.length > 0 && (
@@ -194,7 +213,33 @@ const TimetableResult: React.FC<TimetableResultProps> = ({ data, onReprocess }) 
           </div>
         )}
 
-        <div className="flex-1 overflow-auto p-4 md:p-6 bg-[#f1f5f9]/50">
+        <div className="flex-1 overflow-auto p-4 md:p-6 bg-[#f1f5f9]/50 relative">
+          {/* LOCK OVERLAY */}
+          {isLocked && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-4 text-center bg-gray-900/20 backdrop-blur-[3px] animate-in fade-in duration-500 overflow-y-auto">
+              <div className="bg-white dark:bg-gray-950 p-8 rounded-[32px] shadow-2xl border border-gray-100 dark:border-gray-800 max-w-md my-auto">
+                <div className="size-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="material-symbols-outlined text-4xl text-primary">lock</span>
+                </div>
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter mb-3 uppercase">
+                  Aprovação Pendente
+                </h2>
+                <p className="text-gray-500 dark:text-gray-400 font-medium text-sm leading-relaxed mb-6">
+                  Sua grade de horários foi gerada com sucesso! Para visualizar a tabela completa, imprimir e exportar para Excel, é necessário possuir uma licença ativa.
+                </p>
+                {onLicenseNeeded && (
+                  <button
+                    onClick={onLicenseNeeded}
+                    className="w-full py-4 bg-primary hover:bg-primary/90 text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/30 transition-all active:scale-95 flex items-center justify-center gap-3"
+                  >
+                    Adquirir / Ver Licença
+                    <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="min-w-fit bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
             <div
               className="grid bg-[#eef2f6] dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800"

@@ -7,6 +7,8 @@ import { generateTimetable } from './services/timetableGenerator';
 import { authService } from './services/authService';
 import { supabase } from './services/supabaseClient';
 import { audio } from './services/audioService';
+import { Modal } from './components/ui/Modal';
+import { Button } from './components/ui/Button';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -41,6 +43,10 @@ const App: React.FC = () => {
   });
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generationMessage, setGenerationMessage] = useState('');
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetPasswordFeedback, setResetPasswordFeedback] = useState<string | null>(null);
 
   const handleSetMuted = (muted: boolean) => {
     setIsMuted(muted);
@@ -150,7 +156,10 @@ const App: React.FC = () => {
     checkSession();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowResetPasswordModal(true);
+      }
       if (session) {
         // Fetch license status immediately on auth change
         loadLicenseStatus(session.user.id);
@@ -345,6 +354,11 @@ const App: React.FC = () => {
 
   const handleViewSolutions = (schedule: SetupData) => {
     setSetupData(schedule);
+    if (!schedule.isLicensed) {
+      alert('Para visualizar as tabelas e exportar esta grade de horários, é necessário possuir uma licença ativa. Você será redirecionado para a página de planos.');
+      setView(AppView.PLANS);
+      return;
+    }
     setView(AppView.RESULT);
     audio.playClick();
   };
@@ -386,6 +400,7 @@ const App: React.FC = () => {
             onDuplicateSchedule={handleDuplicateSchedule}
             onViewSolutions={handleViewSolutions}
             activeLicenseStatus={activeLicenseStatus}
+            onRefreshSchedules={() => scheduleService.getSchedules().then(setSchedules)}
           />
         );
       case AppView.ADMIN:
@@ -418,6 +433,7 @@ const App: React.FC = () => {
             onReprocess={() => {
               handleSetupComplete();
             }}
+            onLicenseNeeded={() => setView(AppView.PLANS)}
           />
         );
       case AppView.PLANS:
@@ -471,6 +487,85 @@ const App: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal de Redefinição de Senha (Password Recovery) */}
+      <Modal
+        isOpen={showResetPasswordModal}
+        onClose={() => setShowResetPasswordModal(false)}
+        size="md"
+      >
+        <div className="p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="size-12 bg-primary/10 text-primary rounded-full flex items-center justify-center">
+              <span className="material-symbols-outlined text-2xl">lock_reset</span>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Redefinir Senha</h2>
+              <p className="text-xs text-gray-500">Crie uma nova senha para sua conta Horium.</p>
+            </div>
+          </div>
+
+          {resetPasswordFeedback && (
+            <div className={`p-3 rounded-lg text-xs font-bold ${resetPasswordFeedback.includes('sucesso') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              {resetPasswordFeedback}
+            </div>
+          )}
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (newPasswordInput.length < 6) {
+                setResetPasswordFeedback('A nova senha deve ter pelo menos 6 caracteres.');
+                return;
+              }
+              setIsResettingPassword(true);
+              setResetPasswordFeedback(null);
+              try {
+                await authService.updatePassword(newPasswordInput);
+                setResetPasswordFeedback('Senha redefinida com sucesso! Você já pode utilizar sua nova senha.');
+                setTimeout(() => {
+                  setShowResetPasswordModal(false);
+                  setNewPasswordInput('');
+                  setResetPasswordFeedback(null);
+                }, 2000);
+              } catch (err: any) {
+                setResetPasswordFeedback(authService.translateError(err));
+              } finally {
+                setIsResettingPassword(false);
+              }
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Nova Senha</label>
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={newPasswordInput}
+                onChange={(e) => setNewPasswordInput(e.target.value)}
+                placeholder="Mínimo de 6 caracteres"
+                className="w-full h-11 px-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:border-primary"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowResetPasswordModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                isLoading={isResettingPassword}
+              >
+                Salvar Nova Senha
+              </Button>
+            </div>
+          </form>
+        </div>
+      </Modal>
     </Layout>
   );
 };

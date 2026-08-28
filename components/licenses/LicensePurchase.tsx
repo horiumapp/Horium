@@ -76,9 +76,11 @@ export const LicensePurchase: React.FC<LicensePurchaseProps> = ({ onBack, onGoHo
 
         setPaymentStatus('verifying');
 
+        let currentUser: any = null;
         try {
             const { data: userData, error: userError } = await supabase.auth.getUser();
             if (userError) throw userError;
+            currentUser = userData.user;
 
             if (userData.user) {
                 const today = new Date().toISOString().split('T')[0];
@@ -111,70 +113,30 @@ export const LicensePurchase: React.FC<LicensePurchaseProps> = ({ onBack, onGoHo
             return;
         }
 
-        // FormSubmit handles file uploads much better through native form submission
-        // rather than AJAX/fetch requests which often strip the attachment or fail.
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = 'https://formsubmit.co/horium.app@gmail.com';
-        form.enctype = 'multipart/form-data';
+        try {
+            const formData = new FormData();
+            formData.append('_subject', `Novo Comprovante PIX - Horium (${numClasses} Turmas)`);
+            formData.append('_captcha', 'false');
+            formData.append('_template', 'table');
+            formData.append('_cc', 'prof.jackison@gmail.com');
+            formData.append('Email_Usuario', currentUser?.email || 'Não informado');
+            formData.append('ID_Usuario', currentUser?.id || 'Não informado');
+            formData.append('ID_Horario', scheduleId || 'Não vinculado');
+            formData.append('Total_Pago', `R$ ${totalPrice},00`);
+            formData.append('Qtd_Turmas', String(numClasses));
+            formData.append('Mensagem', `Um usuário anexou comprovante de PIX para a compra de ${numClasses} turmas (6 meses). Comprovante anexo.`);
+            formData.append('attachment', receiptFile);
 
-        // Prevent redirect to FormSubmit captcha page by using AJAX mode via target iframe
-        // Create hidden iframe
-        const iframeName = 'formSubmitFrame' + Date.now();
-        const iframe = document.createElement('iframe');
-        iframe.name = iframeName;
-        iframe.style.display = 'none';
+            await fetch('https://formsubmit.co/ajax/horium.app@gmail.com', {
+                method: 'POST',
+                body: formData
+            });
 
-        iframe.onload = () => {
-            // After form submits to iframe, update our UI state
-            setTimeout(() => {
-                setPaymentStatus('under_review');
-
-                // Cleanup
-                if (document.body.contains(iframe)) {
-                    document.body.removeChild(iframe);
-                }
-            }, 1500);
-        };
-
-        document.body.appendChild(iframe);
-        form.target = iframeName;
-
-        // Add inputs
-        const inputs = [
-            { name: '_subject', value: `Novo Comprovante PIX - Horium (${numClasses} Turmas)` },
-            { name: '_captcha', value: 'false' },
-            { name: 'Mensagem', value: `Um usuário anexou um comprovante de PIX para a compra de ${numClasses} turmas. O arquivo está em anexo.` },
-            { name: '_template', value: 'table' }
-        ];
-
-        inputs.forEach(({ name, value }) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = name;
-            input.value = value;
-            form.appendChild(input);
-        });
-
-        // Add the file input
-        // Since we already have the File object but can't assign it to a new input element directly due to security,
-        // we will use DataTransfer to create a new FileList
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.name = 'attachment'; // MUST be 'attachment' for FormSubmit to see it as a file
-
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(receiptFile);
-        fileInput.files = dataTransfer.files;
-
-        form.appendChild(fileInput);
-
-        // Submit the form
-        document.body.appendChild(form);
-        form.submit();
-
-        // Remove form after submission starts
-        document.body.removeChild(form);
+            setPaymentStatus('under_review');
+        } catch (submitErr) {
+            console.warn("Erro no envio do formulário via fetch, mantendo status sob revisão:", submitErr);
+            setPaymentStatus('under_review');
+        }
     };
 
     const renderConfig = () => (

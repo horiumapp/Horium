@@ -53,7 +53,27 @@ export const Step4Classes: React.FC<Step4ClassesProps> = ({ data, setData, activ
     };
 
     const handleDeleteClass = (id: string) => {
-        setData(prev => ({ ...prev, classes: prev.classes.filter(cl => cl.id !== id) }));
+        setData(prev => {
+            const updatedTeachers = prev.teachers.map(t => {
+                if (!t.classAssignments) return t;
+                const newAssignments: Record<string, Record<string, string>> = {};
+                Object.entries(t.classAssignments).forEach(([subjectId, classes]) => {
+                    const filteredClasses = { ...(classes as Record<string, string>) };
+                    delete filteredClasses[id];
+                    newAssignments[subjectId] = filteredClasses;
+                });
+                return { ...t, classAssignments: newAssignments };
+            });
+
+            const updatedFixed = (prev.fixedLessons || []).filter(fl => fl.classId !== id);
+
+            return {
+                ...prev,
+                classes: prev.classes.filter(cl => cl.id !== id),
+                teachers: updatedTeachers,
+                fixedLessons: updatedFixed
+            };
+        });
     };
 
     // Calculate total slots once

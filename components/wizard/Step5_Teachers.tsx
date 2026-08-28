@@ -73,7 +73,11 @@ export const Step5Teachers: React.FC<Step5TeachersProps> = ({ data, setData, act
     };
 
     const handleDeleteTeacher = (id: string) => {
-        setData(prev => ({ ...prev, teachers: prev.teachers.filter(prof => prof.id !== id) }));
+        setData(prev => ({
+            ...prev,
+            teachers: prev.teachers.filter(prof => prof.id !== id),
+            fixedLessons: (prev.fixedLessons || []).filter(fl => fl.teacherId !== id)
+        }));
     };
 
     const toggleSubjectInTeacher = (subjectId: string) => {

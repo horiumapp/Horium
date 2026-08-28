@@ -14,6 +14,7 @@ interface DashboardPageProps {
   onDuplicateSchedule: (schedule: SetupData) => void;
   onViewSolutions: (schedule: SetupData) => void;
   activeLicenseStatus: string;
+  onRefreshSchedules?: () => void;
 }
 
 const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -24,7 +25,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   onDeleteSchedule,
   onDuplicateSchedule,
   onViewSolutions,
-  activeLicenseStatus
+  activeLicenseStatus,
+  onRefreshSchedules
 }) => {
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
@@ -148,10 +150,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         isOpen={isDeletedModalOpen}
         onClose={() => setIsDeletedModalOpen(false)}
         onRestore={() => {
-          // You might need a way to trigger a refresh here if `schedules` isn't reactive to changes.
-          // To keep it simple for now, we assume reloading the page or the parent component
-          // handles the data refetching. A full reload is a brute force but safe way:
-          window.location.reload();
+          onRefreshSchedules?.();
         }}
       />
 

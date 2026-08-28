@@ -1,4 +1,8 @@
--- Create schedules table
+-- ==============================================================================
+-- HORIUM - SCHEMA COMPLETO DO BANCO DE DADOS (SUPABASE POSTGRESQL)
+-- ==============================================================================
+
+-- 1. TABELA SCHEDULES (Horários Escolares)
 CREATE TABLE IF NOT EXISTS public.schedules (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -6,46 +10,205 @@ CREATE TABLE IF NOT EXISTS public.schedules (
     data JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()),
+    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
     is_licensed BOOLEAN DEFAULT false
 );
 
--- Enable RLS for schedules
+-- Habilitar RLS para schedules
 ALTER TABLE public.schedules ENABLE ROW LEVEL SECURITY;
 
--- Create policies for schedules
+-- Políticas de RLS para schedules
+DROP POLICY IF EXISTS "Users can create their own schedules" ON public.schedules;
 CREATE POLICY "Users can create their own schedules" ON public.schedules
-FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
+FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete their own schedules" ON public.schedules;
 CREATE POLICY "Users can delete their own schedules" ON public.schedules
-FOR DELETE TO public USING (auth.uid() = user_id);
+FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own schedules" ON public.schedules;
 CREATE POLICY "Users can update their own schedules" ON public.schedules
-FOR UPDATE TO public USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view their own schedules" ON public.schedules;
 CREATE POLICY "Users can view their own schedules" ON public.schedules
-FOR SELECT TO public USING (auth.uid() = user_id);
+FOR SELECT TO authenticated USING (auth.uid() = user_id);
 
--- Create licenses table
+
+-- 2. TABELA LICENSES (Licenças de Turmas e Planos)
 CREATE TABLE IF NOT EXISTS public.licenses (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    schedule_id UUID REFERENCES public.schedules(id) ON DELETE SET NULL,
     payment_date DATE,
     classes_amount INTEGER,
     value_paid NUMERIC,
     payment_method TEXT,
-    payment_status TEXT CHECK (payment_status IN ('Aguardando', 'Aprovado', 'Rejeitado')),
+    payment_status TEXT CHECK (payment_status IN ('Aguardando', 'Aprovado', 'Rejeitado', 'under_review')),
     valid_until DATE,
     receipt_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
 );
 
--- Enable RLS for licenses
+-- Habilitar RLS para licenses
 ALTER TABLE public.licenses ENABLE ROW LEVEL SECURITY;
 
--- Create policies for licenses
+-- Políticas de RLS para licenses
+DROP POLICY IF EXISTS "Service role can manage all licenses" ON public.licenses;
 CREATE POLICY "Service role can manage all licenses" ON public.licenses
 FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Wait, the `licenses` policy had roles: `{authenticated}`
+DROP POLICY IF EXISTS "Users can view their own licenses" ON public.licenses;
 CREATE POLICY "Users can view their own licenses" ON public.licenses
 FOR SELECT TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert their own licenses" ON public.licenses;
+CREATE POLICY "Users can insert their own licenses" ON public.licenses
+FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+
+-- 3. TABELA NOTIFICATIONS (Notificações do Usuário)
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
+);
+
+-- Habilitar RLS para notifications
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own notifications" ON public.notifications;
+CREATE POLICY "Users can view their own notifications" ON public.notifications
+FOR SELECT TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update their own notifications" ON public.notifications;
+CREATE POLICY "Users can update their own notifications" ON public.notifications
+FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert notifications" ON public.notifications;
+CREATE POLICY "Users can insert notifications" ON public.notifications
+FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+
+-- 4. TABELA TICKETS (Chamados de Suporte)
+CREATE TABLE IF NOT EXISTS public.tickets (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    subject TEXT NOT NULL,
+    description TEXT NOT NULL,
+    image_url TEXT,
+    status TEXT DEFAULT 'aberto' CHECK (status IN ('aberto', 'em_andamento', 'fechado')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
+);
+
+-- Habilitar RLS para tickets
+ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own tickets" ON public.tickets;
+CREATE POLICY "Users can view their own tickets" ON public.tickets
+FOR SELECT TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert their own tickets" ON public.tickets;
+CREATE POLICY "Users can insert their own tickets" ON public.tickets
+FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+
+-- 5. FUNÇÕES SEGURAS PARA ADMINISTRAÇÃO (RPC COM SECURITY DEFINER)
+
+-- Função auxiliar para validar se o usuário autenticado é administrador
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN (auth.jwt() ->> 'email') IN ('horium.app@gmail.com', 'prof.jackison@gmail.com');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC para buscar todas as licenças com e-mail dos usuários
+CREATE OR REPLACE FUNCTION public.get_admin_licenses()
+RETURNS TABLE (
+    id UUID,
+    user_id UUID,
+    user_email TEXT,
+    payment_date DATE,
+    classes_amount INTEGER,
+    value_paid NUMERIC,
+    payment_method TEXT,
+    payment_status TEXT,
+    valid_until DATE,
+    receipt_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE,
+    schedule_id UUID,
+    schedule_name TEXT
+) AS $$
+BEGIN
+    IF NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Acesso negado. Apenas administradores podem acessar esta função.';
+    END IF;
+
+    RETURN QUERY
+    SELECT 
+        l.id,
+        l.user_id,
+        u.email::TEXT AS user_email,
+        l.payment_date,
+        l.classes_amount,
+        l.value_paid,
+        l.payment_method,
+        l.payment_status,
+        l.valid_until,
+        l.receipt_url,
+        l.created_at,
+        l.schedule_id,
+        s.name AS schedule_name
+    FROM public.licenses l
+    LEFT JOIN auth.users u ON u.id = l.user_id
+    LEFT JOIN public.schedules s ON s.id = l.schedule_id
+    ORDER BY l.created_at DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC para aprovar licença e sincronizar o horário de forma atômica
+CREATE OR REPLACE FUNCTION public.approve_license_rpc(
+    p_license_id UUID,
+    p_valid_until DATE
+)
+RETURNS VOID AS $$
+DECLARE
+    v_schedule_id UUID;
+    v_user_id UUID;
+BEGIN
+    IF NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Acesso negado. Apenas administradores podem aprovar licenças.';
+    END IF;
+
+    -- Atualiza o status e a data de validade da licença
+    UPDATE public.licenses
+    SET 
+        payment_status = 'Aprovado',
+        valid_until = p_valid_until
+    WHERE id = p_license_id
+    RETURNING schedule_id, user_id INTO v_schedule_id, v_user_id;
+
+    -- Sincroniza a tabela schedules se schedule_id estiver vinculado
+    IF v_schedule_id IS NOT NULL THEN
+        UPDATE public.schedules
+        SET 
+            is_licensed = true,
+            updated_at = timezone('utc', now())
+        WHERE id = v_schedule_id;
+    END IF;
+
+    -- Cria notificação para o usuário informado
+    IF v_user_id IS NOT NULL THEN
+        INSERT INTO public.notifications (user_id, title, message)
+        VALUES (
+            v_user_id,
+            'Licença Aprovada! 🎊',
+            'Seu pagamento foi confirmado. Sua licença ficará ativa até ' || to_char(p_valid_until, 'DD/MM/YYYY') || '.'
+        );
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

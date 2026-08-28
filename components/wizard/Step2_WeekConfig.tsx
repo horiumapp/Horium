@@ -105,25 +105,34 @@ export const Step2WeekConfig: React.FC<Step2WeekConfigProps> = ({
                                 className="bg-gray-50 dark:bg-gray-800 h-11 rounded-lg px-3 border-2 border-gray-100 dark:border-gray-700 font-bold w-full outline-none focus:border-primary transition-all"
                                 value={`${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`}
                                 onChange={e => {
+                                    if (!e.target.value) return;
                                     const [h, m] = e.target.value.split(':');
-                                    setStartHour(parseInt(h));
-                                    setStartMinute(parseInt(m));
+                                    const parsedH = parseInt(h, 10);
+                                    const parsedM = parseInt(m, 10);
+                                    if (!isNaN(parsedH)) setStartHour(parsedH);
+                                    if (!isNaN(parsedM)) setStartMinute(parsedM);
                                 }}
                             />
                         </div>
                         <Input
                             label="Duração Aula (min)"
                             type="number"
-                            value={durationMinute}
-                            onChange={e => setDurationMinute(parseInt(e.target.value))}
+                            value={durationMinute || ''}
+                            onChange={e => {
+                                const val = parseInt(e.target.value, 10);
+                                setDurationMinute(isNaN(val) ? 0 : val);
+                            }}
                         />
                         <Input
                             label="Aulas por Dia"
                             type="number"
                             min={1}
                             max={15}
-                            value={lessonsPerDayGlobal}
-                            onChange={e => setLessonsPerDayGlobal(parseInt(e.target.value))}
+                            value={lessonsPerDayGlobal || ''}
+                            onChange={e => {
+                                const val = parseInt(e.target.value, 10);
+                                setLessonsPerDayGlobal(isNaN(val) ? 0 : val);
+                            }}
                         />
                     </div>
 

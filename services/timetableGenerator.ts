@@ -90,7 +90,13 @@ export const generateTimetable = async (
     };
 
     const runAttempt = (): { fixedLessons: FixedLesson[], failures: SchedulingFailure[], score: number } => {
-        let currentFixed: FixedLesson[] = [];
+        // Inicializar com as aulas fixas previamente cadastradas pelo usuário (válidas)
+        const initialFixed: FixedLesson[] = (data.fixedLessons || []).filter(fl =>
+            data.classes.some(c => c.id === fl.classId) &&
+            data.teachers.some(t => t.id === fl.teacherId) &&
+            data.subjects.some(s => s.id === fl.subjectId)
+        );
+        let currentFixed: FixedLesson[] = [...initialFixed];
         const failures: SchedulingFailure[] = [];
         const assignments: Assignment[] = [];
 
@@ -107,7 +113,11 @@ export const generateTimetable = async (
                                     classId,
                                     subjectId,
                                     lessons: classroom.lessonsPerSubject[subjectId] || 0,
-                                    grouping: data.assignmentGroupings?.[`${teacher.id}|${classId}|${subjectId}`] || 'Não Especificado'
+                                    grouping: data.assignmentGroupings?.[`${teacher.id}|${classId}|${subjectId}`] ||
+                                        data.teacherGroupings?.[teacher.id] ||
+                                        data.subjectGroupings?.[subjectId] ||
+                                        data.generalGrouping ||
+                                        'Não Especificado'
                                 });
                             }
                         }
@@ -116,30 +126,59 @@ export const generateTimetable = async (
             }
         });
 
+        // 1.1 Coletar matérias de turmas sem atribuição OBRIGATÓRIA, atribuindo a professores com status 'PODERÁ'
+        data.classes.forEach(classroom => {
+            Object.entries(classroom.lessonsPerSubject || {}).forEach(([subjectId, lessonCount]) => {
+                if (lessonCount <= 0) return;
+                const alreadyAssigned = assignments.some(a => a.classId === classroom.id && a.subjectId === subjectId);
+                if (!alreadyAssigned) {
+                    // Buscar professores que PODERÃO lecionar esta matéria nesta turma
+                    const eligibleTeachers = data.teachers.filter(t =>
+                        t.classAssignments?.[subjectId]?.[classroom.id] === 'PODERÁ' ||
+                        (t.subjects.includes(subjectId) && t.classAssignments?.[subjectId]?.[classroom.id] !== 'NÃO')
+                    );
+
+                    if (eligibleTeachers.length > 0) {
+                        // Escolhe aleatoriamente entre os elegíveis nesta tentativa para explorar diferentes soluções
+                        const chosenTeacher = eligibleTeachers[Math.floor(Math.random() * eligibleTeachers.length)];
+                        assignments.push({
+                            teacherId: chosenTeacher.id,
+                            classId: classroom.id,
+                            subjectId,
+                            lessons: lessonCount,
+                            grouping: data.assignmentGroupings?.[`${chosenTeacher.id}|${classroom.id}|${subjectId}`] ||
+                                data.teacherGroupings?.[chosenTeacher.id] ||
+                                data.subjectGroupings?.[subjectId] ||
+                                data.generalGrouping ||
+                                'Não Especificado'
+                        });
+                    }
+                }
+            });
+        });
+
         // 2. Calcular Flexibilidade (Ousadia: quanto menos folego, mais cedo agendamos)
         const teacherFlexibility: Record<string, number> = {};
         data.teachers.forEach(t => {
             const availCount = Object.values(t.availability || {}).filter(v => v === 'D' || v === 'IN').length;
             let totalRequestedAulas = 0;
-            if (t.classAssignments) {
-                Object.entries(t.classAssignments).forEach(([subjectId, classes]) => {
-                    Object.entries(classes).forEach(([classId, status]) => {
-                        if (status === 'OBRIGATORIAMENTE') {
-                            const classroom = data.classes.find(c => c.id === classId);
-                            if (classroom) {
-                                totalRequestedAulas += classroom.lessonsPerSubject[subjectId] || 0;
-                            }
-                        }
-                    });
-                });
-            }
+            assignments.filter(a => a.teacherId === t.id).forEach(a => {
+                totalRequestedAulas += a.lessons;
+            });
             teacherFlexibility[t.id] = totalRequestedAulas > 0 ? availCount / totalRequestedAulas : 999;
         });
 
-        // 3. Decompor em blocos
+        // 3. Decompor em blocos, descontando as aulas fixas já alocadas
         const blocks: Block[] = [];
         assignments.forEach(asg => {
-            let left = asg.lessons;
+            // Descontar aulas fixas já existentes desta atribuição
+            const alreadyFixed = currentFixed.filter(f =>
+                f.teacherId === asg.teacherId &&
+                f.classId === asg.classId &&
+                f.subjectId === asg.subjectId
+            ).length;
+
+            let left = Math.max(0, asg.lessons - alreadyFixed);
             const double = (asg.grouping || '').toLowerCase().match(/dupla|seguida|junta/);
             if (double) {
                 let safety = 0;
@@ -149,8 +188,12 @@ export const generateTimetable = async (
             while (left > 0 && safetySingle < 100) { blocks.push({ assignment: asg, size: 1, consecutive: true }); left--; safetySingle++; }
         });
 
-        const originalDays = data.schedule.map(s => s.day);
-        const slotsPerDay = data.schedule[0]?.slots.filter(s => s.type === 'AULA').length || 0;
+        const originalDays = (data.schedule && data.schedule.length > 0 && data.schedule[0]?.day)
+            ? data.schedule.map(s => s.day)
+            : (data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0 ? data.weekConfig.activeDays : ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']);
+
+        const slotsPerDay = (data.schedule && data.schedule[0]?.slots?.filter(s => s.type === 'AULA').length) ||
+            data.weekConfig?.lessonsPerDayGlobal || 5;
 
         const shuffle = <T>(a: T[]) => [...a].sort(() => Math.random() - 0.5);
 
@@ -173,7 +216,7 @@ export const generateTimetable = async (
             });
         });
 
-        const isOk = (day: string, slot: number, asg: Assignment, list: FixedLesson[]): boolean | 'TEACHER_LIMIT' => {
+        const isOk = (day: string, slot: number, asg: Assignment, list: FixedLesson[], currentBlockIndex = 0): boolean | 'TEACHER_LIMIT' => {
             // Conflito básico (mesmo horário, mesmo professor ou mesma turma)
             if (list.some(f => f.day === day && f.slotIndex === slot && (f.teacherId === asg.teacherId || f.classId === asg.classId))) return false;
 
@@ -195,11 +238,11 @@ export const generateTimetable = async (
             if (teacher?.availability?.[`${dIdx}-${slot}`] === 'ND') return false;
             if (data.classes.find(c => c.id === asg.classId)?.timeConstraints?.[`${dIdx}-${slot}`] === 'ND') return false;
 
-            // Verificação de Limite Diário (dailyLimits)
+            // Verificação de Limite Diário (dailyLimits) considerando a posição no bloco atual
             const dailyMax = teacher?.dailyLimits?.[dIdx.toString()];
             if (dailyMax !== undefined) {
                 const currentLessonsOnDay = list.filter(f => f.teacherId === asg.teacherId && f.day === day).length;
-                if (currentLessonsOnDay >= dailyMax) return 'TEACHER_LIMIT';
+                if (currentLessonsOnDay + currentBlockIndex >= dailyMax) return 'TEACHER_LIMIT';
             }
 
             return true;
@@ -231,7 +274,7 @@ export const generateTimetable = async (
 
                     let possible: boolean | 'TEACHER_LIMIT' = true;
                     for (let j = 0; j < block.size; j++) {
-                        const res = isOk(day, i + j, block.assignment, list);
+                        const res = isOk(day, i + j, block.assignment, list, j);
                         if (res !== true) {
                             if (res === 'TEACHER_LIMIT') hitLimit = true;
                             possible = false;
@@ -251,12 +294,25 @@ export const generateTimetable = async (
                                 ? [idx] : []
                         );
 
-                        if (conflictingIdxs.length > 0 && conflictingIdxs.length <= 3) {
+                        // Não podemos expulsar aulas fixas protegidas pelo usuário
+                        const hasProtectedFixed = conflictingIdxs.some(idx => {
+                            const candidate = list[idx];
+                            return initialFixed.some(fl =>
+                                fl.day === candidate.day &&
+                                fl.slotIndex === candidate.slotIndex &&
+                                fl.classId === candidate.classId &&
+                                fl.teacherId === candidate.teacherId
+                            );
+                        });
+
+                        if (!hasProtectedFixed && conflictingIdxs.length > 0 && conflictingIdxs.length <= 3) {
                             const newList = [...list];
                             const filteredList = newList.filter((_, idx) => !conflictingIdxs.includes(idx));
 
                             let canFitNow = true;
-                            for (let j = 0; j < block.size; j++) if (isOk(day, i + j, block.assignment, filteredList) !== true) { canFitNow = false; break; }
+                            for (let j = 0; j < block.size; j++) {
+                                if (isOk(day, i + j, block.assignment, filteredList, j) !== true) { canFitNow = false; break; }
+                            }
 
                             if (canFitNow) {
                                 const victims = conflictingIdxs.map(idx => list[idx]);
@@ -342,6 +398,12 @@ export const generateTimetable = async (
                         if (currentBlock.length > 0) classBlocks.push(currentBlock);
 
                         classBlocks.forEach(blk => {
+                            // Não mover blocos que contenham aulas fixas originais do usuário
+                            const isProtected = blk.some(f => initialFixed.some(fl =>
+                                fl.day === f.day && fl.slotIndex === f.slotIndex && fl.classId === f.classId && fl.teacherId === f.teacherId
+                            ));
+                            if (isProtected) return;
+
                             let safety = 0;
                             while (blk[0].slotIndex > 0 && safety < 20) {
                                 safety++;
@@ -406,6 +468,12 @@ export const generateTimetable = async (
 
                 teacherBlocks.forEach((blk, idx) => {
                     if (idx === 0) return;
+                    // Não mover aulas fixas protegidas
+                    const isProtected = blk.some(f => initialFixed.some(fl =>
+                        fl.day === f.day && fl.slotIndex === f.slotIndex && fl.classId === f.classId && fl.teacherId === f.teacherId
+                    ));
+                    if (isProtected) return;
+
                     const prevBlk = teacherBlocks[idx - 1];
                     const gapStart = prevBlk[prevBlk.length - 1].slotIndex + 1;
                     
@@ -417,10 +485,15 @@ export const generateTimetable = async (
                             const newSlot = target + i;
                             const f = blk[i];
                             
-                            if (currentFixed.some(o => o.day === s.day && o.slotIndex === newSlot && o.classId === f.classId && !blk.includes(o))) {
+                            // Verificar choque tanto de turma quanto de professor!
+                            if (currentFixed.some(o => o.day === s.day && o.slotIndex === newSlot && (o.classId === f.classId || o.teacherId === f.teacherId) && !blk.includes(o))) {
                                 canMoveBlock = false; break;
                             }
                             const dIdx = originalDays.indexOf(s.day);
+                            // Verificar disponibilidade do professor!
+                            if (data.teachers.find(teacher => teacher.id === f.teacherId)?.availability?.[`${dIdx}-${newSlot}`] === 'ND') {
+                                canMoveBlock = false; break;
+                            }
                             if (data.classes.find(c => c.id === f.classId)?.timeConstraints?.[`${dIdx}-${newSlot}`] === 'ND') {
                                 canMoveBlock = false; break;
                             }

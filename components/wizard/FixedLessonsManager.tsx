@@ -55,9 +55,10 @@ export const FixedLessonsManager: React.FC<FixedLessonsManagerProps> = ({ isOpen
 
         // Check teacher availability
         const teacher = data.teachers.find(t => t.id === selectedTeacherId);
-        const dayIdx = DAYS_OF_WEEK.indexOf(day);
+        const activeDaysList = data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0 ? data.weekConfig.activeDays : DAYS_OF_WEEK;
+        const dayIdx = activeDaysList.indexOf(day);
         const status = teacher?.availability?.[`${dayIdx}-${slotIndex}`];
-        if (status === 'ND' || status === 'IN') return;
+        if (status === 'ND') return;
 
         // Check if teacher is already fixed elsewhere at this time
         const teacherBusy = (data.fixedLessons || []).find(fl => fl.teacherId === selectedTeacherId && fl.day === day && fl.slotIndex === slotIndex);

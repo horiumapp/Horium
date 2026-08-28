@@ -31,8 +31,14 @@ export const authService = {
 
     async resetPassword(email: string) {
         const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/reset-password',
+            redirectTo: window.location.origin,
         });
+        if (error) throw error;
+        return data;
+    },
+
+    async updatePassword(password: string) {
+        const { data, error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
         return data;
     },

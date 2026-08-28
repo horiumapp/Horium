@@ -60,7 +60,31 @@ export const Step3Subjects: React.FC<Step3SubjectsProps> = ({ data, setData, onN
     };
 
     const handleDeleteSubject = (id: string) => {
-        setData(prev => ({ ...prev, subjects: prev.subjects.filter(sub => sub.id !== id) }));
+        setData(prev => {
+            const updatedClasses = prev.classes.map(c => {
+                const newSubjects = c.subjects.filter(s => s !== id);
+                const newLessons = { ...c.lessonsPerSubject };
+                delete newLessons[id];
+                return { ...c, subjects: newSubjects, lessonsPerSubject: newLessons };
+            });
+
+            const updatedTeachers = prev.teachers.map(t => {
+                const newSubjects = t.subjects.filter(s => s !== id);
+                const newClassAssignments = { ...t.classAssignments };
+                delete newClassAssignments[id];
+                return { ...t, subjects: newSubjects, classAssignments: newClassAssignments };
+            });
+
+            const updatedFixed = (prev.fixedLessons || []).filter(fl => fl.subjectId !== id);
+
+            return {
+                ...prev,
+                subjects: prev.subjects.filter(sub => sub.id !== id),
+                classes: updatedClasses,
+                teachers: updatedTeachers,
+                fixedLessons: updatedFixed
+            };
+        });
     };
 
     return (

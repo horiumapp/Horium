@@ -40,8 +40,25 @@ export const adminLicenseService = {
     /**
      * Approve a license, setting it to 'Aprovado' and assigning an expiration date
      */
+    /**
+     * Approve a license, setting it to 'Aprovado' and assigning an expiration date
+     */
     async approveLicense(licenseId: string, validUntilDate: string): Promise<void> {
         try {
+            // Tenta primeiro através da RPC segura com SECURITY DEFINER (atômica e autorizada)
+            const { error: rpcError } = await supabase.rpc('approve_license_rpc', {
+                p_license_id: licenseId,
+                p_valid_until: validUntilDate
+            });
+
+            if (!rpcError) {
+                audio.playChaChing();
+                return;
+            }
+
+            console.warn("RPC approve_license_rpc falhou ou não existe, tentando atualização client-side direta:", rpcError);
+
+            // Fallback direto via cliente caso a RPC ainda não tenha sido criada no Supabase
             const { error } = await supabase
                 .from('licenses')
                 .update({

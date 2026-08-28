@@ -49,11 +49,15 @@ export const excelService = {
      * Generates a styled Excel for the specified view mode (TEACHER or CLASS)
      */
     exportEntityView: async (viewMode: 'TEACHER' | 'CLASS', selectedId: string, data: SetupData) => {
+        const activeDays = data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0
+            ? data.weekConfig.activeDays
+            : DAYS_OF_WEEK;
+
         const entityName = viewMode === 'CLASS'
             ? data.classes.find(c => c.id === selectedId)?.name
             : data.teachers.find(t => t.id === selectedId)?.name;
 
-        const totalCols = 1 + DAYS_OF_WEEK.length;
+        const totalCols = 1 + activeDays.length;
 
         // Title row (Row 1)
         const titleRow: Row = [
@@ -93,7 +97,7 @@ export const excelService = {
                 borderStyle: 'thin',
                 height: 25,
             },
-            ...DAYS_OF_WEEK.map(day => ({
+            ...activeDays.map(day => ({
                 value: day,
                 fontWeight: 'bold' as const,
                 textColor: '#FFFFFF',
@@ -121,7 +125,7 @@ export const excelService = {
                 fontSize: 10,
             };
 
-            const dayCells: Cell[] = DAYS_OF_WEEK.map(day => {
+            const dayCells: Cell[] = activeDays.map(day => {
                 const lessonData = data.fixedLessons?.find(fl =>
                     fl.day === day &&
                     fl.slotIndex === idx &&
@@ -170,7 +174,7 @@ export const excelService = {
 
         const columns = [
             { width: 15 },
-            ...DAYS_OF_WEEK.map(() => ({ width: 20 }))
+            ...activeDays.map(() => ({ width: 20 }))
         ];
 
         const blob = await writeXlsxFile([titleRow, emptyRow, headerRow, ...lessonRows], {
@@ -185,7 +189,10 @@ export const excelService = {
      * Generates a styled Excel for the Weekly view (All classes as columns)
      */
     exportWeeklyView: async (dayIndex: number, data: SetupData) => {
-        const dayName = DAYS_OF_WEEK[dayIndex];
+        const activeDays = data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0
+            ? data.weekConfig.activeDays
+            : DAYS_OF_WEEK;
+        const dayName = activeDays[dayIndex] || DAYS_OF_WEEK[dayIndex] || 'Dia';
         const sortedClasses = [...data.classes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         const totalCols = 1 + sortedClasses.length;
 
