@@ -43,12 +43,16 @@ DROP POLICY IF EXISTS "Users can view their own schedules" ON public.schedules;
 CREATE POLICY "Users can view their own schedules" ON public.schedules
 FOR SELECT TO authenticated USING (auth.uid() = user_id OR public.is_admin());
 
--- Trigger para impedir que usuários comuns alterem 'is_licensed' diretamente
+-- Trigger para impedir que usuários comuns alterem ou insiram 'is_licensed' diretamente
 CREATE OR REPLACE FUNCTION public.protect_schedule_license_status()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NOT public.is_admin() AND NEW.is_licensed IS DISTINCT FROM OLD.is_licensed THEN
-        NEW.is_licensed := OLD.is_licensed; -- Força manter o valor anterior
+    IF NOT public.is_admin() THEN
+        IF TG_OP = 'INSERT' THEN
+            NEW.is_licensed := false; -- Força false na criação para não-admins
+        ELSIF TG_OP = 'UPDATE' AND NEW.is_licensed IS DISTINCT FROM OLD.is_licensed THEN
+            NEW.is_licensed := OLD.is_licensed; -- Força manter o valor anterior
+        END IF;
     END IF;
     RETURN NEW;
 END;
@@ -56,7 +60,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS trg_protect_schedule_license ON public.schedules;
 CREATE TRIGGER trg_protect_schedule_license
-BEFORE UPDATE ON public.schedules
+BEFORE INSERT OR UPDATE ON public.schedules
 FOR EACH ROW
 EXECUTE FUNCTION public.protect_schedule_license_status();
 
@@ -279,28 +283,65 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
--- 7. CONFIGURAÇÃO DE STORAGE BUCKETS
--- Criação dos buckets (caso a extensão storage esteja disponível)
+-- 7. CONFIGURAÇÃO DE STORAGE BUCKETS (PRIVADOS E ISOLADOS)
+-- Criação dos buckets privados para comprovantes e anexos de suporte
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
-    ('receipts', 'receipts', true),
-    ('tickets-attachments', 'tickets-attachments', true)
-ON CONFLICT (id) DO NOTHING;
+    ('receipts', 'receipts', false),
+    ('tickets-attachments', 'tickets-attachments', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
 
 -- Políticas de Storage para Comprovantes (receipts)
 DROP POLICY IF EXISTS "Authenticated users can upload receipts" ON storage.objects;
 CREATE POLICY "Authenticated users can upload receipts" ON storage.objects
-FOR INSERT TO authenticated WITH CHECK (bucket_id = 'receipts');
+FOR INSERT TO authenticated 
+WITH CHECK (
+    bucket_id = 'receipts' 
+    AND (storage.foldername(name))[1] = auth.uid()::text
+);
 
 DROP POLICY IF EXISTS "Users can read receipts" ON storage.objects;
 CREATE POLICY "Users can read receipts" ON storage.objects
-FOR SELECT TO authenticated USING (bucket_id = 'receipts');
+FOR SELECT TO authenticated 
+USING (
+    bucket_id = 'receipts' 
+    AND ((storage.foldername(name))[1] = auth.uid()::text OR public.is_admin())
+);
+
+DROP POLICY IF EXISTS "Users and admins can delete receipts" ON storage.objects;
+CREATE POLICY "Users and admins can delete receipts" ON storage.objects
+FOR DELETE TO authenticated 
+USING (
+    bucket_id = 'receipts' 
+    AND ((storage.foldername(name))[1] = auth.uid()::text OR public.is_admin())
+);
 
 -- Políticas de Storage para Anexos de Tickets (tickets-attachments)
 DROP POLICY IF EXISTS "Authenticated users can upload ticket attachments" ON storage.objects;
 CREATE POLICY "Authenticated users can upload ticket attachments" ON storage.objects
-FOR INSERT TO authenticated WITH CHECK (bucket_id = 'tickets-attachments');
+FOR INSERT TO authenticated 
+WITH CHECK (
+    bucket_id = 'tickets-attachments' 
+    AND (storage.foldername(name))[1] = auth.uid()::text
+);
 
 DROP POLICY IF EXISTS "Users can read ticket attachments" ON storage.objects;
 CREATE POLICY "Users can read ticket attachments" ON storage.objects
-FOR SELECT TO authenticated USING (bucket_id = 'tickets-attachments');
+FOR SELECT TO authenticated 
+USING (
+    bucket_id = 'tickets-attachments' 
+    AND ((storage.foldername(name))[1] = auth.uid()::text OR public.is_admin())
+);
+
+
+-- 8. ÍNDICES DE PERFORMANCE E ESCALABILIDADE (POSTGRESQL)
+-- Otimização de consultas, filtros frequentes e chaves estrangeiras
+CREATE INDEX IF NOT EXISTS idx_schedules_user_deleted ON public.schedules(user_id, deleted_at, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_schedules_deleted_at ON public.schedules(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_licenses_user_id ON public.licenses(user_id);
+CREATE INDEX IF NOT EXISTS idx_licenses_schedule_id ON public.licenses(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_licenses_pending ON public.licenses(payment_status) WHERE payment_status IN ('Aguardando', 'under_review');
+CREATE INDEX IF NOT EXISTS idx_licenses_valid_until ON public.licenses(valid_until);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON public.notifications(user_id, is_read, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id, created_at DESC);
+

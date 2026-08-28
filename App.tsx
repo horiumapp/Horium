@@ -102,20 +102,29 @@ const App: React.FC = () => {
     try {
       const { data: userLicenses, error: licenseError } = await supabase
         .from('licenses')
-        .select('payment_status')
+        .select('payment_status, valid_until')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (!licenseError && userLicenses && userLicenses.length > 0) {
-        const hasApproved = userLicenses.some(l => l.payment_status === 'Aprovado');
-        const hasPending = userLicenses.some(l => l.payment_status === 'Aguardando' || l.payment_status === 'under_review');
+        const todayStr = new Date().toISOString().split('T')[0];
+        const activeApproved = userLicenses.filter(l => {
+          if (l.payment_status !== 'Aprovado') return false;
+          if (l.valid_until && l.valid_until < todayStr) return false;
+          return true;
+        });
 
-        if (hasApproved) {
+        const hasPending = userLicenses.some(l => l.payment_status === 'Aguardando' || l.payment_status === 'under_review');
+        const hasExpired = userLicenses.some(l => l.payment_status === 'Aprovado' && l.valid_until && l.valid_until < todayStr);
+
+        if (activeApproved.length > 0) {
           setActiveLicenseStatus('Aprovado');
         } else if (hasPending) {
           setActiveLicenseStatus('Aguardando');
+        } else if (hasExpired) {
+          setActiveLicenseStatus('Expirada');
         } else {
-          setActiveLicenseStatus(userLicenses[0].payment_status);
+          setActiveLicenseStatus(userLicenses[0].payment_status || 'Sem Licença');
         }
       } else {
         setActiveLicenseStatus('Sem Licença');

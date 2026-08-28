@@ -129,8 +129,9 @@ const PlansPage: React.FC<PlansPageProps> = ({
         return;
       }
 
-      const cleanFileName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const filePath = `${userData.user.id}/${Date.now()}_${cleanFileName}`;
+      const rawExt = receiptFile.name.split('.').pop() || 'png';
+      const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 5);
+      const filePath = `${userData.user.id}/${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
 
       // Upload para o bucket receipts
       const { error: uploadError } = await supabase.storage

@@ -18,8 +18,9 @@ export const ticketService = {
         let imageUrl = '';
 
         if (imageFile) {
-            const fileExt = imageFile.name.split('.').pop();
-            const fileName = `${Math.random()}.${fileExt}`;
+            const rawExt = imageFile.name.split('.').pop() || 'png';
+            const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 5);
+            const fileName = `${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
             const filePath = `${user.id}/${fileName}`;
 
             // Assuming we create a bucket called 'tickets-attachments'

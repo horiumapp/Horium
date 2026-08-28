@@ -4,6 +4,7 @@ import { LOGO_SVG } from '../constants';
 import { AppView, ADMIN_EMAILS } from '../types';
 import { notificationService, AppNotification } from '../services/notificationService';
 import { adminLicenseService } from '../services/adminLicenseService';
+import { supabase } from '../services/supabaseClient';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -35,7 +36,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
   };
 
   const handleMarkAllAsRead = async () => {
-    const { data: { user } } = await import('../services/supabaseClient').then(m => m.supabase.auth.getUser());
+    const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await notificationService.markAllAsRead(user.id);
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
@@ -57,7 +58,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
       try {
         let user = sessionUser;
         if (!user) {
-          const { data } = await import('../services/supabaseClient').then(m => m.supabase.auth.getUser());
+          const { data } = await supabase.auth.getUser();
           user = data.user;
         }
 
@@ -106,18 +107,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
 
     fetchUser();
 
-    let subscription: any;
-    import('../services/supabaseClient').then(m => {
-      const { data } = m.supabase.auth.onAuthStateChange((_event, session) => {
-        if (!hideNav && currentView !== AppView.LOGIN) {
-          fetchUser(session?.user);
-        }
-      });
-      subscription = data.subscription;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!hideNav && currentView !== AppView.LOGIN) {
+        fetchUser(session?.user);
+      }
     });
 
     return () => {
-      if (subscription) subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, [hideNav, currentView]);
 

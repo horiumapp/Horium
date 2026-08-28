@@ -87,16 +87,38 @@ export const scheduleService = {
         // Fetch licenses for this user
         const { data: licensesData, error: licensesError } = await supabase
             .from('licenses')
-            .select('schedule_id, payment_status')
+            .select('schedule_id, payment_status, valid_until')
             .eq('user_id', user.id);
 
         if (licensesError) {
             console.error('Error fetching licenses:', licensesError);
         }
 
+        const todayStr = new Date().toISOString().split('T')[0];
+
         return (schedulesData || []).map(item => {
             const scheduleLicense = (licensesData || []).find(l => l.schedule_id === item.id);
-            const isApproved = scheduleLicense?.payment_status === 'Aprovado' || item.is_licensed === true;
+
+            let isApproved = false;
+            let licenseStatus = 'Sem Licença';
+
+            if (scheduleLicense) {
+                const isNotExpired = !scheduleLicense.valid_until || scheduleLicense.valid_until >= todayStr;
+                if (scheduleLicense.payment_status === 'Aprovado') {
+                    if (isNotExpired) {
+                        isApproved = true;
+                        licenseStatus = 'Aprovado';
+                    } else {
+                        isApproved = false;
+                        licenseStatus = 'Expirada';
+                    }
+                } else {
+                    licenseStatus = scheduleLicense.payment_status || 'Sem Licença';
+                }
+            } else if (item.is_licensed === true) {
+                isApproved = true;
+                licenseStatus = 'Aprovado';
+            }
 
             const normalizedData = ensureScheduleSlots(item.data || {});
 
@@ -106,7 +128,7 @@ export const scheduleService = {
                 createdAt: item.created_at,
                 status: item.data?.status || 'Em andamento',
                 isLicensed: isApproved,
-                licenseStatus: scheduleLicense?.payment_status || (item.is_licensed ? 'Aprovado' : 'Sem Licença')
+                licenseStatus: licenseStatus
             };
         });
     },
