@@ -106,7 +106,7 @@ export const TeacherAssignmentManager: React.FC<TeacherAssignmentManagerProps> =
                                 </div>
                             ) : (
                                 relevantClasses.map(c => {
-                                    const currentStatus = teacher.classAssignments?.[activeSubject.id]?.[c.id] || 'NÃO';
+                                    const currentStatus = teacher.classAssignments?.[activeSubject.id]?.[c.id] || 'PODERÁ';
                                     const otherTeacherName = takenClasses[c.id];
                                     const isDisabled = !!otherTeacherName;
 

@@ -40,9 +40,6 @@ export const adminLicenseService = {
     /**
      * Approve a license, setting it to 'Aprovado' and assigning an expiration date
      */
-    /**
-     * Approve a license, setting it to 'Aprovado' and assigning an expiration date
-     */
     async approveLicense(licenseId: string, validUntilDate: string): Promise<void> {
         try {
             // Tenta primeiro através da RPC segura com SECURITY DEFINER (atômica e autorizada)
@@ -111,10 +108,21 @@ export const adminLicenseService = {
     },
 
     /**
-     * Delete a license entry permanentely
+     * Delete a license entry permanently (via RPC with client fallback)
      */
     async deleteLicense(licenseId: string): Promise<void> {
         try {
+            // Tenta primeiro via RPC segura com SECURITY DEFINER
+            const { error: rpcError } = await supabase.rpc('delete_license_rpc', {
+                p_license_id: licenseId
+            });
+
+            if (!rpcError) {
+                return;
+            }
+
+            console.warn("RPC delete_license_rpc falhou, tentando fallback:", rpcError);
+
             const { error } = await supabase
                 .from('licenses')
                 .delete()
@@ -131,10 +139,16 @@ export const adminLicenseService = {
     },
 
     /**
-     * Get the count of pending license requests
+     * Get the count of pending license requests (via RPC with client fallback)
      */
     async getPendingLicensesCount(): Promise<number> {
         try {
+            // Tenta primeiro via RPC segura
+            const { data: rpcCount, error: rpcError } = await supabase.rpc('get_pending_licenses_count_rpc');
+            if (!rpcError && typeof rpcCount === 'number') {
+                return rpcCount;
+            }
+
             const { count, error } = await supabase
                 .from('licenses')
                 .select('*', { count: 'exact', head: true })
@@ -142,7 +156,7 @@ export const adminLicenseService = {
 
             if (error) {
                 console.error("Error fetching pending licenses count:", error);
-                throw new Error(error.message);
+                return 0;
             }
 
             return count || 0;

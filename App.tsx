@@ -58,30 +58,38 @@ const App: React.FC = () => {
     audio.setMuted(isMuted);
   }, []);
 
-  // Debounced Auto-save
+  const latestSaveSeq = React.useRef(0);
+
+  // Debounced Auto-save com proteção contra race conditions
   useEffect(() => {
     if (!setupData.id || loading || currentView === AppView.PROCESSING) return;
 
+    const currentSeq = ++latestSaveSeq.current;
     const timer = setTimeout(async () => {
       try {
         setIsSaving(true);
         setSaveError(null);
         const saved = await scheduleService.saveSchedule(setupData);
 
-        // Update the schedules list in background
-        setSchedules(prev => prev.map(s => s.id === saved.id ? saved : s));
-
-        console.log('Auto-save successful');
+        // Update the schedules list in background se ainda for a requisição mais recente
+        if (currentSeq === latestSaveSeq.current) {
+          setSchedules(prev => prev.map(s => s.id === saved.id ? saved : s));
+          console.log('Auto-save successful');
+        }
       } catch (err) {
-        console.error('Auto-save failed:', err);
-        setSaveError('Erro ao salvar automaticamente. Verifique sua conexão.');
+        if (currentSeq === latestSaveSeq.current) {
+          console.error('Auto-save failed:', err);
+          setSaveError('Erro ao salvar automaticamente. Verifique sua conexão.');
+        }
       } finally {
-        setIsSaving(false);
+        if (currentSeq === latestSaveSeq.current) {
+          setIsSaving(false);
+        }
       }
-    }, 2000); // 2 seconds delay
+    }, 1500);
 
     return () => clearTimeout(timer);
-  }, [setupData, loading]);
+  }, [setupData, loading, currentView]);
 
   const loadLicenseStatus = async (userId: string) => {
     try {
@@ -439,10 +447,12 @@ const App: React.FC = () => {
         return (
           <TimetableResult
             data={setupData}
+            setData={handleUpdateData}
             onReprocess={() => {
               handleSetupComplete();
             }}
             onLicenseNeeded={() => setView(AppView.PLANS)}
+            activeLicenseStatus={activeLicenseStatus}
           />
         );
       case AppView.PLANS:

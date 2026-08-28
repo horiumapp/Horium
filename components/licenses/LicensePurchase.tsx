@@ -76,65 +76,58 @@ export const LicensePurchase: React.FC<LicensePurchaseProps> = ({ onBack, onGoHo
 
         setPaymentStatus('verifying');
 
-        let currentUser: any = null;
         try {
             const { data: userData, error: userError } = await supabase.auth.getUser();
-            if (userError) throw userError;
-            currentUser = userData.user;
+            if (userError || !userData.user) {
+                alert("Sessão inválida. Por favor, faça login novamente.");
+                setPaymentStatus('upload_receipt');
+                return;
+            }
 
-            if (userData.user) {
-                const today = new Date().toISOString().split('T')[0];
-                const validUntil = new Date();
-                validUntil.setMonth(validUntil.getMonth() + 6);
+            const cleanFileName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const filePath = `${userData.user.id}/${Date.now()}_${cleanFileName}`;
 
-                const { error: insertError } = await supabase.from('licenses').insert({
-                    user_id: userData.user.id,
-                    schedule_id: scheduleId,
-                    payment_date: today,
-                    classes_amount: numClasses,
-                    value_paid: totalPrice,
-                    payment_method: 'PIX',
-                    payment_status: 'Aguardando',
-                    valid_until: validUntil.toISOString().split('T')[0],
-                    receipt_url: null,
+            // Upload para o bucket seguro do Supabase Storage
+            const { error: uploadError } = await supabase.storage
+                .from('receipts')
+                .upload(filePath, receiptFile, {
+                    cacheControl: '3600',
+                    upsert: false
                 });
 
-                if (insertError) {
-                    console.error("Error inserting license:", insertError);
-                    alert("Erro ao registrar a licença no banco de dados.");
-                    setPaymentStatus('upload_receipt');
-                    return;
-                }
+            let receiptUrl: string | null = null;
+            if (!uploadError) {
+                const { data: publicUrlData } = supabase.storage
+                    .from('receipts')
+                    .getPublicUrl(filePath);
+                receiptUrl = publicUrlData?.publicUrl || null;
+            } else {
+                console.warn("Aviso no upload do comprovante para Storage:", uploadError);
             }
-        } catch (err) {
-            console.error("Auth error:", err);
-            alert("Sessão inválida. Por favor, faça login novamente.");
-            setPaymentStatus('upload_receipt');
-            return;
-        }
 
-        try {
-            const formData = new FormData();
-            formData.append('_subject', `Novo Comprovante PIX - Horium (${numClasses} Turmas)`);
-            formData.append('_captcha', 'false');
-            formData.append('_template', 'table');
-            formData.append('_cc', 'prof.jackison@gmail.com');
-            formData.append('Email_Usuario', currentUser?.email || 'Não informado');
-            formData.append('ID_Usuario', currentUser?.id || 'Não informado');
-            formData.append('ID_Horario', scheduleId || 'Não vinculado');
-            formData.append('Total_Pago', `R$ ${totalPrice},00`);
-            formData.append('Qtd_Turmas', String(numClasses));
-            formData.append('Mensagem', `Um usuário anexou comprovante de PIX para a compra de ${numClasses} turmas (6 meses). Comprovante anexo.`);
-            formData.append('attachment', receiptFile);
+            const today = new Date().toISOString().split('T')[0];
 
-            await fetch('https://formsubmit.co/ajax/horium.app@gmail.com', {
-                method: 'POST',
-                body: formData
+            const { error: insertError } = await supabase.from('licenses').insert({
+                user_id: userData.user.id,
+                schedule_id: scheduleId || null,
+                payment_date: today,
+                classes_amount: numClasses,
+                value_paid: totalPrice,
+                payment_method: 'PIX',
+                payment_status: 'Aguardando',
+                receipt_url: receiptUrl,
             });
 
+            if (insertError) {
+                console.error("Error inserting license:", insertError);
+                alert("Erro ao registrar a licença no banco de dados.");
+                setPaymentStatus('upload_receipt');
+                return;
+            }
+
             setPaymentStatus('under_review');
-        } catch (submitErr) {
-            console.warn("Erro no envio do formulário via fetch, mantendo status sob revisão:", submitErr);
+        } catch (err) {
+            console.error("Erro no processamento do comprovante:", err);
             setPaymentStatus('under_review');
         }
     };

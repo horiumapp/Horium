@@ -2,6 +2,7 @@ import writeXlsxFile, { Row, Cell } from 'write-excel-file/browser';
 import { saveAs } from 'file-saver';
 import { SetupData } from '../types';
 import { DAYS_OF_WEEK } from '../constants';
+import { ensureScheduleSlots } from './scheduleService';
 
 /**
  * Formats a color string to valid 6-digit hex (#RRGGBB)
@@ -49,13 +50,14 @@ export const excelService = {
      * Generates a styled Excel for the specified view mode (TEACHER or CLASS)
      */
     exportEntityView: async (viewMode: 'TEACHER' | 'CLASS', selectedId: string, data: SetupData) => {
-        const activeDays = data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0
-            ? data.weekConfig.activeDays
+        const normalizedData = ensureScheduleSlots(data);
+        const activeDays = normalizedData.weekConfig?.activeDays && normalizedData.weekConfig.activeDays.length > 0
+            ? normalizedData.weekConfig.activeDays
             : DAYS_OF_WEEK;
 
         const entityName = viewMode === 'CLASS'
-            ? data.classes.find(c => c.id === selectedId)?.name
-            : data.teachers.find(t => t.id === selectedId)?.name;
+            ? normalizedData.classes.find(c => c.id === selectedId)?.name
+            : normalizedData.teachers.find(t => t.id === selectedId)?.name;
 
         const totalCols = 1 + activeDays.length;
 
@@ -189,11 +191,12 @@ export const excelService = {
      * Generates a styled Excel for the Weekly view (All classes as columns)
      */
     exportWeeklyView: async (dayIndex: number, data: SetupData) => {
-        const activeDays = data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0
-            ? data.weekConfig.activeDays
+        const normalizedData = ensureScheduleSlots(data);
+        const activeDays = normalizedData.weekConfig?.activeDays && normalizedData.weekConfig.activeDays.length > 0
+            ? normalizedData.weekConfig.activeDays
             : DAYS_OF_WEEK;
         const dayName = activeDays[dayIndex] || DAYS_OF_WEEK[dayIndex] || 'Dia';
-        const sortedClasses = [...data.classes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        const sortedClasses = [...normalizedData.classes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         const totalCols = 1 + sortedClasses.length;
 
         // Title row (Row 1)

@@ -122,57 +122,57 @@ const PlansPage: React.FC<PlansPageProps> = ({
     setPaymentStatus('verifying');
 
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userEmail = userData?.user?.email;
-
-      if (userData.user) {
-        const today = new Date().toISOString().split('T')[0];
-        const validUntil = new Date();
-        if (duration === '06 meses') validUntil.setMonth(validUntil.getMonth() + 6);
-        if (duration === '1 ano') validUntil.setFullYear(validUntil.getFullYear() + 1);
-        if (duration === '2 anos') validUntil.setFullYear(validUntil.getFullYear() + 2);
-
-        const { error: insertError } = await supabase.from('licenses').insert({
-          user_id: userData.user.id,
-          schedule_id: scheduleId,
-          payment_date: today,
-          classes_amount: numClasses,
-          value_paid: totalPrice,
-          payment_method: 'PIX',
-          payment_status: 'Aguardando',
-          valid_until: validUntil.toISOString().split('T')[0],
-          receipt_url: null,
-        });
-
-        if (insertError) {
-          console.warn("DB Insert failed, but will proceed with email:", insertError);
-        }
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        alert("Sessão inválida. Por favor, faça login novamente.");
+        setPaymentStatus('upload_receipt');
+        return;
       }
 
-      // Fluxo de envio por e-mail via AJAX (FormSubmit)
-      const formData = new FormData();
-      formData.append('_subject', `Novo Comprovante PIX - Horium (${numClasses} Turmas)`);
-      formData.append('_captcha', 'false');
-      formData.append('_template', 'table');
-      formData.append('_cc', 'prof.jackison@gmail.com');
-      formData.append('Email_Usuario', userEmail || 'Não identificado');
-      formData.append('Mensagem', `Um usuário anexou um comprovante de PIX para a compra de ${numClasses} turmas pelo plano ${duration}. O arquivo está em anexo.`);
-      formData.append('Link_Admin', window.location.origin);
-      formData.append('Comprovante_PDF_Imagem', receiptFile);
+      const cleanFileName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${userData.user.id}/${Date.now()}_${cleanFileName}`;
 
-      const response = await fetch('https://formsubmit.co/ajax/horium.app@gmail.com', {
-        method: 'POST',
-        body: formData
+      // Upload para o bucket receipts
+      const { error: uploadError } = await supabase.storage
+        .from('receipts')
+        .upload(filePath, receiptFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      let receiptUrl: string | null = null;
+      if (!uploadError) {
+        const { data: publicUrlData } = supabase.storage
+          .from('receipts')
+          .getPublicUrl(filePath);
+        receiptUrl = publicUrlData?.publicUrl || null;
+      } else {
+        console.warn("Aviso no upload para Storage:", uploadError);
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const { error: insertError } = await supabase.from('licenses').insert({
+        user_id: userData.user.id,
+        schedule_id: scheduleId || null,
+        payment_date: today,
+        classes_amount: numClasses,
+        value_paid: totalPrice,
+        payment_method: 'PIX',
+        payment_status: 'Aguardando',
+        receipt_url: receiptUrl,
       });
 
-      if (!response.ok) {
-        throw new Error('Falha ao enviar e-mail via FormSubmit');
+      if (insertError) {
+        console.error("DB Insert failed:", insertError);
+        alert("Erro ao registrar a licença no banco de dados.");
+        setPaymentStatus('upload_receipt');
+        return;
       }
 
       setPaymentStatus('under_review');
     } catch (err) {
       console.error("Erro no processamento do comprovante:", err);
-      // Fallback para não travar a UI do usuário
       setPaymentStatus('under_review');
     }
   };
