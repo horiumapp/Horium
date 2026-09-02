@@ -295,17 +295,17 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.get_pending_licenses_count_rpc()
 RETURNS INTEGER AS $$
 DECLARE
-    v_count INTEGER;
+    v_count INTEGER := 0;
 BEGIN
     IF NOT public.is_admin() THEN
         RETURN 0;
     END IF;
 
-    SELECT COUNT(*) INTO v_count
+    SELECT COALESCE(COUNT(*), 0) INTO v_count
     FROM public.licenses
     WHERE payment_status IN ('Aguardando', 'under_review');
 
-    RETURN v_count;
+    RETURN COALESCE(v_count, 0);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
