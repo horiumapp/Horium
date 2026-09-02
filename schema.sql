@@ -202,6 +202,7 @@ FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admi
 -- 6. FUNÇÕES SEGURAS PARA ADMINISTRAÇÃO E REGRAS DE NEGÓCIO (RPC COM SECURITY DEFINER)
 
 -- RPC para buscar todas as licenças com e-mail dos usuários
+DROP FUNCTION IF EXISTS public.get_admin_licenses();
 CREATE OR REPLACE FUNCTION public.get_admin_licenses()
 RETURNS TABLE (
     id UUID,
@@ -246,6 +247,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 -- RPC para aprovação idempotente de licença
+DROP FUNCTION IF EXISTS public.approve_license_rpc(UUID, DATE);
 CREATE OR REPLACE FUNCTION public.approve_license_rpc(
     p_license_id UUID,
     p_valid_until DATE
@@ -301,6 +303,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 -- RPC para excluir licença permanentemente (Admin)
+DROP FUNCTION IF EXISTS public.delete_license_rpc(UUID);
 CREATE OR REPLACE FUNCTION public.delete_license_rpc(
     p_license_id UUID
 )
@@ -316,6 +319,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 -- RPC para contagem de licenças pendentes (Admin)
+DROP FUNCTION IF EXISTS public.get_pending_licenses_count_rpc();
 CREATE OR REPLACE FUNCTION public.get_pending_licenses_count_rpc()
 RETURNS INTEGER AS $$
 DECLARE
@@ -334,6 +338,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 -- RPC para solicitar compra de licença com cálculo seguro de preço no servidor (Prevenção de BOLA / Tampering)
+DROP FUNCTION IF EXISTS public.request_license_order(UUID, TEXT, INTEGER, TEXT);
 CREATE OR REPLACE FUNCTION public.request_license_order(
     p_schedule_id UUID,
     p_duration TEXT,
@@ -405,6 +410,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 -- RPC de Paywall Seguro: Entrega a solução da grade apenas se houver licença ativa
+DROP FUNCTION IF EXISTS public.get_schedule_solution(UUID);
 CREATE OR REPLACE FUNCTION public.get_schedule_solution(
     p_schedule_id UUID
 )
