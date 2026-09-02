@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { adminLicenseService, AdminLicense } from '../services/adminLicenseService';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { supabase } from '../services/supabaseClient';
 
 interface AdminPanelPageProps {
     onBack: () => void;
@@ -83,6 +84,30 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
         return new Intl.DateTimeFormat('pt-BR').format(new Date(dateString));
     };
 
+    const handleOpenReceipt = async (urlOrPath: string) => {
+        if (!urlOrPath) return;
+        if (urlOrPath.includes('token=')) {
+            setViewingReceiptUrl(urlOrPath);
+            return;
+        }
+
+        try {
+            let path = urlOrPath;
+            if (urlOrPath.includes('/receipts/')) {
+                path = urlOrPath.split('/receipts/').pop()?.split('?')[0] || urlOrPath;
+            }
+            const { data } = await supabase.storage.from('receipts').createSignedUrl(path, 3600);
+            if (data?.signedUrl) {
+                setViewingReceiptUrl(data.signedUrl);
+                return;
+            }
+        } catch (e) {
+            console.warn("Erro ao gerar URL assinada sob demanda:", e);
+        }
+
+        setViewingReceiptUrl(urlOrPath);
+    };
+
     return (
         <div className="flex-1 flex flex-col p-6 min-h-[calc(100vh-64px)] overflow-y-auto academic-gradient">
             <div className="w-full max-w-7xl mx-auto flex flex-col gap-6">
@@ -101,112 +126,134 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
                     </Button>
                 </div>
 
-                {/* Action Bar */}
-                <div className="flex justify-end mb-2">
-                    <Button onClick={fetchLicenses} variant="secondary" className="flex items-center gap-2 shadow-sm text-sm">
-                        <span className="material-symbols-outlined text-sm">refresh</span> Recarregar Tabela
-                    </Button>
-                </div>
+                {/* Main Table Card */}
+                <div className="bg-white dark:bg-[#1a2634] border border-[#dbe0e6] dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/30">
+                        <h2 className="font-bold text-gray-700 dark:text-gray-200">Solicitações de Licença</h2>
+                        <button
+                            onClick={fetchLicenses}
+                            disabled={loading}
+                            className="p-1.5 text-gray-500 hover:text-primary transition-colors flex items-center gap-1 text-xs font-semibold"
+                        >
+                            <span className={`material-symbols-outlined text-sm ${loading ? 'animate-spin' : ''}`}>refresh</span>
+                            Atualizar
+                        </button>
+                    </div>
 
-                {/* Table */}
-                <div className="bg-white dark:bg-[#1a2634] border border-[#dbe0e6] dark:border-gray-700 overflow-x-auto shadow-xl rounded-lg min-h-[400px] relative">
-                    <table className="w-full text-sm text-left border-collapse min-w-[1000px]">
-                        <thead className="text-sm text-[#111418] dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-800/80">
-                            <tr>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700">DATA CRIAÇÃO</th>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700">Cliente (E-mail)</th>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700">Horário</th>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700 text-center">Turmas</th>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700 text-center">Pagamento</th>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700 text-center">Comprovante</th>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700 text-center">Status</th>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700 text-center">Vencimento</th>
-                                <th scope="col" className="px-5 py-4 border-b border-[#dbe0e6] dark:border-gray-700 text-right">Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {!loading && !error && licenses.length === 0 && (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-sm">
+                            <thead className="bg-gray-50 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-700 uppercase text-[11px] tracking-wider">
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-16 text-center text-gray-500 text-lg">
-                                        Nenhuma licença foi localizada no banco de dados.
-                                    </td>
+                                    <th className="px-5 py-3">Usuário</th>
+                                    <th className="px-5 py-3">Horário Vinculado</th>
+                                    <th className="px-5 py-3 text-center">Data</th>
+                                    <th className="px-5 py-3 text-center">Turmas</th>
+                                    <th className="px-5 py-3 text-center">Valor / Forma</th>
+                                    <th className="px-5 py-3 text-center">Comprovante</th>
+                                    <th className="px-5 py-3 text-center">Status</th>
+                                    <th className="px-5 py-3 text-center">Validade Atual</th>
+                                    <th className="px-5 py-3 text-right">Ações</th>
                                 </tr>
-                            )}
-
-                            {!loading && !error && licenses.map((lic) => {
-                                const isPending = lic.payment_status === 'Aguardando' || lic.payment_status === 'under_review';
-
-                                return (
-                                    <tr key={lic.id} className="hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border-b border-[#dbe0e6]/50 dark:border-gray-700/50">
-                                        <td className="px-5 py-4 font-medium text-gray-500 whitespace-nowrap">
-                                            {formatDate(lic.created_at)}
-                                        </td>
-                                        <td className="px-5 py-4 font-bold text-gray-800 dark:text-gray-200">
-                                            {lic.user_email}
-                                        </td>
-                                        <td className="px-5 py-4 text-gray-600 dark:text-gray-400">
-                                            {lic.schedule_name || <span className="italic text-gray-400">Não associado</span>}
-                                        </td>
-                                        <td className="px-5 py-4 text-center text-lg">{lic.classes_amount}</td>
-                                        <td className="px-5 py-4 text-center">
-                                            <div className="flex flex-col items-center">
-                                                <span className="font-bold text-primary">{formatCurrency(lic.value_paid)}</span>
-                                                <span className="text-xs text-gray-400">{lic.payment_method}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4 text-center">
-                                            {lic.receipt_url ? (
-                                                <button
-                                                    onClick={() => setViewingReceiptUrl(lic.receipt_url)}
-                                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-primary dark:text-blue-300 rounded-lg font-bold text-xs hover:bg-blue-100 transition-colors border border-blue-200 dark:border-blue-700 shadow-sm"
-                                                    title="Ver comprovante anexado"
-                                                >
-                                                    <span className="material-symbols-outlined text-[16px]">receipt_long</span>
-                                                    Ver
-                                                </button>
-                                            ) : (
-                                                <span className="text-xs text-gray-400 italic">Sem anexo</span>
-                                            )}
-                                        </td>
-                                        <td className="px-5 py-4 text-center">
-                                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1
-                        ${isPending ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-green-100 text-green-800 border border-green-200'}
-                       `}>
-                                                <span className="material-symbols-outlined text-[14px]">
-                                                    {isPending ? 'hourglass_empty' : 'check_circle'}
-                                                </span>
-                                                {lic.payment_status}
-                                            </span>
-                                        </td>
-                                        <td className="px-5 py-4 text-center font-medium text-gray-600 dark:text-gray-400">
-                                            {formatDate(lic.valid_until)}
-                                        </td>
-                                        <td className="px-5 py-4 text-right">
-                                            <div className="flex justify-end items-center gap-2">
-                                                {isPending ? (
-                                                    <Button
-                                                        onClick={() => setSelectedLicense(lic)}
-                                                        className="bg-green-600 hover:bg-green-700 text-white shadow-md rounded-xl text-sm"
-                                                    >
-                                                        Aprovar
-                                                    </Button>
-                                                ) : (
-                                                    <span className="text-sm text-gray-400 font-bold">Já Aprovado</span>
-                                                )}
-                                                <button
-                                                    onClick={() => handleDeleteLicense(lic.id, lic.user_email)}
-                                                    className="bg-red-50 hover:bg-red-100 text-red-600 p-2 rounded-lg transition-colors border border-red-100"
-                                                    title="Excluir licença permanentemente"
-                                                >
-                                                    <span className="material-symbols-outlined text-xl">delete</span>
-                                                </button>
-                                            </div>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={9} className="text-center py-12 text-gray-400">
+                                            <span className="material-symbols-outlined animate-spin text-3xl mb-2 text-primary">progress_activity</span>
+                                            <p>Carregando licenças...</p>
                                         </td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                ) : licenses.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={9} className="text-center py-12 text-gray-400">
+                                            <span className="material-symbols-outlined text-4xl mb-2 text-gray-300">inbox</span>
+                                            <p>Nenhuma licença encontrada.</p>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    licenses.map((lic) => {
+                                        const isPending = lic.payment_status === 'Aguardando' || lic.payment_status === 'under_review';
+
+                                        return (
+                                            <tr key={lic.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
+                                                <td className="px-5 py-4 font-medium text-gray-900 dark:text-white">
+                                                    {lic.user_email || 'Email não disponível'}
+                                                </td>
+                                                <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
+                                                    {lic.schedule_name ? (
+                                                        <span className="inline-flex items-center gap-1.5 font-medium">
+                                                            <span className="material-symbols-outlined text-xs text-primary">calendar_month</span>
+                                                            {lic.schedule_name}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 italic">Sem horário vinculado</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-5 py-4 text-center text-gray-600 dark:text-gray-400">
+                                                    {formatDate(lic.payment_date)}
+                                                </td>
+                                                <td className="px-5 py-4 text-center text-lg">{lic.classes_amount}</td>
+                                                <td className="px-5 py-4 text-center">
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="font-bold text-primary">{formatCurrency(lic.value_paid)}</span>
+                                                        <span className="text-xs text-gray-400">{lic.payment_method}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4 text-center">
+                                                    {lic.receipt_url ? (
+                                                        <button
+                                                            onClick={() => handleOpenReceipt(lic.receipt_url)}
+                                                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-primary dark:text-blue-300 rounded-lg font-bold text-xs hover:bg-blue-100 transition-colors border border-blue-200 dark:border-blue-700 shadow-sm"
+                                                            title="Ver comprovante anexado"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+                                                            Ver
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 italic">Sem anexo</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-5 py-4 text-center">
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1
+                                                        ${isPending ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-green-100 text-green-800 border border-green-200'}
+                                                    `}>
+                                                        <span className="material-symbols-outlined text-[14px]">
+                                                            {isPending ? 'hourglass_empty' : 'check_circle'}
+                                                        </span>
+                                                        {lic.payment_status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-4 text-center font-medium text-gray-600 dark:text-gray-400">
+                                                    {formatDate(lic.valid_until)}
+                                                </td>
+                                                <td className="px-5 py-4 text-right">
+                                                    <div className="flex justify-end items-center gap-2">
+                                                        {isPending ? (
+                                                            <Button
+                                                                onClick={() => setSelectedLicense(lic)}
+                                                                className="bg-green-600 hover:bg-green-700 text-white shadow-md rounded-xl text-sm"
+                                                            >
+                                                                Aprovar
+                                                            </Button>
+                                                        ) : (
+                                                            <span className="text-sm text-gray-400 font-bold">Já Aprovado</span>
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleDeleteLicense(lic.id, lic.user_email)}
+                                                            className="bg-red-50 hover:bg-red-100 text-red-600 p-2 rounded-lg transition-colors border border-red-100"
+                                                            title="Excluir licença permanentemente"
+                                                        >
+                                                            <span className="material-symbols-outlined text-xl">delete</span>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
 
                     {loading && (
                         <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-[#1a2634]/80 backdrop-blur-sm">

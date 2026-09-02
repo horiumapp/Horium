@@ -72,10 +72,11 @@ export const scheduleService = {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return [];
 
-        // Fetch schedules
+        // Fetch schedules (filtrando explicitamente por user_id como defesa em profundidade)
         const { data: schedulesData, error: schedulesError } = await supabase
             .from('schedules')
             .select('*')
+            .eq('user_id', user.id)
             .is('deleted_at', null)
             .order('created_at', { ascending: false });
 
@@ -154,6 +155,7 @@ export const scheduleService = {
                 .from('schedules')
                 .update(payload)
                 .eq('id', id)
+                .eq('user_id', user.id)
                 .select()
                 .single();
 
@@ -178,10 +180,14 @@ export const scheduleService = {
     },
 
     async deleteSchedule(id: string): Promise<void> {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+
         const { error } = await supabase
             .from('schedules')
             .update({ deleted_at: new Date().toISOString() })
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', user.id);
 
         if (error) {
             console.error('Error deleting schedule:', error);
@@ -199,6 +205,7 @@ export const scheduleService = {
         const { data, error } = await supabase
             .from('schedules')
             .select('*')
+            .eq('user_id', user.id)
             .not('deleted_at', 'is', null)
             .gte('deleted_at', thirtyDaysAgo.toISOString())
             .order('deleted_at', { ascending: false });
@@ -219,10 +226,14 @@ export const scheduleService = {
     },
 
     async restoreSchedule(id: string): Promise<void> {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+
         const { error } = await supabase
             .from('schedules')
             .update({ deleted_at: null })
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', user.id);
 
         if (error) {
             console.error('Error restoring schedule:', error);
@@ -231,10 +242,14 @@ export const scheduleService = {
     },
 
     async permanentlyDeleteSchedule(id: string): Promise<void> {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+
         const { error } = await supabase
             .from('schedules')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', user.id);
 
         if (error) {
             console.error('Error permanently deleting schedule:', error);

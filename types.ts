@@ -11,8 +11,6 @@ export enum AppView {
   ADMIN = 'ADMIN'
 }
 
-export const ADMIN_EMAILS = ['horium.app@gmail.com', 'prof.jackison@gmail.com'];
-
 export interface Institution {
   name: string;
   year: string;

@@ -143,10 +143,13 @@ const PlansPage: React.FC<PlansPageProps> = ({
 
       let receiptUrl: string | null = null;
       if (!uploadError) {
-        const { data: publicUrlData } = supabase.storage
+        const { data: signedData, error: signError } = await supabase.storage
           .from('receipts')
-          .getPublicUrl(filePath);
-        receiptUrl = publicUrlData?.publicUrl || null;
+          .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 ano de expiração
+        if (signError) {
+          console.warn("Aviso ao gerar Signed URL do comprovante:", signError);
+        }
+        receiptUrl = signedData?.signedUrl || null;
       } else {
         console.warn("Aviso no upload para Storage:", uploadError);
       }

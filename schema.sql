@@ -2,11 +2,38 @@
 -- HORIUM - SCHEMA COMPLETO DO BANCO DE DADOS (SUPABASE POSTGRESQL)
 -- ==============================================================================
 
--- 1. FUNÇÃO AUXILIAR DE SEGURANÇA (ADMIN)
+-- 1. TABELA DE ADMINISTRADORES (ADMIN_USERS) COM RLS
+CREATE TABLE IF NOT EXISTS public.admin_users (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
+);
+
+ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
+
+-- 2. FUNÇÃO AUXILIAR DE SEGURANÇA (ADMIN) DINÂMICA
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-    RETURN (auth.jwt() ->> 'email') IN ('horium.app@gmail.com', 'prof.jackison@gmail.com');
+    RETURN EXISTS (
+        SELECT 1 FROM public.admin_users
+        WHERE (user_id IS NOT NULL AND user_id = auth.uid())
+           OR (email IS NOT NULL AND LOWER(email) = LOWER(auth.jwt() ->> 'email'))
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Políticas de RLS para admin_users (Apenas admins gerenciam/visualizam)
+DROP POLICY IF EXISTS "Admins can manage admin_users" ON public.admin_users;
+CREATE POLICY "Admins can manage admin_users" ON public.admin_users
+FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+-- RPC para o frontend consultar status de admin do usuário autenticado de forma segura
+CREATE OR REPLACE FUNCTION public.is_current_user_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN public.is_admin();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

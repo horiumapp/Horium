@@ -78,20 +78,34 @@ export const adminLicenseService = {
     },
 
     /**
-     * Get the count of pending license requests (via RPC with client fallback)
+     * Check if the current logged-in user is an administrator via secure RPC
+     */
+    async isCurrentUserAdmin(): Promise<boolean> {
+        try {
+            const { data, error } = await supabase.rpc('is_current_user_admin');
+            if (error) {
+                console.warn("RPC is_current_user_admin falhou:", error);
+                return false;
+            }
+            return !!data;
+        } catch (err) {
+            console.error("Erro ao verificar status de admin:", err);
+            return false;
+        }
+    },
+
+    /**
+     * Get the count of pending license requests (via secure RPC)
      */
     async getPendingLicensesCount(): Promise<number> {
         try {
-            const { count, error } = await supabase
-                .from('licenses')
-                .select('*', { count: 'exact', head: true })
-                .or('payment_status.eq.Aguardando,payment_status.eq.under_review');
+            const { data, error } = await supabase.rpc('get_pending_licenses_count_rpc');
 
             if (error) {
                 return 0;
             }
 
-            return count || 0;
+            return typeof data === 'number' ? data : 0;
         } catch (err: any) {
             return 0;
         }

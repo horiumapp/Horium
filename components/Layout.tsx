@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { LOGO_SVG } from '../constants';
-import { AppView, ADMIN_EMAILS } from '../types';
+import { AppView } from '../types';
 import { notificationService, AppNotification } from '../services/notificationService';
 import { adminLicenseService } from '../services/adminLicenseService';
 import { supabase } from '../services/supabaseClient';
@@ -63,7 +63,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
         }
 
         if (user) {
-          setIsAdmin(ADMIN_EMAILS.includes(user.email || ''));
+          const isUserAdmin = await adminLicenseService.isCurrentUserAdmin();
+          setIsAdmin(isUserAdmin);
           setUserEmail(user.email || 'Usuário Horium');
 
           // Fetch notifications
@@ -75,7 +76,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
           }
 
           // If user is admin, fetch pending licenses
-          if (ADMIN_EMAILS.includes(user.email || '')) {
+          if (isUserAdmin) {
             try {
               const count = await adminLicenseService.getPendingLicensesCount();
               setPendingApprovalsCount(count);

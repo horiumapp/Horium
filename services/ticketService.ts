@@ -33,11 +33,15 @@ export const ticketService = {
                 throw uploadError;
             }
 
-            const { data } = supabase.storage
+            const { data: signedUrlData, error: signError } = await supabase.storage
                 .from('tickets-attachments')
-                .getPublicUrl(filePath);
+                .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 ano de expiração
 
-            imageUrl = data.publicUrl;
+            if (signError) {
+                console.error('Error creating signed URL for ticket attachment:', signError);
+            }
+
+            imageUrl = signedUrlData?.signedUrl || '';
         }
 
         const payload = {

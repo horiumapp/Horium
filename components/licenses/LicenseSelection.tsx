@@ -48,9 +48,34 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
     };
 
-    const formatDate = (dateString: string) => {
+    const formatDate = (dateString: string | null) => {
+        if (!dateString) return '-';
         const date = new Date(dateString);
         return new Intl.DateTimeFormat('pt-BR').format(date);
+    };
+
+    const handleOpenReceipt = async (urlOrPath: string) => {
+        if (!urlOrPath) return;
+        if (urlOrPath.includes('token=')) {
+            window.open(urlOrPath, '_blank');
+            return;
+        }
+
+        try {
+            let path = urlOrPath;
+            if (urlOrPath.includes('/receipts/')) {
+                path = urlOrPath.split('/receipts/').pop()?.split('?')[0] || urlOrPath;
+            }
+            const { data } = await supabase.storage.from('receipts').createSignedUrl(path, 3600);
+            if (data?.signedUrl) {
+                window.open(data.signedUrl, '_blank');
+                return;
+            }
+        } catch (e) {
+            console.warn("Erro ao gerar URL assinada para visualização:", e);
+        }
+
+        window.open(urlOrPath, '_blank');
     };
 
     return (
@@ -114,7 +139,7 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center font-medium">{formatDate(license.valid_until)}</td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center">
                                         {license.receipt_url && (
-                                            <div className="flex justify-center cursor-pointer hover:scale-110 transition-transform" onClick={() => window.open(license.receipt_url, '_blank')}>
+                                            <div className="flex justify-center cursor-pointer hover:scale-110 transition-transform" onClick={() => handleOpenReceipt(license.receipt_url)}>
                                                 <div className="relative">
                                                     <span className="material-symbols-outlined text-gray-500 text-2xl">receipt_long</span>
                                                     <span className="absolute -bottom-1 -right-1 text-[10px] font-black text-white bg-blue-500 rounded-full w-4 h-4 flex items-center justify-center border border-white">e</span>

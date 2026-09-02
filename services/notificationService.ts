@@ -43,10 +43,14 @@ export const notificationService = {
     },
 
     async markAsRead(notificationId: string): Promise<boolean> {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return false;
+
         const { error } = await supabase
             .from('notifications')
             .update({ is_read: true })
-            .eq('id', notificationId);
+            .eq('id', notificationId)
+            .eq('user_id', user.id);
 
         if (error) {
             console.error('Error marking notification as read:', error);
