@@ -1,5 +1,4 @@
 import { supabase } from './supabaseClient';
-import { notificationService } from './notificationService';
 import { audio } from './audioService';
 
 export interface AdminLicense {
@@ -42,65 +41,17 @@ export const adminLicenseService = {
      */
     async approveLicense(licenseId: string, validUntilDate: string): Promise<void> {
         try {
-            // Tenta primeiro através da RPC segura com SECURITY DEFINER (atômica e autorizada)
             const { error: rpcError } = await supabase.rpc('approve_license_rpc', {
                 p_license_id: licenseId,
                 p_valid_until: validUntilDate
             });
 
-            if (!rpcError) {
-                audio.playChaChing();
-                return;
+            if (rpcError) {
+                console.error("RPC approve_license_rpc falhou:", rpcError);
+                throw new Error(rpcError.message);
             }
 
-            console.warn("RPC approve_license_rpc falhou ou não existe, tentando atualização client-side direta:", rpcError);
-
-            // Fallback direto via cliente caso a RPC ainda não tenha sido criada no Supabase
-            const { error } = await supabase
-                .from('licenses')
-                .update({
-                    payment_status: 'Aprovado',
-                    valid_until: validUntilDate
-                })
-                .eq('id', licenseId);
-
-            if (error) {
-                console.error("Error approving license:", error);
-                throw new Error(error.message);
-            }
-
-            // After approving, fetch the user_id and schedule_id from the license to send a notification and update schedule
-            const { data: licenseData } = await supabase
-                .from('licenses')
-                .select('user_id, id, schedule_id')
-                .eq('id', licenseId)
-                .single();
-
-            // Play the cha-ching sound for the admin!
             audio.playChaChing();
-
-            if (licenseData?.user_id) {
-                await notificationService.createNotification(
-                    licenseData.user_id,
-                    'Licença Aprovada! 🎊',
-                    `Seu pagamento foi confirmado. Sua licença ficará ativa até ${new Date(validUntilDate).toLocaleDateString('pt-BR')}.`
-                );
-            }
-
-            // Sync with schedules table if schedule_id exists
-            if (licenseData?.schedule_id) {
-                const { error: scheduleError } = await supabase
-                    .from('schedules')
-                    .update({ is_licensed: true })
-                    .eq('id', licenseData.schedule_id);
-
-                if (scheduleError) {
-                    console.error("Error syncing license to schedule:", scheduleError);
-                } else {
-                    console.log(`Schedule ${licenseData.schedule_id} successfully licensed!`);
-                }
-            }
-
         } catch (err: any) {
             console.error("Erro no adminLicenseService.approveLicense:", err);
             throw err;
@@ -108,29 +59,17 @@ export const adminLicenseService = {
     },
 
     /**
-     * Delete a license entry permanently (via RPC with client fallback)
+     * Delete a license entry permanently (via secure RPC)
      */
     async deleteLicense(licenseId: string): Promise<void> {
         try {
-            // Tenta primeiro via RPC segura com SECURITY DEFINER
             const { error: rpcError } = await supabase.rpc('delete_license_rpc', {
                 p_license_id: licenseId
             });
 
-            if (!rpcError) {
-                return;
-            }
-
-            console.warn("RPC delete_license_rpc falhou, tentando fallback:", rpcError);
-
-            const { error } = await supabase
-                .from('licenses')
-                .delete()
-                .eq('id', licenseId);
-
-            if (error) {
-                console.error("Error deleting license:", error);
-                throw new Error(error.message);
+            if (rpcError) {
+                console.error("RPC delete_license_rpc falhou:", rpcError);
+                throw new Error(rpcError.message);
             }
         } catch (err: any) {
             console.error("Erro no adminLicenseService.deleteLicense:", err);
