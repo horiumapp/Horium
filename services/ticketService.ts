@@ -10,45 +10,50 @@ export interface TicketData {
     status: 'aberto' | 'em_andamento' | 'fechado';
 }
 
+const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'pdf'];
+const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+
 export const ticketService = {
     async createTicket(ticket: Omit<TicketData, 'id' | 'createdAt' | 'userId' | 'status'>, imageFile?: File): Promise<TicketData> {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
-        let imageUrl = '';
+        let storedPath = '';
 
         if (imageFile) {
-            const rawExt = imageFile.name.split('.').pop() || 'png';
-            const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 5);
-            const fileName = `${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
+            const rawExt = (imageFile.name.split('.').pop() || '').toLowerCase();
+            if (!ALLOWED_EXTENSIONS.includes(rawExt) || !ALLOWED_MIME_TYPES.includes(imageFile.type)) {
+                throw new Error('Tipo de arquivo não permitido. Apenas imagens (PNG, JPG, WEBP) e PDF são aceitos.');
+            }
+
+            if (imageFile.size > 5 * 1024 * 1024) {
+                throw new Error('O arquivo excede o limite máximo de 5MB.');
+            }
+
+            const fileName = `${Date.now()}_${crypto.randomUUID()}.${rawExt}`;
             const filePath = `${user.id}/${fileName}`;
 
-            // Assuming we create a bucket called 'tickets-attachments'
             const { error: uploadError } = await supabase.storage
                 .from('tickets-attachments')
-                .upload(filePath, imageFile);
+                .upload(filePath, imageFile, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
 
             if (uploadError) {
-                console.error('Error uploading image:', uploadError);
+                console.error('Error uploading ticket attachment:', uploadError);
                 throw uploadError;
             }
 
-            const { data: signedUrlData, error: signError } = await supabase.storage
-                .from('tickets-attachments')
-                .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 ano de expiração
-
-            if (signError) {
-                console.error('Error creating signed URL for ticket attachment:', signError);
-            }
-
-            imageUrl = signedUrlData?.signedUrl || '';
+            // Armazenamos o filePath relativo seguro
+            storedPath = filePath;
         }
 
         const payload = {
             user_id: user.id,
             subject: ticket.subject,
             description: ticket.description,
-            image_url: imageUrl || null,
+            image_url: storedPath || null,
             status: 'aberto'
         };
 
@@ -72,5 +77,31 @@ export const ticketService = {
             imageUrl: data.image_url,
             status: data.status
         };
+    },
+
+    /**
+     * Gera uma URL pré-assinada temporária (1 hora) para visualização segura do anexo
+     */
+    async getAttachmentSignedUrl(pathOrUrl: string): Promise<string> {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http') && pathOrUrl.includes('token=')) {
+            return pathOrUrl; // Mantém compatibilidade com URLs antigas já salvas
+        }
+
+        let path = pathOrUrl;
+        if (path.includes('/tickets-attachments/')) {
+            path = path.split('/tickets-attachments/').pop()?.split('?')[0] || path;
+        }
+
+        const { data, error } = await supabase.storage
+            .from('tickets-attachments')
+            .createSignedUrl(path, 3600); // 1 hora de TTL
+
+        if (error) {
+            console.error('Error generating signed URL for ticket:', error);
+            return '';
+        }
+
+        return data?.signedUrl || '';
     }
 };

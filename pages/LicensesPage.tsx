@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { LicenseSelection } from '../components/licenses/LicenseSelection';
-import { LicensePurchase } from '../components/licenses/LicensePurchase';
+import PlansPage from './PlansPage';
 import { BudgetRequest } from '../components/licenses/BudgetRequest';
 
 interface LicensesPageProps {
@@ -12,7 +11,7 @@ interface LicensesPageProps {
 
 type LicenseView = 'selection' | 'purchase' | 'budget';
 
-const LicensesPage: React.FC<LicensesPageProps> = ({ onBack, onStartTestMode, scheduleId }) => {
+export const LicensesPage: React.FC<LicensesPageProps> = ({ onBack, onStartTestMode, scheduleId }) => {
   const [view, setView] = useState<LicenseView>('selection');
 
   const handleBackToSelection = () => setView('selection');
@@ -29,10 +28,9 @@ const LicensesPage: React.FC<LicensesPageProps> = ({ onBack, onStartTestMode, sc
       )}
 
       {view === 'purchase' && (
-        <LicensePurchase
-          onBack={handleBackToSelection}
-          onGoHome={onBack}
+        <PlansPage
           scheduleId={scheduleId}
+          onBackToStart={handleBackToSelection}
         />
       )}
 

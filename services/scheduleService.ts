@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { SetupData, TimeSlot, DaySchedule } from '../types';
+import { SetupData, TimeSlot, DaySchedule, FixedLesson } from '../types';
 
 const formatTime = (totalMinutes: number) => {
     const h = Math.floor(totalMinutes / 60) % 24;
@@ -123,8 +123,14 @@ export const scheduleService = {
 
             const normalizedData = ensureScheduleSlots(item.data || {});
 
-            return {
+            // Defesa de paywall: grades sem licença ativa não têm a solução exposta na memória
+            const safeData = isApproved ? normalizedData : {
                 ...normalizedData,
+                fixedLessons: []
+            };
+
+            return {
+                ...safeData,
                 id: item.id,
                 createdAt: item.created_at,
                 status: item.data?.status || 'Em andamento',
@@ -132,6 +138,22 @@ export const scheduleService = {
                 licenseStatus: licenseStatus
             };
         });
+    },
+
+    /**
+     * Busca a solução detalhada (fixedLessons) protegida por paywall server-side
+     */
+    async getScheduleSolution(scheduleId: string): Promise<FixedLesson[]> {
+        const { data, error } = await supabase.rpc('get_schedule_solution', {
+            p_schedule_id: scheduleId
+        });
+
+        if (error) {
+            console.error('Error fetching schedule solution (RPC):', error);
+            throw new Error(error.message);
+        }
+
+        return (data as FixedLesson[]) || [];
     },
 
     async saveSchedule(scheduleData: SetupData): Promise<SetupData> {

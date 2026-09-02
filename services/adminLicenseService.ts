@@ -109,5 +109,31 @@ export const adminLicenseService = {
         } catch (err: any) {
             return 0;
         }
+    },
+
+    /**
+     * Gera uma URL assinada temporária (1 hora) para visualização segura de comprovante
+     */
+    async getReceiptSignedUrl(receiptUrlOrPath: string): Promise<string> {
+        if (!receiptUrlOrPath) return '';
+        if (receiptUrlOrPath.startsWith('http') && receiptUrlOrPath.includes('token=')) {
+            return receiptUrlOrPath; // Compatibilidade com URLs antigas
+        }
+
+        let path = receiptUrlOrPath;
+        if (path.includes('/receipts/')) {
+            path = path.split('/receipts/').pop()?.split('?')[0] || path;
+        }
+
+        const { data, error } = await supabase.storage
+            .from('receipts')
+            .createSignedUrl(path, 3600); // 1 hora de TTL
+
+        if (error) {
+            console.error("Erro ao gerar signed URL para comprovante:", error);
+            return '';
+        }
+
+        return data?.signedUrl || '';
     }
 };

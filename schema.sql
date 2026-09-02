@@ -1,5 +1,6 @@
 -- ==============================================================================
 -- HORIUM - SCHEMA COMPLETO DO BANCO DE DADOS (SUPABASE POSTGRESQL)
+-- Versão com Hardening de Segurança, Prevenção de BOLA, Paywall Server-Side e Idempotência
 -- ==============================================================================
 
 -- 1. TABELA DE ADMINISTRADORES (ADMIN_USERS) COM RLS
@@ -12,17 +13,17 @@ CREATE TABLE IF NOT EXISTS public.admin_users (
 
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 
--- 2. FUNÇÃO AUXILIAR DE SEGURANÇA (ADMIN) DINÂMICA
+-- 2. FUNÇÃO AUXILIAR DE SEGURANÇA (ADMIN) DINÂMICA E PROTEGIDA
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
     RETURN EXISTS (
         SELECT 1 FROM public.admin_users
         WHERE (user_id IS NOT NULL AND user_id = auth.uid())
-           OR (email IS NOT NULL AND LOWER(email) = LOWER(auth.jwt() ->> 'email'))
+           OR (email IS NOT NULL AND LOWER(email) = LOWER(auth.jwt() ->> 'email') AND (auth.jwt() ->> 'email_verified')::BOOLEAN IS TRUE)
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 -- Políticas de RLS para admin_users (Apenas admins gerenciam/visualizam)
 DROP POLICY IF EXISTS "Admins can manage admin_users" ON public.admin_users;
@@ -35,7 +36,7 @@ RETURNS BOOLEAN AS $$
 BEGIN
     RETURN public.is_admin();
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 
 -- 2. TABELA SCHEDULES (Horários Escolares)
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS public.schedules (
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT,
     data JSONB,
+    version INTEGER DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()),
     deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
@@ -83,7 +85,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 DROP TRIGGER IF EXISTS trg_protect_schedule_license ON public.schedules;
 CREATE TRIGGER trg_protect_schedule_license
@@ -105,6 +107,12 @@ CREATE TABLE IF NOT EXISTS public.licenses (
     valid_until DATE,
     receipt_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
+);
+
+ALTER TABLE public.licenses DROP CONSTRAINT IF EXISTS chk_licenses_positive_values;
+ALTER TABLE public.licenses ADD CONSTRAINT chk_licenses_positive_values CHECK (
+    (value_paid IS NULL OR value_paid > 0) AND 
+    (classes_amount IS NULL OR classes_amount > 0)
 );
 
 -- Habilitar RLS para licenses
@@ -131,6 +139,10 @@ FOR INSERT TO authenticated
 WITH CHECK (
     auth.uid() = user_id 
     AND (payment_status IN ('Aguardando', 'under_review') OR payment_status IS NULL)
+    AND (
+        schedule_id IS NULL OR 
+        EXISTS (SELECT 1 FROM public.schedules WHERE id = schedule_id AND user_id = auth.uid())
+    )
 );
 
 
@@ -187,7 +199,7 @@ CREATE POLICY "Admins can update tickets" ON public.tickets
 FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 
--- 6. FUNÇÕES SEGURAS PARA ADMINISTRAÇÃO (RPC COM SECURITY DEFINER)
+-- 6. FUNÇÕES SEGURAS PARA ADMINISTRAÇÃO E REGRAS DE NEGÓCIO (RPC COM SECURITY DEFINER)
 
 -- RPC para buscar todas as licenças com e-mail dos usuários
 CREATE OR REPLACE FUNCTION public.get_admin_licenses()
@@ -231,9 +243,9 @@ BEGIN
     LEFT JOIN public.schedules s ON s.id = l.schedule_id
     ORDER BY l.created_at DESC;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
--- RPC para aprovar licença e sincronizar o horário de forma atômica
+-- RPC para aprovação idempotente de licença
 CREATE OR REPLACE FUNCTION public.approve_license_rpc(
     p_license_id UUID,
     p_valid_until DATE
@@ -242,9 +254,21 @@ RETURNS VOID AS $$
 DECLARE
     v_schedule_id UUID;
     v_user_id UUID;
+    v_already_approved BOOLEAN;
 BEGIN
     IF NOT public.is_admin() THEN
         RAISE EXCEPTION 'Acesso negado. Apenas administradores podem aprovar licenças.';
+    END IF;
+
+    -- Trava e verificação de idempotência
+    SELECT payment_status = 'Aprovado' INTO v_already_approved
+    FROM public.licenses
+    WHERE id = p_license_id
+    FOR UPDATE;
+
+    IF v_already_approved IS TRUE THEN
+        -- Já aprovado: operação idempotente
+        RETURN;
     END IF;
 
     -- Atualiza o status e a data de validade da licença
@@ -264,7 +288,7 @@ BEGIN
         WHERE id = v_schedule_id;
     END IF;
 
-    -- Cria notificação para o usuário informado
+    -- Cria notificação única para o usuário
     IF v_user_id IS NOT NULL THEN
         INSERT INTO public.notifications (user_id, title, message)
         VALUES (
@@ -274,7 +298,7 @@ BEGIN
         );
     END IF;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 -- RPC para excluir licença permanentemente (Admin)
 CREATE OR REPLACE FUNCTION public.delete_license_rpc(
@@ -289,9 +313,9 @@ BEGIN
     DELETE FROM public.licenses
     WHERE id = p_license_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
--- RPC para obter a contagem de licenças pendentes (Admin)
+-- RPC para contagem de licenças pendentes (Admin)
 CREATE OR REPLACE FUNCTION public.get_pending_licenses_count_rpc()
 RETURNS INTEGER AS $$
 DECLARE
@@ -307,16 +331,127 @@ BEGIN
 
     RETURN COALESCE(v_count, 0);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+-- RPC para solicitar compra de licença com cálculo seguro de preço no servidor (Prevenção de BOLA / Tampering)
+CREATE OR REPLACE FUNCTION public.request_license_order(
+    p_schedule_id UUID,
+    p_duration TEXT,
+    p_classes_amount INTEGER,
+    p_receipt_path TEXT
+)
+RETURNS UUID AS $$
+DECLARE
+    v_schedule_owner UUID;
+    v_price_per_class NUMERIC;
+    v_total_price NUMERIC;
+    v_license_id UUID;
+BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Usuário não autenticado.';
+    END IF;
+
+    -- Se schedule_id for fornecido, valida propriedade
+    IF p_schedule_id IS NOT NULL THEN
+        SELECT user_id INTO v_schedule_owner
+        FROM public.schedules
+        WHERE id = p_schedule_id;
+
+        IF v_schedule_owner IS NULL OR v_schedule_owner <> auth.uid() THEN
+            RAISE EXCEPTION 'A grade especificada não pertence ao usuário autenticado.';
+        END IF;
+    END IF;
+
+    -- Validação da duração e determinação do preço unitário oficial
+    IF p_duration = '06 meses' THEN
+        v_price_per_class := 15.00;
+    ELSIF p_duration = '1 ano' THEN
+        v_price_per_class := 25.00;
+    ELSIF p_duration = '2 anos' THEN
+        v_price_per_class := 50.00;
+    ELSE
+        RAISE EXCEPTION 'Duração de plano inválida: %', p_duration;
+    END IF;
+
+    IF p_classes_amount <= 0 OR p_classes_amount > 100 THEN
+        RAISE EXCEPTION 'Quantidade de turmas inválida: %', p_classes_amount;
+    END IF;
+
+    v_total_price := p_classes_amount * v_price_per_class;
+
+    -- Insere a licença com valor e dados auditados no servidor
+    INSERT INTO public.licenses (
+        user_id,
+        schedule_id,
+        payment_date,
+        classes_amount,
+        value_paid,
+        payment_method,
+        payment_status,
+        receipt_url
+    ) VALUES (
+        auth.uid(),
+        p_schedule_id,
+        CURRENT_DATE,
+        p_classes_amount,
+        v_total_price,
+        'PIX',
+        'Aguardando',
+        p_receipt_path
+    ) RETURNING id INTO v_license_id;
+
+    RETURN v_license_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+-- RPC de Paywall Seguro: Entrega a solução da grade apenas se houver licença ativa
+CREATE OR REPLACE FUNCTION public.get_schedule_solution(
+    p_schedule_id UUID
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_owner_id UUID;
+    v_is_licensed BOOLEAN;
+    v_data JSONB;
+BEGIN
+    SELECT user_id, is_licensed, data INTO v_owner_id, v_is_licensed, v_data
+    FROM public.schedules
+    WHERE id = p_schedule_id AND deleted_at IS NULL;
+
+    IF v_owner_id IS NULL THEN
+        RAISE EXCEPTION 'Horário não encontrado.';
+    END IF;
+
+    -- Apenas o proprietário ou um admin podem acessar
+    IF v_owner_id <> auth.uid() AND NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Acesso negado.';
+    END IF;
+
+    -- Validação do Paywall no Servidor
+    IF NOT v_is_licensed AND NOT EXISTS (
+        SELECT 1 FROM public.licenses
+        WHERE schedule_id = p_schedule_id
+          AND payment_status = 'Aprovado'
+          AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
+    ) AND NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.';
+    END IF;
+
+    -- Retorna os dados completos da solução
+    RETURN COALESCE(v_data -> 'fixedLessons', '[]'::jsonb);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 
--- 7. CONFIGURAÇÃO DE STORAGE BUCKETS (PRIVADOS E ISOLADOS)
--- Criação dos buckets privados para comprovantes e anexos de suporte
-INSERT INTO storage.buckets (id, name, public)
+-- 7. CONFIGURAÇÃO DE STORAGE BUCKETS (PRIVADOS, RESTRITOS E ISOLADOS)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES 
-    ('receipts', 'receipts', false),
-    ('tickets-attachments', 'tickets-attachments', false)
-ON CONFLICT (id) DO UPDATE SET public = false;
+    ('receipts', 'receipts', false, 5242880, ARRAY['image/png', 'image/jpeg', 'image/webp', 'application/pdf']),
+    ('tickets-attachments', 'tickets-attachments', false, 5242880, ARRAY['image/png', 'image/jpeg', 'image/webp', 'application/pdf'])
+ON CONFLICT (id) DO UPDATE SET 
+    public = false,
+    file_size_limit = 5242880,
+    allowed_mime_types = ARRAY['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
 -- Políticas de Storage para Comprovantes (receipts)
 DROP POLICY IF EXISTS "Authenticated users can upload receipts" ON storage.objects;
@@ -362,7 +497,6 @@ USING (
 
 
 -- 8. ÍNDICES DE PERFORMANCE E ESCALABILIDADE (POSTGRESQL)
--- Otimização de consultas, filtros frequentes e chaves estrangeiras
 CREATE INDEX IF NOT EXISTS idx_schedules_user_deleted ON public.schedules(user_id, deleted_at, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_schedules_deleted_at ON public.schedules(deleted_at) WHERE deleted_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_licenses_user_id ON public.licenses(user_id);
@@ -371,4 +505,3 @@ CREATE INDEX IF NOT EXISTS idx_licenses_pending ON public.licenses(payment_statu
 CREATE INDEX IF NOT EXISTS idx_licenses_valid_until ON public.licenses(valid_until);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON public.notifications(user_id, is_read, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id, created_at DESC);
-

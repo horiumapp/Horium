@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { SetupData, FixedLesson } from '../../types';
 import { DAYS_OF_WEEK } from '../../constants';
 import { excelService } from '../../services/excelService';
-import { ensureScheduleSlots } from '../../services/scheduleService';
+import { ensureScheduleSlots, scheduleService } from '../../services/scheduleService';
 
 interface TimetableResultViewProps {
     data: SetupData;
@@ -34,6 +34,19 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
             ? normalizedData.weekConfig.activeDays
             : DAYS_OF_WEEK;
     }, [normalizedData.weekConfig]);
+
+    // Carrega a solução protegida sob demanda se a grade estiver licenciada e a solução ainda não estiver em memória
+    useEffect(() => {
+        if (!isLocked && data.id && (!data.fixedLessons || data.fixedLessons.length === 0) && setData) {
+            scheduleService.getScheduleSolution(data.id)
+                .then(solution => {
+                    if (solution && solution.length > 0) {
+                        setData(prev => ({ ...prev, fixedLessons: solution }));
+                    }
+                })
+                .catch(err => console.warn("Aviso ao carregar solução da grade:", err.message));
+        }
+    }, [isLocked, data.id]);
 
     const handlePrint = () => {
         if (isLocked) return;
@@ -423,34 +436,33 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
 
                     {/* LOCK OVERLAY IF NOT LICENSED */}
                     <div className="relative flex-1">
-                        {isLocked && (
-                            <div className="absolute inset-0 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm z-30 flex flex-col items-center justify-center p-6 text-center rounded-2xl border-2 border-dashed border-primary/30">
-                                <div className="size-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-4">
-                                    <span className="material-symbols-outlined text-3xl">lock</span>
+                        {isLocked ? (
+                            <div className="bg-white dark:bg-gray-900 border-2 border-dashed border-primary/30 rounded-3xl p-10 md:p-16 text-center flex flex-col items-center justify-center min-h-[420px] shadow-sm animate-in fade-in duration-300">
+                                <div className="size-20 bg-primary/10 text-primary rounded-3xl flex items-center justify-center mb-6 shadow-inner">
+                                    <span className="material-symbols-outlined text-4xl">lock</span>
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Grade Otimizada com Sucesso!</h3>
-                                <p className="text-sm text-gray-600 dark:text-gray-300 max-w-md mb-6">
-                                    Para visualizar a grade completa, imprimir e exportar para Excel, ative a licença para as turmas da sua escola.
+                                <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-3 tracking-tight">Grade Otimizada com Sucesso!</h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 max-w-md mb-8 leading-relaxed">
+                                    Para visualizar a grade completa de todas as turmas, imprimir e exportar para Excel, ative a licença para as turmas da sua instituição.
                                 </p>
                                 <button
                                     onClick={onLicenseNeeded}
-                                    className="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2"
+                                    className="px-8 py-4 bg-primary hover:bg-primary/90 text-white font-black text-sm uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/30 transition-all active:scale-95 flex items-center gap-3"
                                 >
                                     <span className="material-symbols-outlined">workspace_premium</span>
                                     Adquirir Licença
                                 </button>
                             </div>
-                        )}
-
-                        {/* TIMETABLE GRID */}
-                        <div className="bg-white dark:bg-[#101822] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-x-auto print-area">
-                            {/* PRINT HEADER */}
-                            <div className="hidden print:block text-center border-b pb-2 mb-2 print-header">
-                                <h1 className="font-black uppercase tracking-tight text-black">{normalizedData.institution?.name || 'Horário Escolar'}</h1>
-                                <h2 className="text-xs text-gray-600 font-bold uppercase">
-                                    {currentEntityName} • {normalizedData.institution?.shift || 'Turno Geral'} • {normalizedData.institution?.year || '2026'}
-                                </h2>
-                            </div>
+                        ) : (
+                            /* TIMETABLE GRID */
+                            <div className="bg-white dark:bg-[#101822] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-x-auto print-area">
+                                {/* PRINT HEADER */}
+                                <div className="hidden print:block text-center border-b pb-2 mb-2 print-header">
+                                    <h1 className="font-black uppercase tracking-tight text-black">{normalizedData.institution?.name || 'Horário Escolar'}</h1>
+                                    <h2 className="text-xs text-gray-600 font-bold uppercase">
+                                        {currentEntityName} • {normalizedData.institution?.shift || 'Turno Geral'} • {normalizedData.institution?.year || '2026'}
+                                    </h2>
+                                </div>
 
                             {viewMode === 'WEEKLY' ? (
                                 <table className="w-full border-collapse border border-gray-300 dark:border-gray-700 text-xs timetable-table min-w-[700px]">
@@ -556,6 +568,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                 </table>
                             )}
                         </div>
+                        )}
                     </div>
                 </main>
             </div>

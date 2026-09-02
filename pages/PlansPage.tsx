@@ -3,42 +3,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { generatePixPayload } from '../utils/pix';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../services/supabaseClient';
+import { pricingService, PLAN_OPTIONS, PlanDuration } from '../services/pricingService';
 
-const PRICES_CONFIG = {
-  '06 meses': 15,
-  '1 ano': 25,
-  '2 anos': 50
-};
-
-const DURATION_OPTIONS = [
-  { label: '06 meses', sub: 'PLANO ESCOLHIDO' },
-  { label: '1 ano', sub: 'PLANO ESCOLHIDO' },
-  { label: '2 anos', sub: 'PLANO ESCOLHIDO' }
-];
-
-const FULL_PRICE_TABLE = [
-  { classes: '01 Turma', type: '06 meses', value: 'R$ 15,00' },
-  { classes: '01 Turma', type: '1 ano', value: 'R$ 25,00' },
-  { classes: '01 Turma', type: '2 anos', value: 'R$ 50,00' },
-  { classes: '02 Turmas', type: '06 meses', value: 'R$ 30,00' },
-  { classes: '02 Turmas', type: '1 ano', value: 'R$ 50,00' },
-  { classes: '02 Turmas', type: '2 anos', value: 'R$ 100,00' },
-  { classes: '03 Turmas', type: '06 meses', value: 'R$ 45,00' },
-  { classes: '03 Turmas', type: '1 ano', value: 'R$ 75,00' },
-  { classes: '03 Turmas', type: '2 anos', value: 'R$ 150,00' },
-  { classes: '04 Turmas', type: '06 meses', value: 'R$ 60,00' },
-  { classes: '04 Turmas', type: '1 ano', value: 'R$ 100,00' },
-  { classes: '04 Turmas', type: '2 anos', value: 'R$ 200,00' },
-  { classes: '05 Turmas', type: '06 meses', value: 'R$ 75,00' },
-  { classes: '05 Turmas', type: '1 ano', value: 'R$ 125,00' },
-  { classes: '05 Turmas', type: '2 anos', value: 'R$ 250,00' },
-  { classes: '06 Turmas', type: '06 meses', value: 'R$ 90,00' },
-  { classes: '06 Turmas', type: '1 ano', value: 'R$ 150,00' },
-  { classes: '06 Turmas', type: '2 anos', value: 'R$ 300,00' },
-  { classes: '07 Turmas', type: '06 meses', value: 'R$ 105,00' },
-  { classes: '07 Turmas', type: '1 ano', value: 'R$ 175,00' },
-  { classes: '07 Turmas', type: '2 anos', value: 'R$ 350,00' }
-];
+const DURATION_OPTIONS = PLAN_OPTIONS;
+const FULL_PRICE_TABLE = pricingService.generatePriceTable();
 
 interface PlansPageProps {
   initialClasses?: number;
@@ -55,7 +23,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
 }) => {
   const [step, setStep] = useState<'SELECTION' | 'SUMMARY'>('SELECTION');
   const [numClasses, setNumClasses] = useState(initialClasses);
-  const [duration, setDuration] = useState<keyof typeof PRICES_CONFIG>('06 meses');
+  const [duration, setDuration] = useState<PlanDuration>('06 meses');
   const [paymentMethod, setPaymentMethod] = useState<'CARD' | 'PIX' | 'BOLETO'>('CARD');
   const [showPriceTable, setShowPriceTable] = useState(false);
   const [showPixQR, setShowPixQR] = useState(false);
@@ -68,7 +36,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
   const totalPrice = useMemo(() => {
-    return numClasses * PRICES_CONFIG[duration];
+    return pricingService.calculatePrice(numClasses, duration);
   }, [numClasses, duration]);
 
   const pixPayload = useMemo(() => generatePixPayload('horium.app@gmail.com', totalPrice), [totalPrice]);
@@ -141,37 +109,41 @@ const PlansPage: React.FC<PlansPageProps> = ({
           upsert: false
         });
 
-      let receiptUrl: string | null = null;
-      if (!uploadError) {
-        const { data: signedData, error: signError } = await supabase.storage
-          .from('receipts')
-          .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 ano de expiração
-        if (signError) {
-          console.warn("Aviso ao gerar Signed URL do comprovante:", signError);
-        }
-        receiptUrl = signedData?.signedUrl || null;
-      } else {
-        console.warn("Aviso no upload para Storage:", uploadError);
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-
-      const { error: insertError } = await supabase.from('licenses').insert({
-        user_id: userData.user.id,
-        schedule_id: scheduleId || null,
-        payment_date: today,
-        classes_amount: numClasses,
-        value_paid: totalPrice,
-        payment_method: 'PIX',
-        payment_status: 'Aguardando',
-        receipt_url: receiptUrl,
-      });
-
-      if (insertError) {
-        console.error("DB Insert failed:", insertError);
-        alert("Erro ao registrar a licença no banco de dados.");
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        alert("Erro no upload do comprovante. Verifique o arquivo e tente novamente.");
         setPaymentStatus('upload_receipt');
         return;
+      }
+
+      // Tenta via RPC segura request_license_order
+      const { error: rpcError } = await supabase.rpc('request_license_order', {
+        p_schedule_id: scheduleId || null,
+        p_duration: duration,
+        p_classes_amount: numClasses,
+        p_receipt_path: filePath
+      });
+
+      if (rpcError) {
+        console.warn("RPC request_license_order fallback para insert:", rpcError);
+        const today = new Date().toISOString().split('T')[0];
+        const { error: insertError } = await supabase.from('licenses').insert({
+          user_id: userData.user.id,
+          schedule_id: scheduleId || null,
+          payment_date: today,
+          classes_amount: numClasses,
+          value_paid: totalPrice,
+          payment_method: 'PIX',
+          payment_status: 'Aguardando',
+          receipt_url: filePath,
+        });
+
+        if (insertError) {
+          console.error("DB Insert failed:", insertError);
+          alert("Erro ao registrar a licença no banco de dados.");
+          setPaymentStatus('upload_receipt');
+          return;
+        }
       }
 
       setPaymentStatus('under_review');
@@ -242,7 +214,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
                   <p className="text-[9px] font-black text-gray-400 tracking-widest uppercase">{opt.sub}</p>
                 </div>
                 <p className={`text-2xl font-black ${duration === opt.label ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>
-                  {formatCurrency(numClasses * PRICES_CONFIG[opt.label as keyof typeof PRICES_CONFIG])}
+                  {formatCurrency(pricingService.calculatePrice(numClasses, opt.label))}
                 </p>
               </button>
             ))}
