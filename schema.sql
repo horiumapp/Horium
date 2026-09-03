@@ -16,14 +16,29 @@ ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 -- 2. FUNÇÃO AUXILIAR DE SEGURANÇA (ADMIN) DINÂMICA E PROTEGIDA
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
+DECLARE
+    v_user_email TEXT;
 BEGIN
+    v_user_email := LOWER(COALESCE(auth.jwt() ->> 'email', ''));
+
     RETURN EXISTS (
-        SELECT 1 FROM public.admin_users
-        WHERE (user_id IS NOT NULL AND user_id = auth.uid())
-           OR (email IS NOT NULL AND LOWER(email) = LOWER(auth.jwt() ->> 'email') AND (auth.jwt() ->> 'email_verified')::BOOLEAN IS TRUE)
-    );
+        SELECT 1 FROM public.admin_users au
+        WHERE (au.user_id IS NOT NULL AND au.user_id = auth.uid())
+           OR (au.email IS NOT NULL AND LOWER(au.email) = v_user_email)
+    )
+    OR (v_user_email IN ('horium.app@gmail.com', 'prof.jackison@gmail.com'));
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+-- Inserção idempotente dos administradores mestres
+INSERT INTO public.admin_users (email, user_id)
+SELECT email, id FROM auth.users 
+WHERE LOWER(email) IN ('horium.app@gmail.com', 'prof.jackison@gmail.com')
+ON CONFLICT (email) DO UPDATE SET user_id = COALESCE(EXCLUDED.user_id, public.admin_users.user_id);
+
+INSERT INTO public.admin_users (email)
+VALUES ('horium.app@gmail.com'), ('prof.jackison@gmail.com')
+ON CONFLICT (email) DO NOTHING;
 
 -- Políticas de RLS para admin_users (Apenas admins gerenciam/visualizam)
 DROP POLICY IF EXISTS "Admins can manage admin_users" ON public.admin_users;
