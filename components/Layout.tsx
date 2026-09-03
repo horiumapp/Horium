@@ -25,6 +25,7 @@ const NAV_ITEMS = [
 const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav = false, onLogout, isMuted, setIsMuted }) => {
   const [gender, setGender] = useState<'male' | 'female'>('female');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>('Usuário Horium');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window === 'undefined') return false;
     const saved = localStorage.getItem('horium-theme');
