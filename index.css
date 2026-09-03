@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #136dec;
   --color-background-light: #f6f7f8;
@@ -15,7 +17,8 @@ body {
   transition-duration: 200ms;
 }
 
-.dark body {
+.dark body,
+html.dark body {
   background-color: var(--color-background-dark);
   color: #ffffff;
 }
@@ -28,8 +31,9 @@ body {
   background: linear-gradient(135deg, #f6f7f8 0%, #e2e8f0 100%);
 }
 
-.dark .academic-gradient {
-  background: linear-gradient(135deg, #1a2634 0%, #233245 100%);
+.dark .academic-gradient,
+html.dark .academic-gradient {
+  background: linear-gradient(135deg, #101822 0%, #1a2634 50%, #233245 100%);
 }
 
 .timetable-grid {

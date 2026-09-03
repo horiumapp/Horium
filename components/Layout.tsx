@@ -25,8 +25,12 @@ const NAV_ITEMS = [
 const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav = false, onLogout, isMuted, setIsMuted }) => {
   const [gender, setGender] = useState<'male' | 'female'>('female');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [userEmail, setUserEmail] = useState<string>('Usuário Horium');
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const saved = localStorage.getItem('horium-theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
@@ -120,28 +124,43 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
   }, [hideNav, currentView]);
 
   useEffect(() => {
-    // Initial theme check
     const savedTheme = localStorage.getItem('horium-theme');
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-    // Default to light theme if no preference is saved
-    if (savedTheme === 'dark') {
-      setIsDarkMode(true);
-      document.documentElement.classList.add('dark');
+    const applyTheme = (dark: boolean) => {
+      setIsDarkMode(dark);
+      if (dark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    if (savedTheme) {
+      applyTheme(savedTheme === 'dark');
     } else {
-      setIsDarkMode(false);
-      document.documentElement.classList.remove('dark');
+      applyTheme(mediaQuery.matches);
     }
+
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem('horium-theme')) {
+        applyTheme(e.matches);
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
   const toggleTheme = () => {
-    if (isDarkMode) {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('horium-theme', 'light');
-      setIsDarkMode(false);
-    } else {
+    const nextTheme = !isDarkMode;
+    setIsDarkMode(nextTheme);
+    if (nextTheme) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('horium-theme', 'dark');
-      setIsDarkMode(true);
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('horium-theme', 'light');
     }
   };
 
