@@ -199,7 +199,28 @@ CREATE POLICY "Admins can update tickets" ON public.tickets
 FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 
--- 6. FUNÇÕES SEGURAS PARA ADMINISTRAÇÃO E REGRAS DE NEGÓCIO (RPC COM SECURITY DEFINER)
+-- 6. TABELA AUDIT_LOGS (Logs de Auditoria de Operações)
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    table_name TEXT,
+    record_id UUID,
+    action TEXT,
+    old_data JSONB,
+    new_data JSONB,
+    user_id UUID,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
+);
+
+-- Habilitar RLS para audit_logs
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Permitir acesso audit_logs" ON public.audit_logs;
+CREATE POLICY "Permitir acesso audit_logs" 
+ON public.audit_logs FOR ALL TO authenticated 
+USING (true) WITH CHECK (true);
+
+
+-- 7. FUNÇÕES SEGURAS PARA ADMINISTRAÇÃO E REGRAS DE NEGÓCIO (RPC COM SECURITY DEFINER)
 
 -- RPC para buscar todas as licenças com e-mail dos usuários
 DROP FUNCTION IF EXISTS public.get_admin_licenses();

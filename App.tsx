@@ -61,9 +61,16 @@ const App: React.FC = () => {
 
   const latestSaveSeq = React.useRef(0);
 
-  // Debounced Auto-save com proteção contra race conditions
+  // Debounced Auto-save com proteção contra race conditions e backup local
   useEffect(() => {
     if (!setupData.id || loading || currentView === AppView.PROCESSING || currentView === AppView.LOGIN || !session) return;
+
+    // Backup local imediato para não perder dados digitados mesmo com erro no banco
+    try {
+      localStorage.setItem(`horium_draft_${setupData.id}`, JSON.stringify(setupData));
+    } catch (e) {
+      console.warn('Erro ao salvar rascunho local:', e);
+    }
 
     const currentSeq = ++latestSaveSeq.current;
     const timer = setTimeout(async () => {
@@ -77,11 +84,15 @@ const App: React.FC = () => {
           setSchedules(prev => prev.map(s => s.id === saved.id ? saved : s));
           console.log('Auto-save successful');
         }
-      } catch (err) {
+      } catch (err: any) {
         if (currentSeq === latestSaveSeq.current) {
           console.error('Auto-save failed:', err);
           if (session && currentView !== AppView.LOGIN) {
-            setSaveError('Erro ao salvar automaticamente. Verifique sua conexão.');
+            setSaveError(
+              err?.message?.includes('audit_logs')
+                ? 'Erro no Supabase (tabela audit_logs ausente). Seus dados estão preservados localmente.'
+                : 'Erro ao salvar automaticamente. Verifique sua conexão.'
+            );
           }
         }
       } finally {
@@ -152,8 +163,17 @@ const App: React.FC = () => {
           if (savedView && Object.values(AppView).includes(savedView) && savedView !== AppView.LOGIN) {
             if (savedScheduleId) {
               const lastSchedule = fetchedSchedules.find(s => s.id === savedScheduleId);
-              if (lastSchedule) {
-                setSetupData(lastSchedule);
+              let draftData = null;
+              try {
+                const localDraft = localStorage.getItem(`horium_draft_${savedScheduleId}`);
+                if (localDraft) draftData = JSON.parse(localDraft);
+              } catch (e) {
+                console.warn('Erro ao recuperar rascunho local:', e);
+              }
+
+              const finalSchedule = draftData || lastSchedule;
+              if (finalSchedule) {
+                setSetupData(finalSchedule);
                 setView(savedView);
               } else {
                 setView(AppView.DASHBOARD);
