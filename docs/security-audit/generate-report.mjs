@@ -399,6 +399,11 @@ function addHeaderFooter(doc) {
     // Não desenha cabeçalho nem rodapé na capa (página 0)
     if (i === 0) continue;
 
+    const oldTop = doc.page.margins.top;
+    const oldBottom = doc.page.margins.bottom;
+    doc.page.margins.top = 0;
+    doc.page.margins.bottom = 0;
+
     // Header
     doc.save();
     doc.fontSize(7.5).font('Helvetica').fillColor('#6B7280')
@@ -416,6 +421,9 @@ function addHeaderFooter(doc) {
     doc.fontSize(7).font('Helvetica').fillColor('#9CA3AF')
       .text(`${AUDIT_DATE}`, MARGIN, PAGE_H - 26, { width: CONTENT_W, align: 'left', lineBreak: false });
     doc.restore();
+
+    doc.page.margins.top = oldTop;
+    doc.page.margins.bottom = oldBottom;
   }
 }
 
@@ -540,9 +548,8 @@ function drawSeverityChip(doc, x, y, severity) {
   return badgeW;
 }
 
-function ensureSpace(doc, needed, label = '') {
+function ensureSpace(doc, needed) {
   if (doc.y + needed > PAGE_H - MARGIN - 30) {
-    console.log(`[ensureSpace] Page added by '${label}' at y=${doc.y.toFixed(1)}, needed=${needed}`);
     doc.addPage();
     doc.y = MARGIN + 10;
   }
@@ -553,9 +560,6 @@ function ensureSpace(doc, needed, label = '') {
 async function generatePDF() {
   const outputPath = path.join(__dirname, 'relatorio-auditoria-seguranca.pdf');
   const doc = createDoc();
-  doc.on('pageAdded', () => {
-    console.log(`[Page ${doc.bufferedPageRange().count}] added:`, new Error().stack.split('\n').slice(2, 7).join('\n'));
-  });
   const stream = fs.createWriteStream(outputPath);
   doc.pipe(stream);
 
@@ -1007,16 +1011,16 @@ async function generatePDF() {
   // Cabeçalhos e Rodapés com numeração total
   addHeaderFooter(doc);
 
+  const finalPageCount = doc.bufferedPageRange().count;
   doc.end();
 
   return new Promise((resolve, reject) => {
     stream.on('finish', () => {
       const stats = fs.statSync(outputPath);
-      const totalPages = doc.bufferedPageRange().count;
       console.log(`✅ PDF gerado com sucesso: ${outputPath}`);
-      console.log(`   Páginas: ${totalPages}`);
+      console.log(`   Páginas: ${finalPageCount}`);
       console.log(`   Tamanho: ${(stats.size / 1024).toFixed(1)} KB`);
-      resolve({ outputPath, totalPages, size: stats.size });
+      resolve({ outputPath, totalPages: finalPageCount, size: stats.size });
     });
     stream.on('error', reject);
   });
