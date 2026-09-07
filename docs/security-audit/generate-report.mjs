@@ -539,8 +539,9 @@ function drawSeverityChip(doc, x, y, severity) {
   return badgeW;
 }
 
-function ensureSpace(doc, needed) {
+function ensureSpace(doc, needed, label = '') {
   if (doc.y + needed > PAGE_H - MARGIN - 30) {
+    console.log(`[ensureSpace] Page added by '${label}' at y=${doc.y.toFixed(1)}, needed=${needed}`);
     doc.addPage();
     doc.y = MARGIN + 10;
   }
@@ -551,6 +552,7 @@ function ensureSpace(doc, needed) {
 async function generatePDF() {
   const outputPath = path.join(__dirname, 'relatorio-auditoria-seguranca.pdf');
   const doc = createDoc();
+  doc.on('pageAdded', () => console.log(`[PDFKit Event] Page Added, count: ${doc.bufferedPageRange().count}`));
   const stream = fs.createWriteStream(outputPath);
   doc.pipe(stream);
 
