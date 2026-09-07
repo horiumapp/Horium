@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
+import { adminLicenseService, getSafeHttpsUrl } from '../../services/adminLicenseService';
 
 interface LicenseSelectionProps {
     onSelectPurchase: () => void;
@@ -54,28 +55,29 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
         return new Intl.DateTimeFormat('pt-BR').format(date);
     };
 
+    /**
+     * Abre o comprovante de pagamento com sanitização completa de URL.
+     * Utiliza a mesma camada de segurança do AdminPanelPage para prevenção de Open Redirect / XSS.
+     */
     const handleOpenReceipt = async (urlOrPath: string) => {
         if (!urlOrPath) return;
-        if (urlOrPath.includes('token=')) {
-            window.open(urlOrPath, '_blank');
-            return;
-        }
 
         try {
-            let path = urlOrPath;
-            if (urlOrPath.includes('/receipts/')) {
-                path = urlOrPath.split('/receipts/').pop()?.split('?')[0] || urlOrPath;
-            }
-            const { data } = await supabase.storage.from('receipts').createSignedUrl(path, 3600);
-            if (data?.signedUrl) {
-                window.open(data.signedUrl, '_blank');
+            // Gera URL assinada segura via serviço de admin (sanitiza esquemas perigosos + valida HTTPS)
+            const signedUrl = await adminLicenseService.getReceiptSignedUrl(urlOrPath);
+            const safeUrl = getSafeHttpsUrl(signedUrl);
+
+            if (safeUrl) {
+                window.open(safeUrl, '_blank', 'noopener,noreferrer');
                 return;
             }
         } catch (e) {
-            console.warn("Erro ao gerar URL assinada para visualização:", e);
+            console.warn("Erro ao gerar URL assinada segura para visualização:", e);
         }
 
-        window.open(urlOrPath, '_blank');
+        // Se não foi possível gerar uma URL segura, não abre — evita Open Redirect
+        console.warn("Comprovante não pôde ser aberto com segurança:", urlOrPath);
+        alert("Não foi possível abrir o comprovante com segurança. Verifique o arquivo.");
     };
 
     return (
