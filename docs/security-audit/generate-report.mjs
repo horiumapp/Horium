@@ -393,7 +393,8 @@ function createDoc() {
 
 function addHeaderFooter(doc) {
   const pages = doc.bufferedPageRange();
-  for (let i = 0; i < pages.count; i++) {
+  const totalPages = pages.count;
+  for (let i = 0; i < totalPages; i++) {
     doc.switchToPage(i);
     // Não desenha cabeçalho nem rodapé na capa (página 0)
     if (i === 0) continue;
@@ -401,9 +402,9 @@ function addHeaderFooter(doc) {
     // Header
     doc.save();
     doc.fontSize(7.5).font('Helvetica').fillColor('#6B7280')
-      .text(`Relatório de Auditoria de Segurança — ${PROJECT_NAME}`, MARGIN, 24, { width: CONTENT_W, align: 'left' });
+      .text(`Relatório de Auditoria de Segurança — ${PROJECT_NAME}`, MARGIN, 24, { width: CONTENT_W, align: 'left', lineBreak: false });
     doc.fontSize(7.5).font('Helvetica').fillColor('#9CA3AF')
-      .text('CONFIDENCIAL', MARGIN, 24, { width: CONTENT_W, align: 'right' });
+      .text('CONFIDENCIAL', MARGIN, 24, { width: CONTENT_W, align: 'right', lineBreak: false });
     doc.moveTo(MARGIN, 36).lineTo(PAGE_W - MARGIN, 36).strokeColor('#E5E7EB').lineWidth(0.5).stroke();
     doc.restore();
 
@@ -411,9 +412,9 @@ function addHeaderFooter(doc) {
     doc.save();
     doc.moveTo(MARGIN, PAGE_H - 36).lineTo(PAGE_W - MARGIN, PAGE_H - 36).strokeColor('#E5E7EB').lineWidth(0.5).stroke();
     doc.fontSize(7.5).font('Helvetica').fillColor('#6B7280')
-      .text(`Página ${i + 1} de ${pages.count}`, MARGIN, PAGE_H - 26, { width: CONTENT_W, align: 'center' });
+      .text(`Página ${i + 1} de ${totalPages}`, MARGIN, PAGE_H - 26, { width: CONTENT_W, align: 'center', lineBreak: false });
     doc.fontSize(7).font('Helvetica').fillColor('#9CA3AF')
-      .text(`${AUDIT_DATE}`, MARGIN, PAGE_H - 26, { width: CONTENT_W, align: 'left' });
+      .text(`${AUDIT_DATE}`, MARGIN, PAGE_H - 26, { width: CONTENT_W, align: 'left', lineBreak: false });
     doc.restore();
   }
 }
@@ -552,7 +553,10 @@ function ensureSpace(doc, needed, label = '') {
 async function generatePDF() {
   const outputPath = path.join(__dirname, 'relatorio-auditoria-seguranca.pdf');
   const doc = createDoc();
-  doc.on('pageAdded', () => console.log(`[PDFKit Event] Page Added, count: ${doc.bufferedPageRange().count}`));
+  doc.on('pageAdded', () => {
+    const stack = new Error().stack.split('\n').slice(2, 4).map(s => s.trim()).join(' -> ');
+    console.log(`[Page ${doc.bufferedPageRange().count}] added: ${stack}`);
+  });
   const stream = fs.createWriteStream(outputPath);
   doc.pipe(stream);
 
