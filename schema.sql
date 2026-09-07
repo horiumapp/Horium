@@ -234,9 +234,16 @@ DROP POLICY IF EXISTS "Users can update their own notifications" ON public.notif
 CREATE POLICY "Users can update their own notifications" ON public.notifications
 FOR UPDATE TO authenticated USING (auth.uid() = user_id OR public.is_admin()) WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
+-- INSERT restrito: apenas admins e service_role podem criar notificações.
+-- Notificações para usuários comuns são criadas via RPCs SECURITY DEFINER (ex: approve_license_rpc).
 DROP POLICY IF EXISTS "Users can insert notifications" ON public.notifications;
-CREATE POLICY "Users can insert notifications" ON public.notifications
-FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id OR public.is_admin());
+DROP POLICY IF EXISTS "Admins can insert notifications" ON public.notifications;
+CREATE POLICY "Admins can insert notifications" ON public.notifications
+FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Service role can insert notifications" ON public.notifications;
+CREATE POLICY "Service role can insert notifications" ON public.notifications
+FOR INSERT TO service_role WITH CHECK (true);
 
 
 -- 5. TABELA TICKETS (Chamados de Suporte)
@@ -639,6 +646,29 @@ CREATE INDEX IF NOT EXISTS idx_licenses_valid_until ON public.licenses(valid_unt
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON public.notifications(user_id, is_read, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON public.audit_logs(user_id, created_at DESC);
+
+
+-- 10. RPC para envio seguro de notificação administrativa
+DROP FUNCTION IF EXISTS public.send_admin_notification(UUID, TEXT, TEXT);
+CREATE OR REPLACE FUNCTION public.send_admin_notification(
+    p_user_id UUID,
+    p_title TEXT,
+    p_message TEXT
+)
+RETURNS VOID AS $$
+BEGIN
+    IF NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Acesso negado. Apenas administradores podem enviar notificações.';
+    END IF;
+
+    IF p_user_id IS NULL OR p_title IS NULL OR p_message IS NULL THEN
+        RAISE EXCEPTION 'Parâmetros user_id, title e message são obrigatórios.';
+    END IF;
+
+    INSERT INTO public.notifications (user_id, title, message)
+    VALUES (p_user_id, p_title, p_message);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
 
 -- 9. MIGRAÇÃO DE RETROCOMPATIBILIDADE: Segregar fixedLessons legadas existentes

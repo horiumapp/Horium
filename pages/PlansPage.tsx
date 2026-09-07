@@ -39,7 +39,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
     return pricingService.calculatePrice(numClasses, duration);
   }, [numClasses, duration]);
 
-  const pixPayload = useMemo(() => generatePixPayload('horium.app@gmail.com', totalPrice), [totalPrice]);
+  const pixPayload = useMemo(() => generatePixPayload(import.meta.env.VITE_PIX_KEY || 'horium.app@gmail.com', totalPrice), [totalPrice]);
 
   useEffect(() => {
     if (!showPixQR || paymentStatus === 'success' || paymentStatus === 'verifying' || paymentStatus === 'upload_receipt' || isExpired) return;

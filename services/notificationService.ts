@@ -73,18 +73,19 @@ export const notificationService = {
         return true;
     },
 
+    /**
+     * Cria notificação para um usuário via RPC segura (apenas administradores).
+     * Notificações para usuários comuns são criadas automaticamente via RPCs SECURITY DEFINER do banco.
+     */
     async createNotification(userId: string, title: string, message: string): Promise<boolean> {
-        const { error } = await supabase
-            .from('notifications')
-            .insert({
-                user_id: userId,
-                title,
-                message,
-                is_read: false,
-            });
+        const { error } = await supabase.rpc('send_admin_notification', {
+            p_user_id: userId,
+            p_title: title,
+            p_message: message,
+        });
 
         if (error) {
-            console.error('Error creating notification:', error);
+            console.error('Error creating notification via RPC:', error);
             return false;
         }
         return true;

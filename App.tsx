@@ -261,6 +261,21 @@ const App: React.FC = () => {
       setIsSaving(false);
       localStorage.removeItem('horium_last_view');
       localStorage.removeItem('horium_last_schedule_id');
+
+      // VULN-04: Limpar todos os rascunhos locais sensíveis para evitar persistência pós-logout
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('horium_draft_')) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+      } catch (e) {
+        console.warn('Erro ao limpar rascunhos locais:', e);
+      }
+
       setView(AppView.LOGIN);
     } catch (err) {
       console.error('Logout error:', err);
