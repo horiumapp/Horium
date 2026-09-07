@@ -58,18 +58,34 @@ export const getSafeHttpsUrl = (url: string | null | undefined): string | null =
 };
 
 /**
- * Valida se a URL ou caminho aponta para um arquivo PDF com base no pathname da URL
+ * Valida se a URL ou caminho aponta para um arquivo PDF seguro com base no pathname da URL ou regex de storage
  */
 export const isPdfReceipt = (urlOrPath: string | null | undefined): boolean => {
     if (!urlOrPath) return false;
+    const lower = urlOrPath.trim().toLowerCase();
+
+    // Rejeição de esquemas perigosos
+    if (
+        lower.startsWith('javascript:') ||
+        lower.startsWith('data:') ||
+        lower.startsWith('vbscript:') ||
+        lower.startsWith('file:') ||
+        lower.startsWith('blob:')
+    ) {
+        return false;
+    }
+
     try {
-        if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
+        if (lower.startsWith('http://') || lower.startsWith('https://')) {
             const parsed = new URL(urlOrPath);
             return parsed.pathname.toLowerCase().endsWith('.pdf');
         }
-        // Se for um caminho relativo, analisa o final antes de query params ou hashes
-        const cleanPath = urlOrPath.split('?')[0].split('#')[0];
-        return cleanPath.toLowerCase().endsWith('.pdf');
+        // Se for um caminho relativo, deve atender ao padrão de storage e terminar com .pdf
+        if (SAFE_STORAGE_PATH_REGEX.test(urlOrPath)) {
+            const cleanPath = urlOrPath.split('?')[0].split('#')[0];
+            return cleanPath.toLowerCase().endsWith('.pdf');
+        }
+        return false;
     } catch {
         return false;
     }

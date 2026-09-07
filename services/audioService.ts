@@ -5,8 +5,14 @@ class AudioService {
     private isMuted: boolean = false;
 
     constructor() {
-        const savedMuted = localStorage.getItem('horium_muted');
-        this.isMuted = savedMuted === 'true';
+        try {
+            if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+                const savedMuted = localStorage.getItem('horium_muted');
+                this.isMuted = savedMuted === 'true';
+            }
+        } catch {
+            this.isMuted = false;
+        }
     }
 
     private getContext(): AudioContext {
@@ -23,7 +29,11 @@ class AudioService {
 
     public setMuted(muted: boolean) {
         this.isMuted = muted;
-        localStorage.setItem('horium_muted', muted.toString());
+        try {
+            if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+                localStorage.setItem('horium_muted', muted.toString());
+            }
+        } catch {}
     }
 
     public getMuted() {

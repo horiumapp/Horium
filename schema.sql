@@ -210,17 +210,9 @@ DROP POLICY IF EXISTS "Users can view their own licenses" ON public.licenses;
 CREATE POLICY "Users can view their own licenses" ON public.licenses
 FOR SELECT TO authenticated USING (auth.uid() = user_id);
 
+-- Remoção de INSERT direto para usuários comuns: novos pedidos devem ser criados exclusivamente
+-- via RPC segura request_license_order para garantir cálculo oficial de preços e auditoria no servidor.
 DROP POLICY IF EXISTS "Users can insert their own licenses" ON public.licenses;
-CREATE POLICY "Users can insert their own licenses" ON public.licenses
-FOR INSERT TO authenticated 
-WITH CHECK (
-    auth.uid() = user_id 
-    AND (payment_status IN ('Aguardando', 'under_review') OR payment_status IS NULL)
-    AND (
-        schedule_id IS NULL OR 
-        EXISTS (SELECT 1 FROM public.schedules WHERE id = schedule_id AND user_id = auth.uid())
-    )
-);
 
 
 -- 4. TABELA NOTIFICATIONS (Notificações do Usuário)

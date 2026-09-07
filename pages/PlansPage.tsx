@@ -116,7 +116,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
         return;
       }
 
-      // Tenta via RPC segura request_license_order
+      // Cria o pedido de licença exclusivamente via RPC segura request_license_order (Prevenção de Adulteração de Preço)
       const { error: rpcError } = await supabase.rpc('request_license_order', {
         p_schedule_id: scheduleId || null,
         p_duration: duration,
@@ -125,25 +125,10 @@ const PlansPage: React.FC<PlansPageProps> = ({
       });
 
       if (rpcError) {
-        console.warn("RPC request_license_order fallback para insert:", rpcError);
-        const today = new Date().toISOString().split('T')[0];
-        const { error: insertError } = await supabase.from('licenses').insert({
-          user_id: userData.user.id,
-          schedule_id: scheduleId || null,
-          payment_date: today,
-          classes_amount: numClasses,
-          value_paid: totalPrice,
-          payment_method: 'PIX',
-          payment_status: 'Aguardando',
-          receipt_url: filePath,
-        });
-
-        if (insertError) {
-          console.error("DB Insert failed:", insertError);
-          alert("Erro ao registrar a licença no banco de dados.");
-          setPaymentStatus('upload_receipt');
-          return;
-        }
+        console.error("RPC request_license_order falhou:", rpcError);
+        alert(`Erro ao registrar a licença: ${rpcError.message || 'Falha na validação do pedido no servidor.'}`);
+        setPaymentStatus('upload_receipt');
+        return;
       }
 
       setPaymentStatus('under_review');
