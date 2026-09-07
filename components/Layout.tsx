@@ -68,9 +68,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
         }
 
         if (user) {
-          const userEmailLower = (user.email || '').toLowerCase();
-          const isMasterAdmin = ['horium.app@gmail.com', 'prof.jackison@gmail.com'].includes(userEmailLower);
-          const isUserAdmin = isMasterAdmin || (await adminLicenseService.isCurrentUserAdmin());
+          const isUserAdmin = await adminLicenseService.isCurrentUserAdmin();
           setIsAdmin(isUserAdmin);
           setUserEmail(user.email || 'Usuário Horium');
 

@@ -19,26 +19,24 @@ RETURNS BOOLEAN AS $$
 DECLARE
     v_user_email TEXT;
 BEGIN
+    IF auth.uid() IS NULL THEN
+        RETURN false;
+    END IF;
+
     v_user_email := LOWER(COALESCE(auth.jwt() ->> 'email', ''));
 
     RETURN EXISTS (
         SELECT 1 FROM public.admin_users au
         WHERE (au.user_id IS NOT NULL AND au.user_id = auth.uid())
            OR (au.email IS NOT NULL AND LOWER(au.email) = v_user_email)
-    )
-    OR (v_user_email IN ('horium.app@gmail.com', 'prof.jackison@gmail.com'));
+    );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
--- Inserção idempotente dos administradores mestres
-INSERT INTO public.admin_users (email, user_id)
-SELECT email, id FROM auth.users 
-WHERE LOWER(email) IN ('horium.app@gmail.com', 'prof.jackison@gmail.com')
-ON CONFLICT (email) DO UPDATE SET user_id = COALESCE(EXCLUDED.user_id, public.admin_users.user_id);
-
-INSERT INTO public.admin_users (email)
-VALUES ('horium.app@gmail.com'), ('prof.jackison@gmail.com')
-ON CONFLICT (email) DO NOTHING;
+-- Gerenciamento de Administradores:
+-- O papel de administrador é dinâmico e determinado unicamente por registros na tabela admin_users.
+-- Exemplo para cadastrar administradores:
+-- INSERT INTO public.admin_users (email) VALUES ('admin@dominio.com') ON CONFLICT (email) DO NOTHING;
 
 -- Políticas de RLS para admin_users (Apenas admins gerenciam/visualizam)
 DROP POLICY IF EXISTS "Admins can manage admin_users" ON public.admin_users;

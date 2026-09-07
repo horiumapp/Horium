@@ -190,6 +190,30 @@ export const adminLicenseService = {
     },
 
     /**
+     * Consulta o status de administrador do usuário autenticado através da RPC oficial segura
+     */
+    async isCurrentUserAdmin(): Promise<boolean> {
+        try {
+            const { data, error } = await supabase.rpc('is_current_user_admin');
+            if (error) {
+                console.warn("RPC is_current_user_admin falhou:", error);
+                return false;
+            }
+            return !!data;
+        } catch (err) {
+            console.error("Erro ao verificar status de administrador via RPC:", err);
+            return false;
+        }
+    },
+
+    /**
+     * Retorna a contagem de licenças pendentes de aprovação
+     */
+    async getPendingLicensesCount(): Promise<number> {
+        return this.getPendingCount();
+    },
+
+    /**
      * Gera uma URL assinada temporária (1 hora) para visualização segura de comprovante.
      * Retorna string vazia caso o caminho seja inválido ou ocorra qualquer erro, prevenindo Stored XSS.
      */
