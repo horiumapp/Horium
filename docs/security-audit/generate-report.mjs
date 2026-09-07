@@ -554,8 +554,7 @@ async function generatePDF() {
   const outputPath = path.join(__dirname, 'relatorio-auditoria-seguranca.pdf');
   const doc = createDoc();
   doc.on('pageAdded', () => {
-    const stack = new Error().stack.split('\n').slice(2, 4).map(s => s.trim()).join(' -> ');
-    console.log(`[Page ${doc.bufferedPageRange().count}] added: ${stack}`);
+    console.log(`[Page ${doc.bufferedPageRange().count}] added:`, new Error().stack.split('\n').slice(2, 7).join('\n'));
   });
   const stream = fs.createWriteStream(outputPath);
   doc.pipe(stream);
