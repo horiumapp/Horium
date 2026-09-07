@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { adminLicenseService, AdminLicense } from '../services/adminLicenseService';
+import { adminLicenseService, AdminLicense, getSafeHttpsUrl, isPdfReceipt } from '../services/adminLicenseService';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { supabase } from '../services/supabaseClient';
 
 interface AdminPanelPageProps {
     onBack: () => void;
@@ -86,26 +85,20 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
 
     const handleOpenReceipt = async (urlOrPath: string) => {
         if (!urlOrPath) return;
-        if (urlOrPath.includes('token=')) {
-            setViewingReceiptUrl(urlOrPath);
-            return;
-        }
 
         try {
-            let path = urlOrPath;
-            if (urlOrPath.includes('/receipts/')) {
-                path = urlOrPath.split('/receipts/').pop()?.split('?')[0] || urlOrPath;
-            }
-            const { data } = await supabase.storage.from('receipts').createSignedUrl(path, 3600);
-            if (data?.signedUrl) {
-                setViewingReceiptUrl(data.signedUrl);
+            const signedUrl = await adminLicenseService.getReceiptSignedUrl(urlOrPath);
+            const safeUrl = getSafeHttpsUrl(signedUrl);
+
+            if (safeUrl) {
+                setViewingReceiptUrl(safeUrl);
                 return;
             }
         } catch (e) {
-            console.warn("Erro ao gerar URL assinada sob demanda:", e);
+            console.error("Erro ao gerar URL segura do comprovante:", e);
         }
 
-        setViewingReceiptUrl(urlOrPath);
+        alert("Não foi possível carregar o comprovante com segurança. O caminho ou link é inválido.");
     };
 
     return (
@@ -333,11 +326,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
                             <span className="material-symbols-outlined text-primary">receipt_long</span>
                             Comprovante de Pagamento
                         </h3>
-                        {viewingReceiptUrl && (
+                        {viewingReceiptUrl && getSafeHttpsUrl(viewingReceiptUrl) && (
                             <a
-                                href={viewingReceiptUrl}
+                                href={getSafeHttpsUrl(viewingReceiptUrl)!}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
                             >
                                 Abrir em nova aba
@@ -347,21 +340,25 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
                     </div>
 
                     <div className="max-h-[65vh] overflow-auto flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-xl p-2">
-                        {viewingReceiptUrl ? (
-                            viewingReceiptUrl.endsWith('.pdf') ? (
+                        {(() => {
+                            const safeUrl = getSafeHttpsUrl(viewingReceiptUrl);
+                            if (!safeUrl) return null;
+
+                            return isPdfReceipt(safeUrl) ? (
                                 <iframe
-                                    src={viewingReceiptUrl}
+                                    src={safeUrl}
                                     title="Comprovante PDF"
                                     className="w-full h-[500px] rounded-lg border-0"
+                                    sandbox="allow-scripts-to-close allow-same-origin"
                                 />
                             ) : (
                                 <img
-                                    src={viewingReceiptUrl}
+                                    src={safeUrl}
                                     alt="Comprovante"
                                     className="max-h-[500px] w-auto object-contain rounded-lg shadow-md"
                                 />
-                            )
-                        ) : null}
+                            );
+                        })()}
                     </div>
 
                     <div className="flex justify-end pt-2">

@@ -185,6 +185,13 @@ ALTER TABLE public.licenses ADD CONSTRAINT chk_licenses_positive_values CHECK (
     (classes_amount IS NULL OR classes_amount > 0)
 );
 
+ALTER TABLE public.licenses DROP CONSTRAINT IF EXISTS chk_licenses_receipt_url_safe;
+ALTER TABLE public.licenses ADD CONSTRAINT chk_licenses_receipt_url_safe CHECK (
+    receipt_url IS NULL OR 
+    receipt_url ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$' OR
+    receipt_url ~* '^https://[a-zA-Z0-9\.\-]+/storage/v1/object/(public|sign)/receipts/.+'
+);
+
 -- Habilitar RLS para licenses
 ALTER TABLE public.licenses ENABLE ROW LEVEL SECURITY;
 
@@ -487,6 +494,16 @@ BEGIN
     END IF;
 
     v_total_price := p_classes_amount * v_price_per_class;
+
+    -- Validação de segurança do caminho do comprovante (Prevenção de XSS / Injeção)
+    IF p_receipt_path IS NOT NULL AND p_receipt_path <> '' THEN
+        IF NOT (
+            p_receipt_path ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$'
+            OR p_receipt_path ~* '^https://[a-zA-Z0-9\.\-]+/storage/v1/object/(public|sign)/receipts/.+'
+        ) THEN
+            RAISE EXCEPTION 'Caminho de comprovante inválido ou inseguro.';
+        END IF;
+    END IF;
 
     -- Insere a licença com valor e dados auditados no servidor
     INSERT INTO public.licenses (
