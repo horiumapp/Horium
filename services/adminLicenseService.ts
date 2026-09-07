@@ -126,47 +126,75 @@ export const adminLicenseService = {
     },
 
     /**
-     * Update payment status of a license (Approve/Reject)
+     * Aprova uma licença usando a RPC segura `approve_license_rpc`.
+     * Esta RPC garante idempotência, sincronização de `is_licensed` em schedules,
+     * e criação automática de notificação para o usuário.
      */
-    async updatePaymentStatus(
-        licenseId: string,
-        newStatus: 'Aprovado' | 'Rejeitado' | 'Aguardando',
-        validUntilDate?: string
-    ): Promise<void> {
+    async approveLicense(licenseId: string, validUntilDate?: string): Promise<void> {
         try {
-            const updatePayload: Record<string, any> = {
-                payment_status: newStatus
-            };
+            const validUntil = validUntilDate || (() => {
+                const oneYear = new Date();
+                oneYear.setFullYear(oneYear.getFullYear() + 1);
+                return oneYear.toISOString().split('T')[0];
+            })();
 
-            if (newStatus === 'Aprovado') {
-                if (validUntilDate) {
-                    updatePayload.valid_until = validUntilDate;
-                } else {
-                    const oneYear = new Date();
-                    oneYear.setFullYear(oneYear.getFullYear() + 1);
-                    updatePayload.valid_until = oneYear.toISOString().split('T')[0];
-                }
-            } else if (newStatus === 'Rejeitado') {
-                updatePayload.valid_until = null;
-            }
-
-            const { error } = await supabase
-                .from('licenses')
-                .update(updatePayload)
-                .eq('id', licenseId);
+            const { error } = await supabase.rpc('approve_license_rpc', {
+                p_license_id: licenseId,
+                p_valid_until: validUntil
+            });
 
             if (error) {
-                console.error("Error updating license status:", error);
+                console.error("Erro ao aprovar licença via RPC:", error);
                 throw new Error(error.message);
             }
 
-            if (newStatus === 'Aprovado') {
-                audio.playSuccess();
-            } else {
-                audio.playPop();
-            }
+            audio.playSuccess();
         } catch (err: any) {
-            console.error("Error in updatePaymentStatus:", err);
+            console.error("Erro em approveLicense:", err);
+            throw err;
+        }
+    },
+
+    /**
+     * Rejeita uma licença via UPDATE direto (não há RPC de rejeição dedicada).
+     * Limpa a data de validade e atualiza o status.
+     */
+    async rejectLicense(licenseId: string): Promise<void> {
+        try {
+            const { error } = await supabase
+                .from('licenses')
+                .update({ payment_status: 'Rejeitado', valid_until: null })
+                .eq('id', licenseId);
+
+            if (error) {
+                console.error("Erro ao rejeitar licença:", error);
+                throw new Error(error.message);
+            }
+
+            audio.playPop();
+        } catch (err: any) {
+            console.error("Erro em rejectLicense:", err);
+            throw err;
+        }
+    },
+
+    /**
+     * Exclui permanentemente uma licença usando a RPC segura `delete_license_rpc`.
+     */
+    async deleteLicense(licenseId: string): Promise<void> {
+        try {
+            const { error } = await supabase.rpc('delete_license_rpc', {
+                p_license_id: licenseId
+            });
+
+            if (error) {
+                console.error("Erro ao excluir licença via RPC:", error);
+                throw new Error(error.message);
+            }
+
+            audio.playPop();
+        } catch (err: any) {
+            console.error("Erro em deleteLicense:", err);
             throw err;
         }
     },
