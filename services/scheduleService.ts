@@ -185,7 +185,12 @@ export const scheduleService = {
                 console.error('Error updating schedule:', error);
                 throw error;
             }
-            return { ...data.data, id: data.id, createdAt: data.created_at };
+            return {
+                ...data.data,
+                id: data.id,
+                createdAt: data.created_at,
+                fixedLessons: scheduleData.fixedLessons || data.data?.fixedLessons || []
+            };
         } else {
             const { data, error } = await supabase
                 .from('schedules')
@@ -197,7 +202,12 @@ export const scheduleService = {
                 console.error('Error inserting schedule:', error);
                 throw error;
             }
-            return { ...data.data, id: data.id, createdAt: data.created_at };
+            return {
+                ...data.data,
+                id: data.id,
+                createdAt: data.created_at,
+                fixedLessons: scheduleData.fixedLessons || data.data?.fixedLessons || []
+            };
         }
     },
 

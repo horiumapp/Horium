@@ -109,6 +109,61 @@ FOR EACH ROW
 EXECUTE FUNCTION public.protect_schedule_license_status();
 
 
+-- 2.1 TABELA SCHEDULE_SOLUTIONS (Soluções de Horários Segregadas com Paywall Server-Side)
+CREATE TABLE IF NOT EXISTS public.schedule_solutions (
+    schedule_id UUID PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    fixed_lessons JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()),
+    CONSTRAINT fk_schedule_solutions_schedule
+        FOREIGN KEY (schedule_id)
+        REFERENCES public.schedules(id)
+        ON DELETE CASCADE
+        DEFERRABLE INITIALLY DEFERRED
+);
+
+-- Habilitar RLS para schedule_solutions (Leitura pública bloqueada, acesso apenas via RPC get_schedule_solution)
+ALTER TABLE public.schedule_solutions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins can manage schedule_solutions" ON public.schedule_solutions;
+CREATE POLICY "Admins can manage schedule_solutions" ON public.schedule_solutions
+FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+-- Trigger para isolar fixedLessons e impedir vazamento no SELECT da tabela schedules
+CREATE OR REPLACE FUNCTION public.isolate_schedule_solution()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.id IS NULL THEN
+        NEW.id := gen_random_uuid();
+    END IF;
+
+    -- Se o payload contiver fixedLessons com itens alocados, salva na tabela protegida schedule_solutions
+    IF NEW.data ? 'fixedLessons' AND jsonb_array_length(COALESCE(NEW.data -> 'fixedLessons', '[]'::jsonb)) > 0 THEN
+        INSERT INTO public.schedule_solutions (schedule_id, user_id, fixed_lessons, updated_at)
+        VALUES (NEW.id, NEW.user_id, NEW.data -> 'fixedLessons', timezone('utc', now()))
+        ON CONFLICT (schedule_id) DO UPDATE 
+        SET fixed_lessons = EXCLUDED.fixed_lessons,
+            user_id = EXCLUDED.user_id,
+            updated_at = timezone('utc', now());
+    END IF;
+
+    -- Remove fixedLessons de schedules.data para grades sem licença ativa (proteção contra vazamento via SELECT *)
+    IF NOT COALESCE(NEW.is_licensed, false) THEN
+        NEW.data := NEW.data - 'fixedLessons';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_isolate_schedule_solution ON public.schedules;
+CREATE TRIGGER trg_isolate_schedule_solution
+BEFORE INSERT OR UPDATE ON public.schedules
+FOR EACH ROW
+EXECUTE FUNCTION public.isolate_schedule_solution();
+
+
 -- 3. TABELA LICENSES (Licenças de Turmas e Planos)
 CREATE TABLE IF NOT EXISTS public.licenses (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -229,10 +284,23 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 -- Habilitar RLS para audit_logs
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
+-- Políticas de RLS restritivas para audit_logs (Isolamento Multi-Tenant e Imutabilidade para Usuários Comuns)
 DROP POLICY IF EXISTS "Permitir acesso audit_logs" ON public.audit_logs;
-CREATE POLICY "Permitir acesso audit_logs" 
-ON public.audit_logs FOR ALL TO authenticated 
-USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service role can manage audit_logs" ON public.audit_logs;
+CREATE POLICY "Service role can manage audit_logs" ON public.audit_logs
+FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins can manage audit_logs" ON public.audit_logs;
+CREATE POLICY "Admins can manage audit_logs" ON public.audit_logs
+FOR ALL TO authenticated 
+USING (public.is_admin()) 
+WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Users can view their own audit_logs" ON public.audit_logs;
+CREATE POLICY "Users can view their own audit_logs" ON public.audit_logs
+FOR SELECT TO authenticated 
+USING (auth.uid() = user_id);
 
 
 -- 7. FUNÇÕES SEGURAS PARA ADMINISTRAÇÃO E REGRAS DE NEGÓCIO (RPC COM SECURITY DEFINER)
@@ -455,6 +523,7 @@ DECLARE
     v_owner_id UUID;
     v_is_licensed BOOLEAN;
     v_data JSONB;
+    v_solution JSONB;
 BEGIN
     SELECT user_id, is_licensed, data INTO v_owner_id, v_is_licensed, v_data
     FROM public.schedules
@@ -479,8 +548,23 @@ BEGIN
         RAISE EXCEPTION 'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.';
     END IF;
 
-    -- Retorna os dados completos da solução
-    RETURN COALESCE(v_data -> 'fixedLessons', '[]'::jsonb);
+    -- Busca a solução prioritariamente na tabela protegida schedule_solutions
+    SELECT fixed_lessons INTO v_solution
+    FROM public.schedule_solutions
+    WHERE schedule_id = p_schedule_id;
+
+    -- Fallback para retrocompatibilidade caso ainda esteja no campo data de schedules
+    IF v_solution IS NULL 
+       OR jsonb_typeof(v_solution) <> 'array' 
+       OR jsonb_array_length(v_solution) = 0 THEN
+        IF v_data ? 'fixedLessons' AND jsonb_typeof(v_data -> 'fixedLessons') = 'array' THEN
+            v_solution := v_data -> 'fixedLessons';
+        ELSE
+            v_solution := '[]'::jsonb;
+        END IF;
+    END IF;
+
+    RETURN v_solution;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
@@ -547,3 +631,32 @@ CREATE INDEX IF NOT EXISTS idx_licenses_pending ON public.licenses(payment_statu
 CREATE INDEX IF NOT EXISTS idx_licenses_valid_until ON public.licenses(valid_until);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON public.notifications(user_id, is_read, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON public.audit_logs(user_id, created_at DESC);
+
+
+-- 9. MIGRAÇÃO DE RETROCOMPATIBILIDADE: Segregar fixedLessons legadas existentes
+DO $$
+BEGIN
+    -- 1. Copiar fixedLessons existentes em schedules para schedule_solutions (se houver dados)
+    INSERT INTO public.schedule_solutions (schedule_id, user_id, fixed_lessons, updated_at)
+    SELECT 
+        s.id, 
+        s.user_id, 
+        s.data -> 'fixedLessons', 
+        timezone('utc', now())
+    FROM public.schedules s
+    WHERE s.data ? 'fixedLessons'
+      AND jsonb_typeof(s.data -> 'fixedLessons') = 'array'
+      AND jsonb_array_length(s.data -> 'fixedLessons') > 0
+    ON CONFLICT (schedule_id) DO UPDATE
+    SET fixed_lessons = EXCLUDED.fixed_lessons,
+        updated_at = timezone('utc', now());
+
+    -- 2. Sanitizar a coluna data de schedules para horários sem licença ativa
+    UPDATE public.schedules
+    SET data = data - 'fixedLessons'
+    WHERE (is_licensed IS DISTINCT FROM true)
+      AND data ? 'fixedLessons';
+END;
+$$;
+
