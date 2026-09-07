@@ -1,7 +1,7 @@
 /**
  * Gerador de Relatório de Auditoria de Segurança — Horium
  * Dependência: pdfkit (npm install pdfkit)
- * Uso: node generate-report.mjs
+ * Execução: node generate-report.mjs
  */
 
 import PDFDocument from 'pdfkit';
@@ -12,385 +12,408 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ─── PALETTE ────────────────────────────────────────────────
+// ─── PALETA DE CORES EXIGIDA ──────────────────────────────────
 const SEV = {
-  critica:      { color: '#B91C1C', label: 'Crítica' },
-  alta:         { color: '#EA580C', label: 'Alta' },
-  media:        { color: '#D97706', label: 'Média' },
-  baixa:        { color: '#2563EB', label: 'Baixa' },
-  informativa:  { color: '#6B7280', label: 'Informativa' },
-  ponto_forte:  { color: '#059669', label: 'Ponto Forte' },
+  critica:      { color: '#B91C1C', label: 'Crítica', bg: '#FEE2E2', border: '#F87171' },
+  alta:         { color: '#EA580C', label: 'Alta', bg: '#FFEDD5', border: '#FB923C' },
+  media:        { color: '#D97706', label: 'Média', bg: '#FEF3C7', border: '#FBBF24' },
+  baixa:        { color: '#2563EB', label: 'Baixa', bg: '#DBEAFE', border: '#60A5FA' },
+  informativa:  { color: '#6B7280', label: 'Informativa', bg: '#F3F4F6', border: '#9CA3AF' },
+  ponto_forte:  { color: '#059669', label: 'Ponto Forte', bg: '#D1FAE5', border: '#34D399' },
 };
 
-const MARGIN = 56; // ~2cm
-const PAGE_W = 595.28; // A4
+const MARGIN = 54; // ~1.9 cm
+const PAGE_W = 595.28; // Formato A4
 const PAGE_H = 841.89;
 const CONTENT_W = PAGE_W - 2 * MARGIN;
 
-// ─── DADOS DA AUDITORIA ──────────────────────────────────────
+// ─── METADADOS DA AUDITORIA ────────────────────────────────────
 const PROJECT_NAME = 'Horium';
-const AUDIT_DATE = '01/09/2026';
+const AUDIT_DATE = '07 de Setembro de 2026';
 
+// ─── ACHADOS CONFIRMADOS ───────────────────────────────────────
 const findings = [
-  // CATEGORIA 1 — BANCO SEM TRANCA
   {
     id: 'F01',
-    category: '1. Banco sem Tranca (RLS)',
-    severity: 'alta',
-    file: 'services/adminLicenseService.ts',
-    lines: '144-158',
-    snippet: `async getPendingLicensesCount(): Promise<number> {
-  const { count, error } = await supabase
-    .from('licenses')
-    .select('*', { count: 'exact', head: true })
-    .or('payment_status.eq.Aguardando,payment_status.eq.under_review');
-  ...
-  return count || 0;
-}`,
-    description: 'Contagem de licenças pendentes sem filtro de admin — qualquer usuário autenticado pode consultar.',
-    why: 'O RPC get_pending_licenses_count_rpc (que valida admin) não é usado aqui. Em vez disso, a query direta na tabela licenses é feita com a anon key. A tabela licenses tem RLS que permite SELECT ao dono (user_id = auth.uid()) OU admin. Portanto, um usuário comum só verá as SUAS licenças pendentes — mas o método pretende retornar o TOTAL global para o admin. O resultado é incorreto para admin (sub-contagem) e revela ao usuário comum a contagem de suas próprias licenças pendentes (risco baixo). A falha é funcional (bypass da RPC segura).',
-    exploitability: 'O RLS da tabela limita o impacto: usuários comuns verão apenas suas próprias licenças. Porém, a RPC segura é ignorada, criando dependência frágil no RLS.',
+    category: '2. Autorização no Navegador',
+    severity: 'critica',
+    title: 'Bypass de Paywall e Licenciamento: Exposição da Solução Completa da Grade no SELECT de Schedules com Ocultação Apenas em Memória do Cliente',
+    file: 'schema.sql:87-88 / services/scheduleService.ts',
+    lines: 'schema.sql:87-88 / scheduleService.ts:77-81, 126-130',
+    snippet: `// services/scheduleService.ts:126-130
+const safeData = isApproved ? normalizedData : {
+    ...normalizedData,
+    fixedLessons: []
+};`,
+    flow: 'Usuário gera horário no assistente -> Dados salvos no banco com fixedLessons completo na coluna schedules.data -> RLS de SELECT em schedules permite leitura do registro ao dono (auth.uid() = user_id) sem validar is_licensed -> PostgREST entrega todo o payload JSONB via HTTP -> Cliente JavaScript mascara fixedLessons: [] apenas na memória do browser.',
+    why: 'A autorização de acesso ao produto comercial gerado (paywall de fixedLessons) é imposta apenas no frontend. A política RLS da tabela schedules entrega o campo data completo para qualquer consulta SELECT * autenticada pelo proprietário, permitindo obter a grade inteira via DevTools ou console sem pagar.',
+    exploitability: 'Qualquer usuário cadastrado com plano gratuito ou grade não licenciada. Basta inspecionar a resposta HTTP na aba Network ou executar supabase.from(\'schedules\').select(\'data\') no console do navegador.',
+    preconditions: 'Possuir conta cadastrada e ter processado a geração de uma grade no assistente.',
+    impact: 'Evasão completa do modelo comercial do software. Qualquer usuário obtém o resultado da otimização escolar gratuitamente.',
+    controlsConsidered: 'A RPC get_schedule_solution existe no banco com validação de pagamento, mas é inócua porque o SELECT * direto na tabela schedules já retorna a solução completa.',
+    recommendation: 'Separar fixedLessons em tabela/coluna restrita ou criar VIEW com RLS que oculte data->\'fixedLessons\' para grades sem licença ativa.',
+    prio: 'P1'
   },
   {
     id: 'F02',
-    category: '1. Banco sem Tranca (RLS)',
-    severity: 'media',
-    file: 'services/ticketService.ts',
-    lines: '36-40',
-    snippet: `const { data } = supabase.storage
-  .from('tickets-attachments')
-  .getPublicUrl(filePath);
-imageUrl = data.publicUrl;`,
-    description: 'URL pública gerada para bucket PRIVADO — getPublicUrl() gera URL que não funciona para buckets privados, mas o valor é salvo na tabela.',
-    why: 'O bucket tickets-attachments é privado (public=false). A URL gerada por getPublicUrl() não vai funcionar para renderização, mas o padrão é inconsistente: deveria usar createSignedUrl() ou o fluxo de download autenticado. A URL salva na tabela pode ser tentada por qualquer um (embora retorne 403).',
-    exploitability: 'Impacto funcional mais que de segurança: imagens de tickets não serão visíveis. A URL salva não permite acesso real ao arquivo.',
+    category: '1. Isolamento de Dados / Cross-Tenant',
+    severity: 'alta',
+    title: 'Ausência de Isolamento Multi-Tenant na Tabela audit_logs Devido à Política RLS Permissiva USING (true)',
+    file: 'schema.sql',
+    lines: '233-235',
+    snippet: `DROP POLICY IF EXISTS "Permitir acesso audit_logs" ON public.audit_logs;
+CREATE POLICY "Permitir acesso audit_logs" 
+ON public.audit_logs FOR ALL TO authenticated 
+USING (true) WITH CHECK (true);`,
+    flow: 'Usuário autentica no Supabase -> Envia query PostgREST direta para /rest/v1/audit_logs -> PostgreSQL avalia política RLS -> USING (true) WITH CHECK (true) permite SELECT, INSERT, UPDATE e DELETE irrestritos.',
+    why: 'A tabela audit_logs registra histórico de operações, dados anteriores (old_data) e novos (new_data). A política FOR ALL TO authenticated USING (true) remove qualquer barreira de tenant, permitindo a qualquer usuário ler dados de auditoria de outros clientes e forjar ou apagar registros.',
+    exploitability: 'Qualquer usuário autenticado via cliente PostgREST/Supabase pode ler, modificar ou deletar logs de qualquer outro usuário ou organização.',
+    preconditions: 'Nenhuma além de possuir conta registrada no sistema.',
+    impact: 'Vazamento massivo de dados sensíveis entre tenants (cross-tenant data leakage), adulteração maliciosa de registros de auditoria e destruição de trilhas de auditoria.',
+    controlsConsidered: 'RLS está habilitado na tabela, mas a política configurada explicitamente usa true como predicado universal.',
+    recommendation: 'Restringir a política para USING (auth.uid() = user_id OR public.is_admin()) ou restringir acesso exclusivamente ao service_role e admins.',
+    prio: 'P1'
   },
   {
     id: 'F03',
-    category: '1. Banco sem Tranca (RLS)',
-    severity: 'media',
-    file: 'pages/PlansPage.tsx',
-    lines: '146-149',
-    snippet: `const { data: publicUrlData } = supabase.storage
-  .from('receipts')
-  .getPublicUrl(filePath);
-receiptUrl = publicUrlData?.publicUrl || null;`,
-    description: 'Mesmo problema de getPublicUrl() em bucket privado para comprovantes de pagamento (receipts).',
-    why: 'Idem ao F02 — o bucket receipts é privado, mas a URL pública é gerada e salva na tabela licenses.receipt_url. Admins que tentarem visualizar o comprovante verão uma URL inválida.',
-    exploitability: 'Idem ao F02. Risco funcional, não de exposição de dados.',
+    category: '5. Inputs sem Tratamento / XSS',
+    severity: 'alta',
+    title: 'Stored XSS e Injeção de URI JavaScript no Painel do Administrador via URL de Comprovante de Pagamento (receipt_url)',
+    file: 'pages/AdminPanelPage.tsx / schema.sql',
+    lines: 'AdminPanelPage.tsx:87-109, 338, 351-356 / schema.sql:113-125',
+    snippet: `// AdminPanelPage.tsx:108
+setViewingReceiptUrl(urlOrPath); // Fallback recebe string crua do usuário
+// AdminPanelPage.tsx:351-353
+{viewingReceiptUrl.endsWith('.pdf') ? (
+    <iframe src={viewingReceiptUrl} title="Comprovante PDF" ... />
+) : ...}`,
+    flow: 'Usuário envia pedido de licença com receipt_url malicioso (ex: javascript:alert(document.domain)//.pdf) -> schema.sql grava sem sanitização -> Admin abre AdminPanelPage e clica para ver comprovante -> createSignedUrl falha no Storage -> Fallback armazena URL crua no estado -> Componente renderiza <iframe src={viewingReceiptUrl}> e <a href={viewingReceiptUrl}>.',
+    why: 'O valor de receipt_url é controlado pelo usuário e não é validado nem no banco nem no frontend. O sufixo //.pdf satisfaz a verificação .endsWith(\'.pdf\'), levando o navegador a renderizar um iframe com src javascript:, executando código malicioso sob a origem do admin.',
+    exploitability: 'Qualquer usuário comum pode enviar uma licença com payload de URI JavaScript. Quando o administrador visualiza o comprovante para análise, o exploit executa automaticamente.',
+    preconditions: 'Administrador abrir a visualização de comprovante da licença enviada.',
+    impact: 'Execução de JavaScript com privilégios de Administrador (Stored XSS). Permite roubo de tokens JWT de autenticação do localStorage e execução não autorizada de aprovações/exclusões de licenças.',
+    controlsConsidered: 'createSignedUrl tenta buscar arquivo no bucket, mas o bloco de fallback repassa o valor cru diretamente ao DOM sem validar protocolo.',
+    recommendation: 'Validar estritamente que receipt_url inicia com padrão de caminho interno ou URL HTTPS válida. Rejeitar esquemas javascript: e data:. Não renderizar iframes com URLs externas arbitrárias.',
+    prio: 'P1'
   },
-
-  // CATEGORIA 2 — PERMISSÃO DEFINIDA NO NAVEGADOR
   {
     id: 'F04',
-    category: '2. Permissão no Navegador',
-    severity: 'critica',
-    file: 'components/Layout.tsx + App.tsx',
-    lines: 'Layout:66,180 / App:438-439',
-    snippet: `// Layout.tsx:66
-setIsAdmin(ADMIN_EMAILS.includes(user.email || ''));
-// Layout.tsx:180 — Renderiza botão Admin apenas se isAdmin
-{isAdmin && (<button onClick={() => setView(AppView.ADMIN)}>...)}
-// App.tsx:438 — Renderiza AdminPanelPage
-case AppView.ADMIN:
-  return <AdminPanelPage ... />;`,
-    description: 'O gate de acesso à área administrativa é EXCLUSIVAMENTE no frontend (lista hardcoded de e-mails). Qualquer usuário autenticado pode navegar diretamente para a view ADMIN manipulando o estado.',
-    why: 'A proteção REAL está nas RPCs do banco (get_admin_licenses, approve_license_rpc, delete_license_rpc) que verificam is_admin(). Então as OPERAÇÕES são protegidas no banco, mas a VISUALIZAÇÃO da interface admin é controlada apenas no frontend. Um atacante autenticado pode montar o componente AdminPanelPage, que tentará chamar as RPCs — e falhará. Porém, a tentativa revela a existência das RPCs e sua API.',
-    exploitability: 'Impacto reduzido porque as RPCs do banco validam admin. Porém, é má prática: o frontend expõe a UI e pode revelar informações pela tentativa de chamada.',
+    category: '2. Autorização no Navegador',
+    severity: 'alta',
+    title: 'Bypass do Cálculo Seguro de Preços por Meio de Fallback de Inserção Direta na Tabela licenses',
+    file: 'pages/PlansPage.tsx / schema.sql',
+    lines: 'PlansPage.tsx:127-147 / schema.sql:151-161',
+    snippet: `// pages/PlansPage.tsx:130-139
+const { error: insertError } = await supabase.from('licenses').insert({
+    user_id: userData.user.id,
+    classes_amount: numClasses,
+    value_paid: totalPrice, // valor calculado no client-side
+    payment_status: 'Aguardando',
+    receipt_url: filePath,
+});`,
+    flow: 'Frontend implementa fallback de inserção direta na tabela licenses se a RPC request_license_order falhar -> Política RLS de INSERT em licenses permite inserção por usuários comuns autenticados com payment_status em Aguardando -> Atacante ignora a RPC e faz POST /rest/v1/licenses enviando classes_amount: 100 e value_paid: 0.01 -> O banco aceita porque a constraint só exige value_paid > 0.',
+    why: 'A regra de negócio que calcula o valor oficial por turma está implementada na RPC request_license_order, mas a tabela licenses continua aberta para INSERT direto com preço e turmas arbitrários.',
+    exploitability: 'Qualquer usuário autenticado pode emitir chamada direta ao PostgREST e criar pedidos de licença de qualquer quantidade de turmas pagando valores irrisórios.',
+    preconditions: 'Estar autenticado.',
+    impact: 'Adulteração de faturamento, pedidos fraudulentos exibidos na fila de conciliação do administrador.',
+    controlsConsidered: 'A constraint chk_licenses_positive_values exige value_paid > 0, mas aceita qualquer quantia positiva (como R$ 0,01).',
+    recommendation: 'Revogar permissão de INSERT direto em licenses para o papel authenticated, permitindo inserção exclusivamente através da RPC request_license_order.',
+    prio: 'P2'
   },
   {
     id: 'F05',
-    category: '2. Permissão no Navegador',
-    severity: 'alta',
-    file: 'services/adminLicenseService.ts',
-    lines: '56-101',
-    snippet: `// Fallback direto via cliente caso a RPC ainda não exista
-const { error } = await supabase
-  .from('licenses')
-  .update({
-    payment_status: 'Aprovado',
-    valid_until: validUntilDate
-  })
-  .eq('id', licenseId);`,
-    description: 'Fallback client-side no approveLicense() permite que, se a RPC falhar (por qualquer motivo), a aprovação seja tentada diretamente via query na tabela licenses.',
-    why: 'A tabela licenses tem RLS que permite ALL para admin E SELECT/INSERT para o próprio usuário. O UPDATE direto falhará para não-admins graças ao RLS. MAS o padrão é perigoso: se o RLS for relaxado no futuro, ou se o fallback for copiado para outro contexto, o bypass se torna real. Além disso, o fallback faz operações parciais (update sem atualizar schedule nem criar notificação) — risco de inconsistência.',
-    exploitability: 'Atualmente bloqueado pelo RLS. Risco latente que se materializa se o RLS for alterado ou se o padrão for reutilizado.',
+    category: '4. Secrets e Credenciais',
+    severity: 'media',
+    title: 'Hardcoding de E-mails de Administradores Mestre no Código-Fonte e na Função SQL is_admin()',
+    file: 'schema.sql / components/Layout.tsx',
+    lines: 'schema.sql:29, 36, 40 / Layout.tsx:72',
+    snippet: `// schema.sql:29
+OR (v_user_email IN ('horium.app@gmail.com', 'prof.jackison@gmail.com'));
+// components/Layout.tsx:72
+const isMasterAdmin = ['horium.app@gmail.com', 'prof.jackison@gmail.com'].includes(userEmailLower);`,
+    flow: 'E-mails de administradores mestres fixados como literais string em schema.sql e em Layout.tsx -> Bundle JavaScript gerado pelo Vite contém os e-mails em texto claro -> Função is_admin() no PostgreSQL concede poderes totais por correspondência estática de string.',
+    why: 'Embora a tabela dinâmica admin_users tenha sido criada, a checagem de privilégios mantém fallback fixo para e-mails hardcoded, expondo os administradores publicamente no bundle.',
+    exploitability: 'Qualquer visitante pode extrair os e-mails administrativos do bundle frontend para lançar ataques de spear phishing ou força bruta.',
+    preconditions: 'Acesso público ao bundle JavaScript.',
+    impact: 'Exposição de identidade administrativa e inflexibilidade no ciclo de vida de privilégios.',
+    controlsConsidered: 'A verificação de admin no banco consulta admin_users, mas a cláusula OR com e-mails estáticos anula o isolamento.',
+    recommendation: 'Remover e-mails hardcoded de schema.sql e Layout.tsx. Delegar autenticação de papéis exclusivamente à tabela admin_users e RPC is_current_user_admin().',
+    prio: 'P2'
   },
   {
     id: 'F06',
-    category: '2. Permissão no Navegador',
-    severity: 'alta',
-    file: 'services/adminLicenseService.ts',
-    lines: '113-138',
-    snippet: `// deleteLicense — fallback direto
-const { error } = await supabase
-  .from('licenses')
-  .delete()
-  .eq('id', licenseId);`,
-    description: 'Mesmo padrão de fallback client-side no deleteLicense(). Se a RPC delete_license_rpc falhar, a exclusão é tentada diretamente.',
-    why: 'Idem ao F05. O RLS protege atualmente, mas o padrão de fallback é inseguro por design.',
-    exploitability: 'Idem ao F05. RLS protege, mas o fallback é anti-padrão.',
-  },
-
-  // CATEGORIA 3 — IDOR
-  {
-    id: 'F07',
-    category: '3. IDOR',
-    severity: 'media',
-    file: 'services/scheduleService.ts',
-    lines: '180-190',
-    snippet: `async deleteSchedule(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('schedules')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', id);
-}`,
-    description: 'Soft-delete de schedule por ID sem filtro explícito de user_id no código do serviço.',
-    why: 'A proteção está no RLS da tabela schedules (UPDATE permitido apenas se auth.uid() = user_id OR is_admin()). O RLS garante que um usuário não consiga soft-deletar o schedule de outro. Contudo, o código não filtra explicitamente, dependendo 100% do RLS.',
-    exploitability: 'Protegido pelo RLS. Se o RLS for desabilitado ou alterado, se torna IDOR.',
-  },
-  {
-    id: 'F08',
-    category: '3. IDOR',
-    severity: 'media',
-    file: 'services/scheduleService.ts',
-    lines: '221-231',
-    snippet: `async restoreSchedule(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('schedules')
-    .update({ deleted_at: null })
-    .eq('id', id);
-}`,
-    description: 'Restauração de schedule por ID sem filtro explícito de user_id.',
-    why: 'Idem ao F07. RLS protege.',
-    exploitability: 'Idem ao F07.',
-  },
-  {
-    id: 'F09',
-    category: '3. IDOR',
-    severity: 'media',
-    file: 'services/scheduleService.ts',
-    lines: '233-243',
-    snippet: `async permanentlyDeleteSchedule(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('schedules')
-    .delete()
-    .eq('id', id);
-}`,
-    description: 'Exclusão permanente de schedule por ID sem filtro explícito de user_id.',
-    why: 'RLS da tabela schedules permite DELETE apenas se auth.uid() = user_id OR is_admin().',
-    exploitability: 'Protegido pelo RLS.',
-  },
-  {
-    id: 'F10',
-    category: '3. IDOR',
-    severity: 'media',
-    file: 'services/notificationService.ts',
-    lines: '45-56',
-    snippet: `async markAsRead(notificationId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('id', notificationId);
-}`,
-    description: 'Marcar notificação como lida por ID sem filtro de user_id.',
-    why: 'O RLS de notifications permite UPDATE se auth.uid() = user_id OR is_admin(). Porém, a operação é de baixo impacto (marcar como lida).',
-    exploitability: 'Protegido pelo RLS. Impacto mínimo mesmo sem RLS.',
-  },
-
-  // CATEGORIA 4 — CHAVES EXPOSTAS
-  {
-    id: 'F11',
-    category: '4. Chaves Expostas',
-    severity: 'critica',
-    file: '.env.local',
-    lines: '1',
-    snippet: `GEMINI_API_KEY=AIzaSy[REDACTED]`,
-    description: 'Chave de API do Google Gemini armazenada em .env.local. Embora o .env.local não esteja rastreado pelo git (*.local no .gitignore), a chave foi encontrada no histórico git (commits ff8a553 e c34535d).',
-    why: 'A chave AIzaSy... é uma chave de API do Google (Gemini). Ela foi commitada em versões anteriores do projeto e PERMANECE no histórico git. Qualquer pessoa com acesso ao repositório pode extraí-la. Além disso, a chave não é usada em nenhum lugar do código atual — pode ser um resquício, mas permanece exposta.',
-    exploitability: 'Qualquer pessoa com acesso ao repositório git pode extrair a chave do histórico e usá-la para fazer chamadas à API do Google, gerando custos ao proprietário.',
-  },
-  {
-    id: 'F12',
-    category: '4. Chaves Expostas',
-    severity: 'informativa',
-    file: 'services/supabaseClient.ts',
-    lines: '3-4',
-    snippet: `const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;`,
-    description: 'A Supabase Anon Key e URL são expostas no bundle do frontend (prefixo VITE_). Isso é o design intencional do Supabase (anon key é pública por definição), mas a segurança DEPENDE inteiramente do RLS estar corretamente configurado.',
-    why: 'É esperado que a anon key do Supabase seja pública. A segurança real está nas políticas RLS. Este achado é informativo para reforçar a importância do RLS.',
-    exploitability: 'Esperado e por design. Não é uma vulnerabilidade se o RLS estiver bem configurado.',
-  },
-  {
-    id: 'F13',
-    category: '4. Chaves Expostas',
-    severity: 'alta',
-    file: 'schema.sql',
-    lines: '9',
-    snippet: `RETURN (auth.jwt() ->> 'email') IN ('horium.app@gmail.com', 'prof.jackison@gmail.com');`,
-    description: 'E-mails de administradores hardcoded na função is_admin() do banco de dados e no frontend (types.ts:14).',
-    why: 'Os e-mails dos administradores estão hardcoded tanto no banco (schema.sql:9) quanto no frontend (types.ts:14). Isso não é um segredo em si, mas: (1) dificulta a gestão de admins — adicionar/remover exige deploy do banco E do frontend; (2) expõe a identidade dos administradores no código-fonte público.',
-    exploitability: 'Facilita ataques de engenharia social direcionados aos e-mails administrativos. Gestão inflexível de privilégios.',
-  },
-
-  // CATEGORIA 5 — INPUTS SEM TRATAMENTO (XSS)
-  // Nenhuma vulnerabilidade encontrada nesta categoria
+    category: '4. Secrets e Credenciais',
+    severity: 'baixa',
+    title: 'Regra Incompleta de Exclusão de Ambientes no .gitignore Expondo Potenciais Arquivos .env',
+    file: '.gitignore',
+    lines: '13',
+    snippet: `*.local`,
+    flow: 'O arquivo .gitignore ignora apenas o padrão *.local (cobrindo .env.local) -> Caso um desenvolvedor crie .env ou .env.production com credenciais sensíveis (ex: service_role), o Git não os ignorará automaticamente.',
+    why: 'O padrão .env e suas variações não estão declarados nas regras de ignore do repositório.',
+    exploitability: 'Risco operacional em desenvolvimento ou automação CI.',
+    preconditions: 'Criação inadvertida de arquivo .env padrão no repositório local.',
+    impact: 'Potencial commit e vazamento de chaves privadas em repositórios remotos.',
+    controlsConsidered: 'O arquivo .env.local atual está ignorado por *.local.',
+    recommendation: 'Adicionar .env, .env.* e !.env.example explicitamente no arquivo .gitignore.',
+    prio: 'P3'
+  }
 ];
 
+// ─── PONTOS FORTES CONFIRMADOS ─────────────────────────────────
 const strengths = [
   {
     id: 'S01',
-    description: 'RLS ativo em TODAS as tabelas — schedules, licenses, notifications, tickets têm Row Level Security habilitado com políticas corretas que filtram por auth.uid() = user_id.',
-    evidence: 'schema.sql:27 (schedules), 84 (licenses), 121 (notifications), 148 (tickets)',
+    title: 'Row Level Security (RLS) Ativo com Isolamento Multi-Tenant por auth.uid()',
+    evidence: 'schema.sql:70-88 (schedules), 133-161 (licenses), 174-188 (notifications), 201-214 (tickets)',
+    description: 'Políticas RLS garantem que usuários comuns não visualizem, atualizem ou excluam dados pertencentes a outros usuários, exigindo correspondência estrita com auth.uid() = user_id.'
   },
   {
     id: 'S02',
-    description: 'RPCs administrativas com SECURITY DEFINER e validação is_admin() — get_admin_licenses, approve_license_rpc, delete_license_rpc, get_pending_licenses_count_rpc todas verificam is_admin() antes de executar.',
-    evidence: 'schema.sql:166-283',
+    title: 'Trigger de Proteção contra Manipulação de Licenciamento de Grades',
+    evidence: 'schema.sql:90-109 (trg_protect_schedule_license)',
+    description: 'Trigger BEFORE INSERT OR UPDATE protege o campo is_licensed na tabela schedules, impedindo que usuários comuns alterem o status de licença via queries diretas no PostgREST.'
   },
   {
     id: 'S03',
-    description: 'Trigger de proteção contra manipulação de is_licensed — protect_schedule_license_status() impede que não-admins alterem o campo is_licensed diretamente.',
-    evidence: 'schema.sql:47-65',
+    title: 'Buckets de Armazenamento Privados com Isolamento de Pastas por UUID',
+    evidence: 'schema.sql:489-538 (receipts e tickets-attachments)',
+    description: 'Buckets receipts e tickets-attachments são privados (public = false). As políticas de Storage RLS exigem que a pasta de primeiro nível corresponda a auth.uid()::text, impedindo upload e leitura não autorizados.'
   },
   {
     id: 'S04',
-    description: 'Storage buckets PRIVADOS com RLS — receipts e tickets-attachments são privados (public=false) com políticas de isolamento por user_id via storage.foldername().',
-    evidence: 'schema.sql:286-334',
+    title: 'Funções RPC com SECURITY DEFINER e Validação Obrigatória de Privilégio Admin',
+    evidence: 'schema.sql:238-375 (get_admin_licenses, approve_license_rpc, delete_license_rpc, get_pending_licenses_count_rpc)',
+    description: 'Todas as RPCs administrativas executam checagem explícita IF NOT public.is_admin() THEN RAISE EXCEPTION antes de executar mutações ou consultas sensíveis.'
   },
   {
     id: 'S05',
-    description: 'Autenticação via Supabase Auth — fluxo de sign-up com verificação por OTP, reset de senha via link, persistência de sessão com auto-refresh.',
-    evidence: 'services/authService.ts (todo o arquivo)',
+    title: 'Arquitetura de Paywall Server-Side Estruturada na RPC get_schedule_solution',
+    evidence: 'schema.sql:449-485 (get_schedule_solution)',
+    description: 'A RPC get_schedule_solution valida propriedade do horário (v_owner_id = auth.uid()) e exige comprovação de licença ativa no banco de dados antes de retornar os dados da solução.'
   },
   {
     id: 'S06',
-    description: 'Sem XSS: React impede innerHTML por default — o codebase não utiliza dangerouslySetInnerHTML, innerHTML, v-html, eval() ou new Function() em NENHUM arquivo.',
-    evidence: 'Busca grep em todo o projeto retornou 0 resultados para todos os padrões XSS.',
+    title: 'Defesa em Profundidade nas Consultas do Cliente Frontend',
+    evidence: 'services/scheduleService.ts:79, 180, 212, 230, 258, 274, 289; services/notificationService.ts:18, 35, 53, 66',
+    description: 'Todos os métodos de serviço do frontend filtram explicitamente .eq(\'user_id\', user.id), garantindo filtro duplo (client + RLS) contra falhas de tenant.'
   },
   {
     id: 'S07',
-    description: '.env.local no .gitignore — o arquivo de variáveis de ambiente local está excluído do rastreamento git via padrão *.local.',
-    evidence: '.gitignore:13',
+    title: 'Ausência de Sinks de XSS Perigosos no Frontend (React 19 Nativo)',
+    evidence: 'Varredura estática completa em todos os arquivos .tsx e .ts',
+    description: 'O código utiliza exclusivamente JSX com auto-escaping. Zero ocorrências de dangerouslySetInnerHTML, innerHTML, v-html, eval() ou new Function().'
   },
   {
     id: 'S08',
-    description: 'Validação de insert em licenses — RLS permite INSERT apenas com payment_status IN (\'Aguardando\', \'under_review\') ou NULL, impedindo que usuários criem licenças já aprovadas.',
-    evidence: 'schema.sql:101-107',
+    title: 'Sanitização de Extensões e Validação de Tipos MIME nos Uploads',
+    evidence: 'services/ticketService.ts:24-30 e pages/PlansPage.tsx:100-101',
+    description: 'Uploads validam extensões permitidas (png, jpg, webp, pdf), MIME types aceitos e limite estrito de 5MB, com higienização de extensões por regex alfanumérico.'
   },
   {
     id: 'S09',
-    description: 'Upload de arquivos com sanitização de extensão — extensões são limpas com regex (remove caracteres não alfanuméricos) e limitadas a 5 caracteres.',
-    evidence: 'services/ticketService.ts:21-22, pages/PlansPage.tsx:132-133',
+    title: 'Autenticação Segura via Supabase Auth com Verificação OTP e Reset Seguro',
+    evidence: 'services/authService.ts',
+    description: 'Fluxo de autenticação completo gerenciado pelo GoTrue, com OTP de 6 dígitos para verificação de e-mail, refresh automático de JWT e reset de senha.'
   },
   {
     id: 'S10',
-    description: 'Headers de segurança no index.html — X-Content-Type-Options: nosniff e referrer policy strict-origin-when-cross-origin.',
-    evidence: 'index.html:7-8',
+    title: 'Inexistência de Chaves Privadas ou service_role Expostas no Repositório',
+    evidence: 'Inspeção profunda de .env.local, bundle de build e histórico Git',
+    description: 'A chave configurada no frontend é estritamente a Anon Key pública do Supabase. A chave mestra service_role e certificados privados não estão presentes no repositório.'
+  }
+];
+
+// ─── MATRIZ DE COBERTURA ───────────────────────────────────────
+const coverageMatrix = [
+  {
+    category: '1. Isolamento de dados / Cross-tenant',
+    scope: 'Tabelas do banco, storage buckets e RPCs',
+    controls: 'RLS por auth.uid(), storage foldername, RPC SECURITY DEFINER',
+    items: '6 tabelas, 2 buckets, 7 RPCs (15 itens)',
+    findings: '1 confirmado (F02: audit_logs)',
+    coverage: '100%'
   },
+  {
+    category: '2. Autorização no navegador',
+    scope: 'Gates de UI (isAdmin, isLicensed), paywall e RPCs',
+    controls: 'RPCs admin com is_admin(), RPC get_schedule_solution, trigger',
+    items: '5 fluxos de privilégio / paywall',
+    findings: '2 confirmados (F01: paywall SELECT, F04: insert licenses)',
+    coverage: '100%'
+  },
+  {
+    category: '3. IDOR / Ownership',
+    scope: 'Todos os handlers e métodos em services/*.ts',
+    controls: 'Filtros .eq(\'user_id\') e políticas RLS de propriedade',
+    items: '18 handlers/métodos de serviço',
+    findings: '0 confirmados (100% verificados e protegidos)',
+    coverage: '100%'
+  },
+  {
+    category: '4. Secrets e credenciais',
+    scope: 'Código-fonte, .env.local, .gitignore, bundle, histórico Git',
+    controls: 'Exclusão *.local no .gitignore, anon key pública por design',
+    items: '6 arquivos config/env + 20+ commits Git',
+    findings: '2 confirmados (F05: e-mails hardcoded, F06: .gitignore)',
+    coverage: '100%'
+  },
+  {
+    category: '5. Inputs sem tratamento / XSS',
+    scope: 'Renderização JSX, tags href/src/iframe, sanitização',
+    controls: 'Escapamento nativo React 19, validação de arquivos',
+    items: '9 páginas, 9 componentes, todos os sinks href/src',
+    findings: '1 confirmado (F03: Stored XSS via receipt_url)',
+    coverage: '100%'
+  }
 ];
 
+// ─── RECOMENDAÇÕES PRIORIZADAS ─────────────────────────────────
 const recommendations = [
-  { priority: 'P1', text: 'Revogar a chave Gemini API (AIzaSy...) exposta no histórico git e gerar uma nova. Considerar reescrever o histórico git ou tornar o repositório privado.' },
-  { priority: 'P1', text: 'Remover TODOS os fallbacks client-side das operações admin (approveLicense, deleteLicense). Se a RPC falhar, deve falhar — não tentar bypass.' },
-  { priority: 'P2', text: 'Mover e-mails de admin para variáveis de ambiente ou tabela no banco com RLS, removendo do código-fonte.' },
-  { priority: 'P2', text: 'Substituir getPublicUrl() por createSignedUrl() nos buckets privados (receipts e tickets-attachments).' },
-  { priority: 'P2', text: 'Adicionar filtro explícito de user_id nas queries do frontend (deleteSchedule, restoreSchedule, permanentlyDeleteSchedule, markAsRead) como defesa em profundidade, mesmo com RLS ativo.' },
-  { priority: 'P2', text: 'Usar a RPC get_pending_licenses_count_rpc no getPendingLicensesCount() em vez da query direta.' },
-  { priority: 'P3', text: 'Adicionar validação de startup que rejeite valores padrão inseguros para variáveis de ambiente (ex: lançar erro se VITE_SUPABASE_URL estiver vazio).' },
-  { priority: 'P3', text: 'Implementar rate limiting nas RPCs administrativas para evitar abuso.' },
+  { priority: 'P1', text: 'Isolar a solução de horários (fixedLessons) no banco de dados para que não seja transmitida no SELECT * da tabela schedules, eliminando o bypass do paywall.' },
+  { priority: 'P1', text: 'Corrigir a política RLS da tabela audit_logs para USING (auth.uid() = user_id OR public.is_admin()), impedindo vazamento e adulteração cross-tenant.' },
+  { priority: 'P1', text: 'Sanitizar e validar rigorosamente o campo receipt_url em AdminPanelPage.tsx e schema.sql, bloqueando esquemas javascript: e iframes com origens arbitrárias.' },
+  { priority: 'P2', text: 'Revogar o INSERT direto em licenses para usuários autenticados, forçando o uso exclusivo da RPC request_license_order para prevenir adulteração de preços.' },
+  { priority: 'P2', text: 'Remover e-mails de administradores hardcoded de schema.sql e Layout.tsx, centralizando o controle na tabela admin_users e RPC is_current_user_admin().' },
+  { priority: 'P3', text: 'Expandir o .gitignore para incluir padrões universais de ambiente (.env, .env.*, !.env.example).' }
 ];
 
+// ─── ISSUES GITHUB ─────────────────────────────────────────────
 const issues = [
   {
-    title: '[Segurança] Chave Gemini API exposta no histórico git',
+    title: '[Segurança] Paywall Server-Side: Bloquear vazamento da grade (fixedLessons) no SELECT de schedules',
     labels: 'security, critica',
-    description: 'A chave de API do Google Gemini (`AIzaSy[REDACTED]`) está presente no histórico git do repositório (commits ff8a553 e c34535d). Mesmo não estando no branch atual (.env.local está no .gitignore), qualquer pessoa com acesso ao repositório pode extraí-la.',
-    evidence: '`.env.local:1` — `GEMINI_API_KEY=AIzaSy[REDACTED]`\nHistórico git: `git log --all -S "AIzaSy" --oneline` retorna commits ff8a553 e c34535d.',
-    impact: 'Uso não autorizado da API Gemini, gerando custos financeiros ao proprietário da chave.',
-    fix: '1. Revogar a chave imediatamente no Google Cloud Console\n2. Gerar uma nova chave\n3. Considerar `git filter-branch` ou `BFG Repo-Cleaner` para limpar o histórico\n4. Verificar se o repositório é público; se sim, tratar como comprometida',
-    acceptance: '- [ ] Chave antiga revogada no Google Cloud Console\n- [ ] Nova chave gerada e configurada apenas em .env.local\n- [ ] Histórico git limpo OU repositório marcado como privado\n- [ ] Nenhuma chave sensível aparece em `git log --all -S "AIzaSy"`',
+    description: 'A solução dos horários escolares gerados (`fixedLessons`) é salva integralmente na coluna JSONB `data` da tabela `schedules`. A política de RLS de SELECT permite ao proprietário ler a grade completa sem verificar se o horário está licenciado (`is_licensed = true`). O frontend tenta mascarar a solução em memória (`scheduleService.ts:126-130`), mas qualquer usuário pode inspecionar a resposta HTTP da API do Supabase e obter o horário completo sem pagar.',
+    why: 'O controle de paywall é imposto unicamente em memória do cliente, enquanto a API do banco expõe a solução completa no SELECT.',
+    evidence: '`schema.sql:87-88`\n`services/scheduleService.ts:77-81`\n`services/scheduleService.ts:126-130`',
+    snippet: `// services/scheduleService.ts:126-130
+const safeData = isApproved ? normalizedData : {
+    ...normalizedData,
+    fixedLessons: []
+};`,
+    impact: 'Evasão completa do modelo de monetização. Usuários comuns extraem os cronogramas escolares otimizados gratuitamente.',
+    fix: '1. Criar uma VIEW com RLS ou função segura que retorne `data` sem a chave `fixedLessons` quando `is_licensed = false`.\n2. Exigir o uso exclusivo da RPC `get_schedule_solution` para recuperar as aulas alocadas.\n3. Garantir que a query `SELECT * FROM schedules` nunca retorne `fixedLessons` para grades sem licença ativa.',
+    acceptance: '- [ ] `SELECT * FROM schedules` não retorna `fixedLessons` quando `is_licensed = false`\n- [ ] Solução só é entregue via `get_schedule_solution` mediante validação de licença ativa no PostgreSQL\n- [ ] Usuários não pagantes não conseguem acessar o cronograma completo via DevTools'
   },
   {
-    title: '[Segurança] Remover fallbacks client-side das operações admin',
+    title: '[Segurança] RLS Indevido na tabela audit_logs permite acesso e adulteração cross-tenant irrestrita',
     labels: 'security, alta',
-    description: 'Os métodos `approveLicense()` e `deleteLicense()` em `adminLicenseService.ts` contêm fallbacks que tentam operações diretamente na tabela `licenses` quando as RPCs seguras falham. Embora o RLS atualmente bloqueie não-admins, o padrão é inseguro por design e cria dependência frágil.',
-    evidence: '`services/adminLicenseService.ts:56-101` (approveLicense fallback)\n`services/adminLicenseService.ts:124-134` (deleteLicense fallback)',
-    impact: 'Se o RLS for relaxado no futuro, qualquer usuário autenticado poderia aprovar ou excluir licenças. O fallback também causa inconsistência (não cria notificação nem atualiza schedules).',
-    fix: '1. Remover os blocos de fallback client-side\n2. Se a RPC falhar, propagar o erro ao usuário\n3. Garantir que as RPCs estão deployed no Supabase',
-    acceptance: '- [ ] Nenhum fallback client-side para operações de admin em `adminLicenseService.ts`\n- [ ] Erro da RPC é exibido ao admin quando falha\n- [ ] RPCs `approve_license_rpc` e `delete_license_rpc` verificadas como deployed',
+    description: 'A política de segurança da tabela `audit_logs` foi criada com `FOR ALL TO authenticated USING (true) WITH CHECK (true)`. Qualquer usuário autenticado no sistema tem permissão para listar todos os registros de auditoria de outros clientes, além de poder injetar logs forjados ou apagar todo o histórico de auditoria.',
+    why: 'A cláusula `USING (true)` anula completamente o isolamento entre tenants no PostgreSQL.',
+    evidence: '`schema.sql:233-235`\n`CREATE POLICY "Permitir acesso audit_logs" ON public.audit_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);`',
+    snippet: `DROP POLICY IF EXISTS "Permitir acesso audit_logs" ON public.audit_logs;
+CREATE POLICY "Permitir acesso audit_logs" 
+ON public.audit_logs FOR ALL TO authenticated 
+USING (true) WITH CHECK (true);`,
+    impact: 'Vazamento de dados confidenciais entre escolas/tenants, falsificação de registros de auditoria e exclusão maliciosa de trilhas de auditoria.',
+    fix: '1. Dropar a política permissiva existente.\n2. Criar política restritiva que permita aos usuários visualizarem apenas seus próprios registros (`auth.uid() = user_id`) e administradores visualizarem todos.\n3. Bloquear mutações diretas (INSERT/UPDATE/DELETE) para usuários comuns.',
+    acceptance: '- [ ] Usuário comum só consegue consultar linhas de `audit_logs` onde `user_id = auth.uid()`\n- [ ] Tentativas de SELECT cruzado entre tenants retornam zero resultados\n- [ ] Tentativas de UPDATE/DELETE por usuários comuns são rejeitadas pelo PostgreSQL'
   },
   {
-    title: '[Segurança] E-mails de admin hardcoded no código-fonte e no banco',
+    title: '[Segurança] Stored XSS no painel de administração via URL de comprovante de licença',
     labels: 'security, alta',
-    description: 'Os e-mails dos administradores estão hardcoded em `schema.sql:9` (função `is_admin()`) e em `types.ts:14` (`ADMIN_EMAILS`). Isso expõe a identidade dos admins e dificulta a gestão de privilégios.',
-    evidence: '`schema.sql:9` — `RETURN (auth.jwt() ->> \'email\') IN (\'horium.app@gmail.com\', \'prof.jackison@gmail.com\');`\n`types.ts:14` — `export const ADMIN_EMAILS = [\'horium.app@gmail.com\', \'prof.jackison@gmail.com\'];`',
-    impact: 'Exposição de identidade administrativa. Gestão inflexível — requer deploy para adicionar/remover admin.',
-    fix: '1. Criar tabela `admin_users` com RLS\n2. Alterar `is_admin()` para consultar a tabela\n3. No frontend, consultar uma RPC que retorne se o usuário é admin',
-    acceptance: '- [ ] Nenhum e-mail hardcoded no código-fonte\n- [ ] Função `is_admin()` consulta tabela dinâmica\n- [ ] Frontend usa RPC para verificar papel',
+    description: 'O campo `receipt_url` da tabela `licenses` aceita qualquer string enviada pelo usuário. Em `AdminPanelPage.tsx:87-109`, quando `createSignedUrl` falha, o código repassa a string crua para `viewingReceiptUrl`. O componente renderiza `<iframe src={viewingReceiptUrl}>` se o texto terminar em `.pdf` (ex: `javascript:alert(document.domain)//.pdf`). Isso aciona execução de código no navegador do administrador ao abrir o comprovante.',
+    why: 'Falta de validação de protocolo/esquema na URL do comprovante combinada com renderização de iframe com conteúdo controlado pelo usuário.',
+    evidence: '`pages/AdminPanelPage.tsx:87-109`\n`pages/AdminPanelPage.tsx:338, 351-356`\n`schema.sql:113-125`',
+    snippet: `// AdminPanelPage.tsx:108
+setViewingReceiptUrl(urlOrPath);
+// AdminPanelPage.tsx:351-353
+{viewingReceiptUrl.endsWith('.pdf') ? (
+    <iframe src={viewingReceiptUrl} title="Comprovante PDF" ... />
+) : ...}`,
+    impact: 'Execução de JavaScript arbitrário no contexto de sessão do administrador, permitindo roubo de token JWT e disparo de ações administrativas (aprovação/exclusão de licenças).',
+    fix: '1. Validar que `receipt_url` segue o padrão estrito de armazenamento do Supabase (`<uuid>/<filename>`).\n2. Nunca renderizar `iframe` com URIs que não pertençam ao domínio oficial do storage do Supabase com protocolo `https:`.\n3. Sanitizar o link de download externo garantindo protocolo seguro.',
+    acceptance: '- [ ] Strings que não comecem com `https://` ou caminho de storage válido são rejeitadas\n- [ ] URIs com esquema `javascript:` ou `data:` não são carregadas em `iframe` nem em tags `<a>`\n- [ ] Teste de carga com `javascript:...//.pdf` não executa script'
   },
   {
-    title: '[Segurança] Uso de getPublicUrl() em buckets privados',
+    title: '[Segurança] Restringir inserção em licenses à RPC request_license_order para evitar adulteração de preços',
+    labels: 'security, alta',
+    description: 'A política RLS da tabela `licenses` permite que qualquer usuário autenticado insira registros diretamente com `payment_status` em `Aguardando`. O frontend possui um bloco de fallback em `PlansPage.tsx:128-139` que faz `INSERT` direto com valores de `value_paid` e `classes_amount` controlados pelo cliente. Um atacante pode enviar requisição PostgREST direta e criar pedidos de 100 turmas com valor de R$ 0,01.',
+    why: 'A tabela `licenses` aceita INSERT direto por clientes em vez de exigir a execução da RPC de cálculo de preço.',
+    evidence: '`pages/PlansPage.tsx:127-147`\n`schema.sql:151-161`',
+    snippet: `// schema.sql:151-161
+CREATE POLICY "Users can insert their own licenses" ON public.licenses
+FOR INSERT TO authenticated 
+WITH CHECK (
+    auth.uid() = user_id 
+    AND (payment_status IN ('Aguardando', 'under_review') OR payment_status IS NULL)
+);`,
+    impact: 'Manipulação de valores financeiros e criação de pedidos com valores incorretos ou fraudulentos na fila de análise do administrador.',
+    fix: '1. Remover a política de INSERT direto para `authenticated` na tabela `licenses`.\n2. Forçar que todos os pedidos sejam criados unicamente através da RPC `request_license_order`.\n3. Remover o bloco de fallback client-side em `PlansPage.tsx`.',
+    acceptance: '- [ ] Requisições `POST /rest/v1/licenses` diretas retornam 403 / erro de RLS\n- [ ] Pedidos de licença só podem ser criados via `request_license_order`\n- [ ] Valores de licença são sempre auditados e calculados no servidor'
+  },
+  {
+    title: '[Segurança] Remover e-mails de administradores hardcoded no banco e no frontend',
     labels: 'security, media',
-    description: 'Os métodos de upload de comprovantes (`PlansPage.tsx:146-149`) e tickets (`ticketService.ts:36-40`) usam `getPublicUrl()` para gerar URLs de arquivos em buckets privados. As URLs geradas não funcionam para buckets privados.',
-    evidence: '`services/ticketService.ts:36-40`\n`pages/PlansPage.tsx:146-149`\n`components/licenses/LicensePurchase.tsx:103`',
-    impact: 'Comprovantes e anexos de tickets não são visualizáveis. Funcionalidade quebrada.',
-    fix: '1. Substituir `getPublicUrl()` por `createSignedUrl()` com expiração\n2. Ou salvar apenas o path relativo e gerar signed URL sob demanda na visualização',
-    acceptance: '- [ ] Nenhum uso de `getPublicUrl()` em buckets privados\n- [ ] Comprovantes e anexos são visualizáveis pelos destinatários corretos\n- [ ] URLs têm expiração definida',
+    description: 'Os e-mails dos administradores mestres estão gravados de forma estática em `schema.sql:29, 36, 40` e em `components/Layout.tsx:72`. Isso expõe a identidade dos administradores no código-fonte e bundle JavaScript entregue ao usuário, além de dificultar o gerenciamento e revogação de acessos.',
+    why: 'Os e-mails constam como literais de string na função `is_admin()` e no layout do frontend.',
+    evidence: '`schema.sql:29` — `OR (v_user_email IN (\'horium.app@gmail.com\', \'prof.jackison@gmail.com\'));`\n`components/Layout.tsx:72` — `const isMasterAdmin = [\'horium.app@gmail.com\', \'prof.jackison@gmail.com\'].includes(userEmailLower);`',
+    snippet: `// schema.sql:29
+OR (v_user_email IN ('horium.app@gmail.com', 'prof.jackison@gmail.com'));`,
+    impact: 'Exposição pública da lista de administradores, favorecendo ataques de phishing direcionado e ataques de engenharia social.',
+    fix: '1. Remover os e-mails literais da função `is_admin()` no PostgreSQL, consultando exclusivamente a tabela `admin_users`.\n2. Remover a verificação estática de e-mails em `Layout.tsx`, utilizando a RPC `is_current_user_admin()` para determinar o papel do usuário logado.',
+    acceptance: '- [ ] Nenhum e-mail de administrador aparece no bundle gerado pelo Vite\n- [ ] A função `is_admin()` depende unicamente de registros na tabela `admin_users`\n- [ ] O frontend consulta o status de administrador através da RPC oficial'
   },
   {
-    title: '[Segurança] Defesa em profundidade: adicionar filtro user_id nas queries do frontend',
-    labels: 'security, media',
-    description: 'Várias operações em `scheduleService.ts` e `notificationService.ts` dependem exclusivamente do RLS para isolamento, sem filtrar por `user_id` no código. Embora o RLS proteja, a defesa em profundidade recomenda filtro duplo.',
-    evidence: '`scheduleService.ts:180-190` (deleteSchedule)\n`scheduleService.ts:221-231` (restoreSchedule)\n`scheduleService.ts:233-243` (permanentlyDeleteSchedule)\n`notificationService.ts:45-56` (markAsRead)',
-    impact: 'Se o RLS for desabilitado ou alterado incorretamente, as operações se tornam IDOR.',
-    fix: 'Adicionar `.eq(\'user_id\', user.id)` em todas as queries que operam por ID em tabelas com dados multi-tenant.',
-    acceptance: '- [ ] Todas as queries de mutação filtram por user_id além do ID do recurso\n- [ ] Testes confirmam que queries retornam erro se user_id não corresponde',
-  },
-  {
-    title: '[Segurança] Usar RPC segura para contagem de licenças pendentes',
-    labels: 'security, alta',
-    description: 'O método `getPendingLicensesCount()` em `adminLicenseService.ts:144-158` faz query direta na tabela `licenses` em vez de usar a RPC `get_pending_licenses_count_rpc` que valida admin.',
-    evidence: '`services/adminLicenseService.ts:144-158`',
-    impact: 'Bypass da RPC segura. Resultado incorreto para admins (sub-contagem por causa do RLS).',
-    fix: 'Substituir a query direta pela chamada `supabase.rpc(\'get_pending_licenses_count_rpc\')`.',
-    acceptance: '- [ ] `getPendingLicensesCount()` usa a RPC `get_pending_licenses_count_rpc`\n- [ ] Contagem retorna o total global para admins',
-  },
+    title: '[Segurança] Adicionar padrões .env e .env.* ao .gitignore para prevenir commit acidental de segredos',
+    labels: 'security, baixa',
+    description: 'O arquivo `.gitignore` atualmente inclui apenas o padrão `*.local`. Caso desenvolvedores criem arquivos de ambiente padrão como `.env` ou `.env.production` contendo credenciais de serviços externos ou chaves de serviço do Supabase, o Git rastreará esses arquivos automaticamente.',
+    why: 'O padrão `.gitignore` não protege nomes de arquivo de variáveis de ambiente sem o sufixo `.local`.',
+    evidence: '`.gitignore:13` — `*.local`',
+    snippet: `// .gitignore:13
+*.local`,
+    impact: 'Risco de versionamento acidental de chaves secretas em repositórios remotos.',
+    fix: 'Adicionar as linhas `.env`, `.env.*` e `!.env.example` ao arquivo `.gitignore`.',
+    acceptance: '- [ ] Arquivos `.env` e `.env.production` são ignorados pelo `git status`\n- [ ] Apenas `.env.example` (se existente) pode ser rastreado'
+  }
 ];
 
-// ─── PDF GENERATION ─────────────────────────────────────────
+// ─── HELPERS DE DESENHO NO PDF ─────────────────────────────────
 
 function hexToRGB(hex) {
   const h = hex.replace('#', '');
-  return [parseInt(h.substring(0, 2), 16), parseInt(h.substring(2, 4), 16), parseInt(h.substring(4, 6), 16)];
+  return [
+    parseInt(h.substring(0, 2), 16),
+    parseInt(h.substring(2, 4), 16),
+    parseInt(h.substring(4, 6), 16)
+  ];
 }
 
 function createDoc() {
-  const doc = new PDFDocument({
+  return new PDFDocument({
     size: 'A4',
     margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
     bufferPages: true,
     info: {
       Title: `Relatório de Auditoria de Segurança — ${PROJECT_NAME}`,
-      Author: 'Auditoria Automatizada',
-      Subject: 'Segurança da Aplicação',
+      Author: 'Auditoria de Segurança Estática e Baseada em Evidências',
+      Subject: 'Segurança da Aplicação e Infraestrutura de Dados'
     }
   });
-  return doc;
 }
 
 function addHeaderFooter(doc) {
   const pages = doc.bufferedPageRange();
   for (let i = 0; i < pages.count; i++) {
     doc.switchToPage(i);
+    // Não desenha cabeçalho nem rodapé na capa (página 0)
+    if (i === 0) continue;
+
     // Header
     doc.save();
-    doc.fontSize(7).fillColor('#9CA3AF')
-      .text(`Relatório de Auditoria de Segurança — ${PROJECT_NAME}`, MARGIN, 20, { width: CONTENT_W, align: 'left' });
+    doc.fontSize(7.5).font('Helvetica').fillColor('#6B7280')
+      .text(`Relatório de Auditoria de Segurança — ${PROJECT_NAME}`, MARGIN, 24, { width: CONTENT_W, align: 'left' });
+    doc.fontSize(7.5).font('Helvetica').fillColor('#9CA3AF')
+      .text('CONFIDENCIAL', MARGIN, 24, { width: CONTENT_W, align: 'right' });
+    doc.moveTo(MARGIN, 36).lineTo(PAGE_W - MARGIN, 36).strokeColor('#E5E7EB').lineWidth(0.5).stroke();
+    doc.restore();
+
     // Footer
-    doc.fontSize(7).fillColor('#9CA3AF')
-      .text(`Página ${i + 1} de ${pages.count}`, MARGIN, PAGE_H - 30, { width: CONTENT_W, align: 'center' });
+    doc.save();
+    doc.moveTo(MARGIN, PAGE_H - 36).lineTo(PAGE_W - MARGIN, PAGE_H - 36).strokeColor('#E5E7EB').lineWidth(0.5).stroke();
+    doc.fontSize(7.5).font('Helvetica').fillColor('#6B7280')
+      .text(`Página ${i + 1} de ${pages.count}`, MARGIN, PAGE_H - 26, { width: CONTENT_W, align: 'center' });
+    doc.fontSize(7).font('Helvetica').fillColor('#9CA3AF')
+      .text(`${AUDIT_DATE}`, MARGIN, PAGE_H - 26, { width: CONTENT_W, align: 'left' });
     doc.restore();
   }
 }
@@ -408,39 +431,28 @@ function drawDonutChart(doc, x, y, radius, data, innerRadiusFactor = 0.55) {
     const endAngle = startAngle + sliceAngle;
     const rgb = hexToRGB(d.color);
 
-    // Draw arc using small line segments
     doc.save();
     doc.fillColor(rgb);
 
-    const steps = Math.max(20, Math.ceil(sliceAngle * 30));
+    const steps = Math.max(24, Math.ceil(sliceAngle * 36));
     const angleStep = sliceAngle / steps;
 
-    // Build path
-    let pathStr = '';
-    // Start at outer arc start
     const ox1 = x + radius * Math.cos(startAngle);
     const oy1 = y + radius * Math.sin(startAngle);
     doc.moveTo(ox1, oy1);
 
-    // Outer arc
     for (let i = 0; i <= steps; i++) {
       const a = startAngle + i * angleStep;
-      const px = x + radius * Math.cos(a);
-      const py = y + radius * Math.sin(a);
-      doc.lineTo(px, py);
+      doc.lineTo(x + radius * Math.cos(a), y + radius * Math.sin(a));
     }
 
-    // Line to inner arc end
     const ix2 = x + innerRadius * Math.cos(endAngle);
     const iy2 = y + innerRadius * Math.sin(endAngle);
     doc.lineTo(ix2, iy2);
 
-    // Inner arc (reverse)
     for (let i = steps; i >= 0; i--) {
       const a = startAngle + i * angleStep;
-      const px = x + innerRadius * Math.cos(a);
-      const py = y + innerRadius * Math.sin(a);
-      doc.lineTo(px, py);
+      doc.lineTo(x + innerRadius * Math.cos(a), y + innerRadius * Math.sin(a));
     }
 
     doc.closePath();
@@ -450,13 +462,13 @@ function drawDonutChart(doc, x, y, radius, data, innerRadiusFactor = 0.55) {
     startAngle = endAngle;
   });
 
-  // Center text
+  // Texto central
   doc.save();
   doc.fontSize(16).fillColor('#111418').font('Helvetica-Bold');
   const totalStr = String(total);
   const tw = doc.widthOfString(totalStr);
-  doc.text(totalStr, x - tw / 2, y - 8, { lineBreak: false });
-  doc.fontSize(7).fillColor('#6B7280').font('Helvetica');
+  doc.text(totalStr, x - tw / 2, y - 10, { lineBreak: false });
+  doc.fontSize(7.5).fillColor('#6B7280').font('Helvetica');
   const label = 'achados';
   const lw = doc.widthOfString(label);
   doc.text(label, x - lw / 2, y + 8, { lineBreak: false });
@@ -465,10 +477,10 @@ function drawDonutChart(doc, x, y, radius, data, innerRadiusFactor = 0.55) {
 
 function drawBarChart(doc, x, y, width, height, data) {
   const maxVal = Math.max(...data.map(d => d.value), 1);
-  const barWidth = Math.min(40, (width - 20) / data.length - 8);
+  const barWidth = 24;
   const gap = (width - data.length * barWidth) / (data.length + 1);
 
-  // Background grid
+  // Linhas horizontais de grade
   doc.save();
   doc.strokeColor('#E5E7EB').lineWidth(0.5);
   for (let i = 0; i <= 4; i++) {
@@ -478,57 +490,63 @@ function drawBarChart(doc, x, y, width, height, data) {
   doc.restore();
 
   data.forEach((d, i) => {
-    if (d.value === 0) return;
-    const barH = (d.value / maxVal) * (height - 20);
+    const barH = d.value > 0 ? (d.value / maxVal) * (height - 24) : 0;
     const bx = x + gap + i * (barWidth + gap);
     const by = y + height - barH;
     const rgb = hexToRGB(d.color);
 
-    // Bar with rounded top
-    doc.save();
-    doc.fillColor(rgb);
-    doc.roundedRect(bx, by, barWidth, barH, 3).fill();
-    doc.restore();
+    if (barH > 0) {
+      doc.save();
+      doc.fillColor(rgb);
+      doc.roundedRect(bx, by, barWidth, barH, 2).fill();
+      doc.restore();
+    }
 
-    // Value label
+    // Rótulo de valor
     doc.save();
-    doc.fontSize(8).fillColor('#374151').font('Helvetica-Bold');
+    doc.fontSize(7.5).fillColor('#374151').font('Helvetica-Bold');
     const vStr = String(d.value);
     const vw = doc.widthOfString(vStr);
-    doc.text(vStr, bx + barWidth / 2 - vw / 2, by - 12, { lineBreak: false });
+    doc.text(vStr, bx + barWidth / 2 - vw / 2, by - 10, { lineBreak: false });
     doc.restore();
 
-    // Category label
+    // Rótulo da categoria
     doc.save();
-    doc.fontSize(5.5).fillColor('#6B7280').font('Helvetica');
-    const cStr = d.label.length > 12 ? d.label.substring(0, 12) + '…' : d.label;
+    doc.fontSize(6).fillColor('#6B7280').font('Helvetica');
+    const cStr = d.shortLabel || d.label;
     const cw = doc.widthOfString(cStr);
     doc.text(cStr, bx + barWidth / 2 - cw / 2, y + height + 4, { lineBreak: false });
     doc.restore();
   });
 }
 
-function drawSeverityBadge(doc, x, y, severity) {
+function drawSeverityChip(doc, x, y, severity) {
   const sev = SEV[severity] || SEV.informativa;
   const rgb = hexToRGB(sev.color);
   const label = sev.label.toUpperCase();
   const fontSize = 6.5;
+
   doc.save();
   doc.fontSize(fontSize).font('Helvetica-Bold');
   const tw = doc.widthOfString(label);
   const badgeW = tw + 10;
-  const badgeH = 14;
+  const badgeH = 13;
+
   doc.fillColor(rgb).roundedRect(x, y, badgeW, badgeH, 3).fill();
   doc.fillColor('#FFFFFF').text(label, x + 5, y + 3, { lineBreak: false });
   doc.restore();
+
   return badgeW;
 }
 
 function ensureSpace(doc, needed) {
-  if (doc.y + needed > PAGE_H - MARGIN - 20) {
+  if (doc.y + needed > PAGE_H - MARGIN - 30) {
     doc.addPage();
+    doc.y = MARGIN + 10;
   }
 }
+
+// ─── GERAÇÃO DO DOCUMENTO ──────────────────────────────────────
 
 async function generatePDF() {
   const outputPath = path.join(__dirname, 'relatorio-auditoria-seguranca.pdf');
@@ -536,323 +554,464 @@ async function generatePDF() {
   const stream = fs.createWriteStream(outputPath);
   doc.pipe(stream);
 
-  // ═══ COVER PAGE ═══
+  // ══════════════════════════════════════════════════════════════
+  // PÁGINA 1 — CAPA
+  // ══════════════════════════════════════════════════════════════
   doc.save();
-  // Top accent bar
   doc.fillColor(hexToRGB('#136DEC')).rect(0, 0, PAGE_W, 8).fill();
   doc.restore();
 
-  doc.moveDown(6);
-  doc.fontSize(28).font('Helvetica-Bold').fillColor('#111418')
-    .text('Relatório de Auditoria', MARGIN, doc.y, { width: CONTENT_W, align: 'center' });
-  doc.fontSize(28).font('Helvetica-Bold').fillColor('#136DEC')
-    .text('de Segurança', { width: CONTENT_W, align: 'center' });
-  doc.moveDown(0.5);
-  doc.fontSize(18).font('Helvetica').fillColor('#6B7280')
+  doc.y = 110;
+  doc.fontSize(24).font('Helvetica-Bold').fillColor('#111418')
+    .text('Relatório de Auditoria de Segurança', MARGIN, doc.y, { width: CONTENT_W, align: 'center' });
+  doc.moveDown(0.3);
+  doc.fontSize(20).font('Helvetica-Bold').fillColor('#136DEC')
     .text(PROJECT_NAME, { width: CONTENT_W, align: 'center' });
+  doc.moveDown(0.3);
+  doc.fontSize(11).font('Helvetica').fillColor('#6B7280')
+    .text('Análise Estática de Segurança Baseada em Evidências do Código-Fonte e Configurações', { width: CONTENT_W, align: 'center' });
 
-  doc.moveDown(3);
-  // Info box
+  doc.y = 230;
   const boxY = doc.y;
   doc.save();
-  doc.fillColor(hexToRGB('#F3F4F6')).roundedRect(MARGIN + 60, boxY, CONTENT_W - 120, 160, 8).fill();
+  doc.fillColor(hexToRGB('#F9FAFB')).roundedRect(MARGIN + 30, boxY, CONTENT_W - 60, 210, 8).fill();
+  doc.strokeColor(hexToRGB('#E5E7EB')).lineWidth(1).roundedRect(MARGIN + 30, boxY, CONTENT_W - 60, 210, 8).stroke();
   doc.restore();
 
-  doc.fontSize(9).font('Helvetica-Bold').fillColor('#374151');
-  const infoX = MARGIN + 80;
-  let infoY = boxY + 20;
-  const lineH = 22;
+  const infoX = MARGIN + 48;
+  let infoY = boxY + 16;
+  const lineH = 19;
 
-  doc.text('Data:', infoX, infoY, { continued: true }).font('Helvetica').text(`  ${AUDIT_DATE}`);
-  infoY += lineH;
-  doc.font('Helvetica-Bold').text('Escopo:', infoX, infoY, { continued: true }).font('Helvetica').text('  Código-fonte completo (frontend + schema SQL)');
-  infoY += lineH;
-  doc.font('Helvetica-Bold').text('Stack:', infoX, infoY, { continued: true }).font('Helvetica').text('  React 19 + Vite + Supabase (PostgreSQL + Auth + Storage)');
-  infoY += lineH;
-  doc.font('Helvetica-Bold').text('Backend:', infoX, infoY, { continued: true }).font('Helvetica').text('  Supabase RLS + RPCs (SECURITY DEFINER)');
-  infoY += lineH;
-  doc.font('Helvetica-Bold').text('Frontend:', infoX, infoY, { continued: true }).font('Helvetica').text('  React SPA (TypeScript) com TailwindCSS');
-  infoY += lineH;
-  doc.font('Helvetica-Bold').text('Deploy:', infoX, infoY, { continued: true }).font('Helvetica').text('  Sem Docker/CI/Helm/Terraform detectados');
+  const metadataRows = [
+    ['Data da Auditoria:', AUDIT_DATE],
+    ['Projeto / Repositório:', 'Horium (Sistema de Gestão de Horário Escolar)'],
+    ['Escopo Auditado:', 'Código-fonte integral (React 19 Frontend + Schema SQL + Storage)'],
+    ['Linguagem / Framework:', 'TypeScript, React 19, Vite 6, TailwindCSS 4'],
+    ['Banco de Dados / Backend:', 'PostgreSQL gerenciado (Supabase), PostgREST, RPCs PL/pgSQL'],
+    ['Mecanismo de Autenticação:', 'Supabase Auth (GoTrue com JWT, verificação OTP de 6 dígitos)'],
+    ['Mecanismo de Autorização:', 'Row Level Security (RLS), Triggers PostgreSQL e RPCs com SECURITY DEFINER'],
+    ['Armazenamento de Arquivos:', 'Supabase Storage (Buckets receipts e tickets-attachments privados)'],
+    ['Infraestrutura / CI/CD:', 'IaC baseada em SQL (schema.sql). Sem Docker/Kubernetes/CI configurados.'],
+  ];
 
-  doc.moveDown(8);
-  doc.fontSize(8).font('Helvetica').fillColor('#9CA3AF')
-    .text('Nota Metodológica: Cada categoria de auditoria foi mapeada para a stack Supabase — "Banco sem Tranca" = RLS ausente/furado; "Permissão no Navegador" = gate frontend sem validação na RPC; "IDOR" = queries sem filtro user_id; "Chaves Expostas" = segredos no código/git; "XSS" = padrões inseguros de renderização no React.', MARGIN, doc.y, { width: CONTENT_W, align: 'center' });
+  metadataRows.forEach(([lbl, val]) => {
+    doc.fontSize(8).font('Helvetica-Bold').fillColor('#374151').text(lbl, infoX, infoY, { width: 150, lineBreak: false });
+    doc.font('Helvetica').fillColor('#4B5563').text(val, infoX + 155, infoY, { width: CONTENT_W - 220 });
+    infoY += lineH;
+  });
 
-  // ═══ EXECUTIVE SUMMARY ═══
+  doc.y = 470;
+  doc.fontSize(9).font('Helvetica-Bold').fillColor('#1F2937')
+    .text('Nota Metodológica & Rigor de Evidências', MARGIN + 30, doc.y, { width: CONTENT_W - 60, align: 'center' });
+  doc.moveDown(0.4);
+  doc.fontSize(7.5).font('Helvetica').fillColor('#4B5563')
+    .text(
+      'Esta auditoria seguiu a regra fundamental de verificação estática: nenhum achado foi registrado sem uma cadeia demonstrável e confirmada no código real (entrada controlável -> fluxo relevante -> recurso sensível -> ausência/bypass de controle efetivo). Controles aplicados indiretamente por RLS, triggers e funções seguras foram avaliados integralmente antes da confirmação de cada vulnerabilidade.',
+      MARGIN + 30, doc.y, { width: CONTENT_W - 60, align: 'justify', lineGap: 2 }
+    );
+
+  doc.moveDown(1);
+  doc.fontSize(9).font('Helvetica-Bold').fillColor('#1F2937')
+    .text('Limitações da Auditoria', MARGIN + 30, doc.y, { width: CONTENT_W - 60, align: 'center' });
+  doc.moveDown(0.4);
+  doc.fontSize(7.5).font('Helvetica').fillColor('#4B5563')
+    .text(
+      'A análise concentrou-se no código-fonte do repositório local, no esquema de dados PostgreSQL (schema.sql) e no histórico Git disponível. Não foram executados testes de intrusão ativos contra instâncias de produção do Supabase nem análises dinâmicas de carga. Testes funcionais não modificaram código ou dados.',
+      MARGIN + 30, doc.y, { width: CONTENT_W - 60, align: 'justify', lineGap: 2 }
+    );
+
+  // ══════════════════════════════════════════════════════════════
+  // PÁGINA 2 — RESUMO EXECUTIVO & GRÁFICOS
+  // ══════════════════════════════════════════════════════════════
   doc.addPage();
+  doc.y = MARGIN + 10;
 
-  doc.fontSize(20).font('Helvetica-Bold').fillColor('#111418')
-    .text('Resumo Executivo', MARGIN, MARGIN + 10);
+  doc.fontSize(18).font('Helvetica-Bold').fillColor('#111418').text('Resumo Executivo', MARGIN, doc.y);
   doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 160, doc.y + 2).strokeColor('#136DEC').lineWidth(2).stroke();
-  doc.moveDown(1.5);
+  doc.moveDown(1.2);
 
-  // Severity counts
+  // Contagens por severidade
   const sevCounts = {
     critica: findings.filter(f => f.severity === 'critica').length,
     alta: findings.filter(f => f.severity === 'alta').length,
     media: findings.filter(f => f.severity === 'media').length,
     baixa: findings.filter(f => f.severity === 'baixa').length,
-    informativa: findings.filter(f => f.severity === 'informativa').length,
   };
 
-  // Summary cards
+  // Cards de severidade
   const cardY = doc.y;
-  const cardW = (CONTENT_W - 40) / 5;
-  Object.entries(sevCounts).forEach(([sev, count], i) => {
+  const cardW = (CONTENT_W - 30) / 4;
+  const orderSev = ['critica', 'alta', 'media', 'baixa'];
+
+  orderSev.forEach((sev, i) => {
     const cx = MARGIN + i * (cardW + 10);
+    const count = sevCounts[sev];
     const rgb = hexToRGB(SEV[sev].color);
+    const bgRgb = hexToRGB(SEV[sev].bg);
+    const borderRgb = hexToRGB(SEV[sev].border);
+
     doc.save();
-    doc.fillColor(rgb).roundedRect(cx, cardY, cardW, 50, 6).fill();
-    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(22)
-      .text(String(count), cx + 8, cardY + 8, { lineBreak: false });
-    doc.fillColor('#FFFFFF').font('Helvetica').fontSize(7)
-      .text(SEV[sev].label.toUpperCase(), cx + 8, cardY + 34, { lineBreak: false });
+    doc.fillColor(bgRgb).strokeColor(borderRgb).lineWidth(1).roundedRect(cx, cardY, cardW, 46, 6).fillAndStroke();
+    doc.fillColor(rgb).font('Helvetica-Bold').fontSize(18).text(String(count), cx + 10, cardY + 7, { lineBreak: false });
+    doc.fillColor(rgb).font('Helvetica-Bold').fontSize(7.5).text(SEV[sev].label.toUpperCase(), cx + 10, cardY + 30, { lineBreak: false });
     doc.restore();
   });
 
-  doc.y = cardY + 70;
-  doc.moveDown(0.5);
+  doc.y = cardY + 62;
 
-  // Charts
+  // Gráficos
   const chartY = doc.y;
-  // Donut
-  const donutData = Object.entries(sevCounts)
-    .filter(([_, v]) => v > 0)
-    .map(([sev, value]) => ({ value, color: SEV[sev].color, label: SEV[sev].label }));
 
-  drawDonutChart(doc, MARGIN + 100, chartY + 70, 60, donutData);
+  // Gráfico de Rosca (Donut)
+  const donutData = [
+    { value: sevCounts.critica, color: SEV.critica.color, label: 'Crítica' },
+    { value: sevCounts.alta, color: SEV.alta.color, label: 'Alta' },
+    { value: sevCounts.media, color: SEV.media.color, label: 'Média' },
+    { value: sevCounts.baixa, color: SEV.baixa.color, label: 'Baixa' }
+  ];
 
-  // Donut legend
-  let legendY = chartY + 10;
-  doc.fontSize(8).font('Helvetica-Bold').fillColor('#374151')
-    .text('Por Severidade', MARGIN + 20, legendY);
-  legendY += 16;
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#1F2937').text('Distribuição por Severidade', MARGIN + 10, chartY);
+  drawDonutChart(doc, MARGIN + 85, chartY + 65, 46, donutData, 0.55);
+
+  let legY = chartY + 28;
   donutData.forEach(d => {
     doc.save();
-    doc.fillColor(hexToRGB(d.color)).rect(MARGIN + 20, legendY, 8, 8).fill();
-    doc.fillColor('#374151').font('Helvetica').fontSize(7)
-      .text(`${d.label} (${d.value})`, MARGIN + 34, legendY, { lineBreak: false });
+    doc.fillColor(hexToRGB(d.color)).rect(MARGIN + 145, legY + 2, 7, 7).fill();
+    doc.fillColor('#374151').font('Helvetica').fontSize(7.5).text(`${d.label}: ${d.value} achado(s)`, MARGIN + 158, legY, { lineBreak: false });
     doc.restore();
-    legendY += 14;
+    legY += 16;
   });
 
-  // Bar chart - by category
-  const categories = [
-    { label: 'Banco s/ Tranca', value: findings.filter(f => f.category.startsWith('1.')).length, color: '#B91C1C' },
-    { label: 'Perm. Browser', value: findings.filter(f => f.category.startsWith('2.')).length, color: '#EA580C' },
-    { label: 'IDOR', value: findings.filter(f => f.category.startsWith('3.')).length, color: '#D97706' },
-    { label: 'Chaves Exp.', value: findings.filter(f => f.category.startsWith('4.')).length, color: '#2563EB' },
-    { label: 'XSS', value: 0, color: '#059669' },
+  // Gráfico de Barras por Categoria
+  const catData = [
+    { label: 'Isolamento / Tenant', shortLabel: 'Isolamento', value: findings.filter(f => f.category.includes('Isolamento')).length, color: '#EA580C' },
+    { label: 'Autorização Frontend', shortLabel: 'Autoriz. UI', value: findings.filter(f => f.category.includes('Autorização')).length, color: '#B91C1C' },
+    { label: 'IDOR / Ownership', shortLabel: 'IDOR', value: 0, color: '#059669' },
+    { label: 'Secrets / Credenciais', shortLabel: 'Secrets', value: findings.filter(f => f.category.includes('Secrets')).length, color: '#D97706' },
+    { label: 'XSS / Sanitização', shortLabel: 'XSS / URI', value: findings.filter(f => f.category.includes('XSS')).length, color: '#EA580C' },
   ];
 
-  doc.fontSize(8).font('Helvetica-Bold').fillColor('#374151')
-    .text('Por Categoria', MARGIN + 260, chartY + 10);
-  drawBarChart(doc, MARGIN + 260, chartY + 30, 200, 110, categories);
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#1F2937').text('Distribuição por Categoria', MARGIN + 260, chartY);
+  drawBarChart(doc, MARGIN + 260, chartY + 20, 210, 85, catData);
 
-  doc.y = chartY + 170;
+  doc.y = chartY + 130;
 
-  // ═══ STRENGTHS & WEAKNESSES ═══
-  doc.moveDown(1);
-  doc.fontSize(16).font('Helvetica-Bold').fillColor('#059669')
-    .text('✓ Pontos Fortes', MARGIN);
-  doc.moveDown(0.5);
+  // Pontos Fracos (Riscos Centrais)
+  doc.fontSize(12).font('Helvetica-Bold').fillColor('#B91C1C').text('✗ Pontos Fracos & Riscos Centrais', MARGIN, doc.y);
+  doc.moveDown(0.4);
+
+  const mainRisks = [
+    'Bypass de Paywall no SELECT: Grades completas (fixedLessons) são enviadas via rede a usuários não licenciados e ocultadas apenas na memória do cliente.',
+    'Isolamento RLS Ausente em audit_logs: Política USING (true) permite que qualquer usuário autenticado leia, forje ou destrua logs de auditoria de todos os tenants.',
+    'Stored XSS no Painel Admin: URL de comprovante de licença não higienizada é renderizada em iframe e tag <a>, viabilizando sequestro de sessão administrativa.',
+    'Bypass de Precificação via INSERT Direto: A tabela licenses permite inserção direta sem passar pela RPC request_license_order, admitindo valores arbitrários.',
+    'Hardcoding de E-mails Administrativos: E-mails de admins mestre expostos no código e no bundle, gerando rigidez e risco de engenharia social.'
+  ];
+
+  mainRisks.forEach((risk, idx) => {
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#991B1B').text(`${idx + 1}. `, MARGIN + 8, doc.y, { continued: true });
+    doc.font('Helvetica').fillColor('#374151').text(risk, { width: CONTENT_W - 20, lineGap: 2 });
+    doc.moveDown(0.2);
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // PÁGINA 3 — PONTOS FORTES CONFIRMADOS
+  // ══════════════════════════════════════════════════════════════
+  doc.addPage();
+  doc.y = MARGIN + 10;
+
+  doc.fontSize(18).font('Helvetica-Bold').fillColor('#111418').text('Pontos Fortes Confirmados', MARGIN, doc.y);
+  doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 220, doc.y + 2).strokeColor('#059669').lineWidth(2).stroke();
+  doc.moveDown(0.8);
+
+  doc.fontSize(7.5).font('Helvetica').fillColor('#4B5563')
+    .text('Os seguintes controles foram inspecionados diretamente no código-fonte e esquemas SQL, com eficácia comprovada:', MARGIN, doc.y);
+  doc.moveDown(0.8);
 
   strengths.forEach(s => {
-    ensureSpace(doc, 40);
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#065F46')
-      .text(`[${s.id}] ${s.description}`, MARGIN + 10, doc.y, { width: CONTENT_W - 20 });
-    doc.fontSize(7).font('Helvetica').fillColor('#6B7280')
-      .text(`Evidência: ${s.evidence}`, MARGIN + 10, doc.y, { width: CONTENT_W - 20 });
-    doc.moveDown(0.3);
-  });
+    ensureSpace(doc, 38);
+    const itemY = doc.y;
 
-  ensureSpace(doc, 60);
-  doc.moveDown(1);
-  doc.fontSize(16).font('Helvetica-Bold').fillColor('#B91C1C')
-    .text('✗ Pontos Fracos (Riscos Centrais)', MARGIN);
-  doc.moveDown(0.5);
-
-  const weaknesses = [
-    'Chave de API Google Gemini comprometida no histórico git — exploração imediata possível.',
-    'Padrão de fallback client-side em operações admin — dependência frágil no RLS.',
-    'E-mails de admin hardcoded em código-fonte público — exposição de identidade.',
-    'URLs públicas geradas para buckets privados — funcionalidade de visualização quebrada.',
-    'Queries sem filtro explícito de user_id — dependência total no RLS para isolamento.',
-  ];
-
-  weaknesses.forEach((w, i) => {
-    ensureSpace(doc, 20);
-    doc.fontSize(8).font('Helvetica').fillColor('#991B1B')
-      .text(`${i + 1}. ${w}`, MARGIN + 10, doc.y, { width: CONTENT_W - 20 });
-    doc.moveDown(0.2);
-  });
-
-  // ═══ DETAILED FINDINGS TABLE ═══
-  doc.addPage();
-  doc.fontSize(20).font('Helvetica-Bold').fillColor('#111418')
-    .text('Achados Detalhados', MARGIN, MARGIN + 10);
-  doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 160, doc.y + 2).strokeColor('#136DEC').lineWidth(2).stroke();
-  doc.moveDown(1);
-
-  let currentCategory = '';
-  findings.forEach(f => {
-    if (f.category !== currentCategory) {
-      currentCategory = f.category;
-      ensureSpace(doc, 40);
-      doc.moveDown(0.5);
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#1F2937')
-        .text(currentCategory, MARGIN);
-      doc.moveDown(0.3);
-    }
-
-    // Estimate space needed
-    ensureSpace(doc, 100);
-
-    // Finding card
-    const cardTop = doc.y;
     doc.save();
-    doc.fillColor(hexToRGB('#F9FAFB')).roundedRect(MARGIN, cardTop, CONTENT_W, 4, 2).fill();
+    doc.fillColor(hexToRGB('#F0FDF4')).strokeColor(hexToRGB('#BBF7D0')).lineWidth(0.5).roundedRect(MARGIN, itemY, CONTENT_W, 34, 4).fillAndStroke();
     doc.restore();
 
-    doc.y = cardTop + 6;
+    doc.fontSize(8).font('Helvetica-Bold').fillColor('#065F46')
+      .text(`✓ [${s.id}] ${s.title}`, MARGIN + 8, itemY + 5, { width: CONTENT_W - 16 });
+    doc.fontSize(7).font('Helvetica').fillColor('#374151')
+      .text(s.description, MARGIN + 8, itemY + 16, { width: CONTENT_W - 16, lineBreak: false });
+    doc.fontSize(6.5).font('Courier').fillColor('#059669')
+      .text(`Evidência: ${s.evidence}`, MARGIN + 8, itemY + 24, { width: CONTENT_W - 16, lineBreak: false });
 
-    // Severity badge + ID
-    const badgeW = drawSeverityBadge(doc, MARGIN + 4, doc.y, f.severity);
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#1F2937')
-      .text(`${f.id} — ${f.file}:${f.lines}`, MARGIN + badgeW + 12, doc.y + 2, { width: CONTENT_W - badgeW - 20, lineBreak: false });
-    doc.y += 18;
-
-    // Description
-    doc.fontSize(8).font('Helvetica').fillColor('#374151')
-      .text(f.description, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
-    doc.moveDown(0.2);
-
-    // Why
-    doc.fontSize(7).font('Helvetica').fillColor('#6B7280')
-      .text(`Explorabilidade: ${f.exploitability}`, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
-    doc.moveDown(0.2);
-
-    // Code snippet
-    if (f.snippet) {
-      doc.save();
-      const snippetTop = doc.y;
-      const snippetLines = f.snippet.split('\n').slice(0, 4).join('\n');
-      doc.fontSize(6).font('Courier').fillColor('#1F2937');
-      const snippetH = doc.heightOfString(snippetLines, { width: CONTENT_W - 24 }) + 10;
-      doc.fillColor(hexToRGB('#F3F4F6')).roundedRect(MARGIN + 4, snippetTop, CONTENT_W - 8, snippetH, 3).fill();
-      doc.fillColor('#1F2937').font('Courier').fontSize(6)
-        .text(snippetLines, MARGIN + 12, snippetTop + 5, { width: CONTENT_W - 24 });
-      doc.restore();
-      doc.y = snippetTop + snippetH + 4;
-    }
-
-    // Separator
-    doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_W, doc.y).strokeColor('#E5E7EB').lineWidth(0.5).stroke();
-    doc.y += 6;
+    doc.y = itemY + 38;
   });
 
-  // ═══ RECOMMENDATIONS ═══
-  ensureSpace(doc, 100);
+  // ══════════════════════════════════════════════════════════════
+  // PÁGINA 4 — MATRIZ DE COBERTURA & TABELA DE ACHADOS
+  // ══════════════════════════════════════════════════════════════
   doc.addPage();
-  doc.fontSize(20).font('Helvetica-Bold').fillColor('#111418')
-    .text('Recomendações Priorizadas', MARGIN, MARGIN + 10);
-  doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 200, doc.y + 2).strokeColor('#136DEC').lineWidth(2).stroke();
+  doc.y = MARGIN + 10;
+
+  doc.fontSize(18).font('Helvetica-Bold').fillColor('#111418').text('Matriz de Cobertura da Auditoria', MARGIN, doc.y);
+  doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 260, doc.y + 2).strokeColor('#136DEC').lineWidth(2).stroke();
+  doc.moveDown(0.8);
+
+  // Tabela da Matriz de Cobertura
+  const colW = [110, 115, 115, 60, 45, 40]; // Soma = 485 ~ CONTENT_W
+  const tableHeaderY = doc.y;
+
+  doc.save();
+  doc.fillColor(hexToRGB('#1F2937')).roundedRect(MARGIN, tableHeaderY, CONTENT_W, 20, 3).fill();
+  doc.restore();
+
+  const headers = ['Categoria', 'Escopo Analisado', 'Controles Encontrados', 'Itens', 'Achados', 'Cob.'];
+  let hx = MARGIN + 4;
+  headers.forEach((h, idx) => {
+    doc.fontSize(7).font('Helvetica-Bold').fillColor('#FFFFFF').text(h, hx, tableHeaderY + 6, { width: colW[idx] - 6, align: idx >= 3 ? 'center' : 'left' });
+    hx += colW[idx];
+  });
+
+  let rowY = tableHeaderY + 20;
+  coverageMatrix.forEach((row, rIdx) => {
+    doc.save();
+    if (rIdx % 2 === 1) {
+      doc.fillColor(hexToRGB('#F9FAFB')).rect(MARGIN, rowY, CONTENT_W, 24).fill();
+    }
+    doc.strokeColor(hexToRGB('#E5E7EB')).lineWidth(0.5).moveTo(MARGIN, rowY + 24).lineTo(PAGE_W - MARGIN, rowY + 24).stroke();
+    doc.restore();
+
+    let rx = MARGIN + 4;
+    const rData = [row.category, row.scope, row.controls, row.items, row.findings, row.coverage];
+    rData.forEach((val, cIdx) => {
+      doc.fontSize(6.5).font(cIdx === 0 ? 'Helvetica-Bold' : 'Helvetica').fillColor('#374151')
+        .text(val, rx, rowY + 4, { width: colW[cIdx] - 6, align: cIdx >= 3 ? 'center' : 'left' });
+      rx += colW[cIdx];
+    });
+
+    rowY += 24;
+  });
+
+  doc.y = rowY + 16;
+
+  // TABELA RESUMO DE ACHADOS DETALHADOS
+  doc.fontSize(14).font('Helvetica-Bold').fillColor('#111418').text('Tabela Resumo dos Achados Confirmados', MARGIN, doc.y);
+  doc.moveDown(0.5);
+
+  const tFindH_Y = doc.y;
+  doc.save();
+  doc.fillColor(hexToRGB('#1F2937')).roundedRect(MARGIN, tFindH_Y, CONTENT_W, 18, 3).fill();
+  doc.restore();
+
+  doc.fontSize(7).font('Helvetica-Bold').fillColor('#FFFFFF');
+  doc.text('Severidade', MARGIN + 8, tFindH_Y + 5, { width: 60 });
+  doc.text('Arquivo:Linha', MARGIN + 75, tFindH_Y + 5, { width: 140 });
+  doc.text('Descrição do Achado Confirmado', MARGIN + 225, tFindH_Y + 5, { width: CONTENT_W - 230 });
+
+  let fRowY = tFindH_Y + 18;
+  findings.forEach((f, idx) => {
+    doc.save();
+    if (idx % 2 === 1) {
+      doc.fillColor(hexToRGB('#F9FAFB')).rect(MARGIN, fRowY, CONTENT_W, 22).fill();
+    }
+    doc.strokeColor(hexToRGB('#E5E7EB')).lineWidth(0.5).moveTo(MARGIN, fRowY + 22).lineTo(PAGE_W - MARGIN, fRowY + 22).stroke();
+    doc.restore();
+
+    drawSeverityChip(doc, MARGIN + 6, fRowY + 4, f.severity);
+    doc.fontSize(6.5).font('Courier').fillColor('#1F2937').text(f.file, MARGIN + 75, fRowY + 5, { width: 140, lineBreak: false });
+    doc.fontSize(6.5).font('Helvetica').fillColor('#374151').text(f.title, MARGIN + 225, fRowY + 5, { width: CONTENT_W - 235, lineBreak: false });
+
+    fRowY += 22;
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // PÁGINA 5 EM DIANTE — FICHAS COMPLETAS DE ACHADOS
+  // ══════════════════════════════════════════════════════════════
+  doc.addPage();
+  doc.y = MARGIN + 10;
+
+  doc.fontSize(18).font('Helvetica-Bold').fillColor('#111418').text('Achados Detalhados com Evidências', MARGIN, doc.y);
+  doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 280, doc.y + 2).strokeColor('#136DEC').lineWidth(2).stroke();
+  doc.moveDown(1);
+
+  findings.forEach(f => {
+    ensureSpace(doc, 190);
+    const cardTop = doc.y;
+
+    // Cabeçalho do Card
+    doc.save();
+    doc.fillColor(hexToRGB('#F9FAFB')).strokeColor(hexToRGB('#E5E7EB')).lineWidth(1)
+      .roundedRect(MARGIN, cardTop, CONTENT_W, 28, 4).fillAndStroke();
+    doc.restore();
+
+    const chipW = drawSeverityChip(doc, MARGIN + 8, cardTop + 7, f.severity);
+    doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#111418')
+      .text(`[${f.id}] ${f.title}`, MARGIN + chipW + 16, cardTop + 8, { width: CONTENT_W - chipW - 24 });
+
+    doc.y = cardTop + 34;
+
+    // Metadados do achado
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#374151').text('Categoria: ', MARGIN + 4, doc.y, { continued: true })
+      .font('Helvetica').fillColor('#4B5563').text(f.category);
+    doc.moveDown(0.2);
+
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#374151').text('Localização: ', MARGIN + 4, doc.y, { continued: true })
+      .font('Courier').fillColor('#1F2937').text(`${f.file}:${f.lines}`);
+    doc.moveDown(0.3);
+
+    // Bloco de código
+    if (f.snippet) {
+      doc.save();
+      const snipY = doc.y;
+      doc.fillColor(hexToRGB('#1E293B')).roundedRect(MARGIN + 4, snipY, CONTENT_W - 8, 36, 3).fill();
+      doc.fontSize(6.5).font('Courier').fillColor('#E2E8F0')
+        .text(f.snippet, MARGIN + 10, snipY + 5, { width: CONTENT_W - 20, lineBreak: true });
+      doc.restore();
+      doc.y = snipY + 40;
+    }
+
+    // Campos detalhados
+    const details = [
+      ['Fluxo de Dados:', f.flow],
+      ['Por que é Vulnerável:', f.why],
+      ['Quem Pode Explorar:', f.exploitability],
+      ['Pré-condições:', f.preconditions],
+      ['Impacto:', f.impact],
+      ['Controles Considerados:', f.controlsConsidered],
+      ['Recomendação:', f.recommendation]
+    ];
+
+    details.forEach(([lbl, val]) => {
+      ensureSpace(doc, 22);
+      doc.fontSize(7).font('Helvetica-Bold').fillColor('#1F2937').text(lbl, MARGIN + 4, doc.y, { width: 110, lineBreak: false });
+      doc.font('Helvetica').fillColor('#4B5563').text(val, MARGIN + 120, doc.y, { width: CONTENT_W - 124, lineGap: 1 });
+      doc.moveDown(0.2);
+    });
+
+    doc.moveDown(0.8);
+    doc.save();
+    doc.strokeColor('#E5E7EB').lineWidth(0.5).moveTo(MARGIN, doc.y).lineTo(PAGE_W - MARGIN, doc.y).stroke();
+    doc.restore();
+    doc.moveDown(0.8);
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // PÁGINA — RECOMENDAÇÕES PRIORIZADAS
+  // ══════════════════════════════════════════════════════════════
+  ensureSpace(doc, 140);
+  doc.addPage();
+  doc.y = MARGIN + 10;
+
+  doc.fontSize(18).font('Helvetica-Bold').fillColor('#111418').text('Plano de Recomendações Priorizadas', MARGIN, doc.y);
+  doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 300, doc.y + 2).strokeColor('#136DEC').lineWidth(2).stroke();
   doc.moveDown(1);
 
   recommendations.forEach(r => {
-    ensureSpace(doc, 30);
-    const prioColor = r.priority === 'P1' ? '#B91C1C' : r.priority === 'P2' ? '#D97706' : '#2563EB';
+    ensureSpace(doc, 32);
+    const rY = doc.y;
+    const pColor = r.priority === 'P1' ? '#B91C1C' : r.priority === 'P2' ? '#EA580C' : '#2563EB';
+
     doc.save();
-    doc.fontSize(8).font('Helvetica-Bold').fillColor(hexToRGB(prioColor))
-      .text(`[${r.priority}]`, MARGIN, doc.y, { continued: true })
-      .font('Helvetica').fillColor('#374151')
-      .text(`  ${r.text}`, { width: CONTENT_W - 30 });
+    doc.fillColor(hexToRGB(pColor)).roundedRect(MARGIN, rY, 24, 18, 3).fill();
+    doc.fontSize(8).font('Helvetica-Bold').fillColor('#FFFFFF').text(r.priority, MARGIN + 4, rY + 5, { width: 16, align: 'center' });
     doc.restore();
-    doc.moveDown(0.5);
+
+    doc.fontSize(8).font('Helvetica').fillColor('#1F2937')
+      .text(r.text, MARGIN + 32, rY + 3, { width: CONTENT_W - 36, lineGap: 2 });
+
+    doc.y = rY + 26;
   });
 
-  // ═══ GITHUB ISSUES ═══
+  // ══════════════════════════════════════════════════════════════
+  // PÁGINA — ISSUES PARA O GITHUB
+  // ══════════════════════════════════════════════════════════════
   doc.addPage();
-  doc.fontSize(20).font('Helvetica-Bold').fillColor('#111418')
-    .text('Issues para o GitHub', MARGIN, MARGIN + 10);
-  doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 160, doc.y + 2).strokeColor('#136DEC').lineWidth(2).stroke();
-  doc.moveDown(1);
+  doc.y = MARGIN + 10;
 
-  doc.fontSize(8).font('Helvetica').fillColor('#6B7280')
-    .text('Abaixo estão as issues completas em formato Markdown, prontas para copiar e colar no GitHub.', MARGIN);
-  doc.moveDown(1);
+  doc.fontSize(18).font('Helvetica-Bold').fillColor('#111418').text('Issues para o GitHub', MARGIN, doc.y);
+  doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 180, doc.y + 2).strokeColor('#136DEC').lineWidth(2).stroke();
+  doc.moveDown(0.6);
 
-  issues.forEach((issue, idx) => {
-    ensureSpace(doc, 180);
+  doc.fontSize(7.5).font('Helvetica').fillColor('#4B5563')
+    .text('As issues abaixo estão completas e delimitadas no formato Markdown pronto para cópia e abertura no repositório.', MARGIN);
+  doc.moveDown(0.8);
 
-    // Issue header
+  issues.forEach((iss, idx) => {
+    ensureSpace(doc, 190);
+
+    const issueHeaderY = doc.y;
     doc.save();
-    doc.fillColor(hexToRGB('#EFF6FF')).roundedRect(MARGIN, doc.y, CONTENT_W, 22, 4).fill();
-    doc.fontSize(9).font('Helvetica-Bold').fillColor('#1E40AF')
-      .text(`--- ISSUE ${idx + 1} ---`, MARGIN + 8, doc.y + 6, { lineBreak: false });
+    doc.fillColor(hexToRGB('#EFF6FF')).strokeColor(hexToRGB('#BFDBFE')).lineWidth(0.5)
+      .roundedRect(MARGIN, issueHeaderY, CONTENT_W, 20, 3).fillAndStroke();
+    doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#1E40AF')
+      .text(`--- ISSUE ${idx + 1} ---`, MARGIN + 8, issueHeaderY + 5, { lineBreak: false });
     doc.restore();
-    doc.y += 28;
+
+    doc.y = issueHeaderY + 26;
 
     doc.fontSize(8).font('Helvetica-Bold').fillColor('#111418')
-      .text(`Título: ${issue.title}`, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
+      .text(`Título: ${iss.title}`, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
+    doc.moveDown(0.2);
+
+    doc.fontSize(7.5).font('Helvetica').fillColor('#6B7280')
+      .text(`Labels sugeridas: ${iss.labels}`, MARGIN + 4, doc.y);
     doc.moveDown(0.3);
 
-    doc.fontSize(7).font('Helvetica').fillColor('#6B7280')
-      .text(`Labels: ${issue.labels}`, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#374151').text('Descrição:');
+    doc.fontSize(7).font('Helvetica').fillColor('#4B5563').text(iss.description, MARGIN + 4, doc.y, { width: CONTENT_W - 8, lineGap: 1.5 });
     doc.moveDown(0.3);
 
-    doc.fontSize(7).font('Helvetica-Bold').fillColor('#374151')
-      .text('Descrição:', MARGIN + 4);
-    doc.fontSize(7).font('Helvetica').fillColor('#374151')
-      .text(issue.description, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#374151').text('Por que é explorável:');
+    doc.fontSize(7).font('Helvetica').fillColor('#4B5563').text(iss.why, MARGIN + 4, doc.y, { width: CONTENT_W - 8, lineGap: 1.5 });
     doc.moveDown(0.3);
 
-    doc.fontSize(7).font('Helvetica-Bold').fillColor('#374151')
-      .text('Evidência:', MARGIN + 4);
-    doc.fontSize(6.5).font('Courier').fillColor('#1F2937')
-      .text(issue.evidence, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#374151').text('Evidência / Código:');
+    doc.fontSize(6.5).font('Courier').fillColor('#1F2937').text(iss.evidence, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
     doc.moveDown(0.3);
 
-    doc.fontSize(7).font('Helvetica-Bold').fillColor('#374151')
-      .text('Impacto:', MARGIN + 4);
-    doc.fontSize(7).font('Helvetica').fillColor('#374151')
-      .text(issue.impact, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
+    if (iss.snippet) {
+      doc.save();
+      const sY = doc.y;
+      doc.fillColor(hexToRGB('#F3F4F6')).roundedRect(MARGIN + 4, sY, CONTENT_W - 8, 30, 2).fill();
+      doc.fontSize(6).font('Courier').fillColor('#1E293B').text(iss.snippet, MARGIN + 8, sY + 4, { width: CONTENT_W - 16 });
+      doc.restore();
+      doc.y = sY + 34;
+    }
+
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#374151').text('Impacto:');
+    doc.fontSize(7).font('Helvetica').fillColor('#4B5563').text(iss.impact, MARGIN + 4, doc.y, { width: CONTENT_W - 8, lineGap: 1.5 });
     doc.moveDown(0.3);
 
-    doc.fontSize(7).font('Helvetica-Bold').fillColor('#374151')
-      .text('Sugestão de Correção:', MARGIN + 4);
-    doc.fontSize(7).font('Helvetica').fillColor('#374151')
-      .text(issue.fix, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#374151').text('Sugestão de Correção:');
+    doc.fontSize(7).font('Helvetica').fillColor('#4B5563').text(iss.fix, MARGIN + 4, doc.y, { width: CONTENT_W - 8, lineGap: 1.5 });
     doc.moveDown(0.3);
 
-    doc.fontSize(7).font('Helvetica-Bold').fillColor('#374151')
-      .text('Critérios de Aceite:', MARGIN + 4);
-    doc.fontSize(7).font('Helvetica').fillColor('#374151')
-      .text(issue.acceptance, MARGIN + 4, doc.y, { width: CONTENT_W - 8 });
-    doc.moveDown(0.3);
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#374151').text('Critérios de Aceite Verificáveis:');
+    doc.fontSize(6.5).font('Courier').fillColor('#1F2937').text(iss.acceptance, MARGIN + 4, doc.y, { width: CONTENT_W - 8, lineGap: 1.5 });
+    doc.moveDown(0.4);
 
-    // End marker
     doc.save();
-    doc.fillColor(hexToRGB('#EFF6FF')).roundedRect(MARGIN, doc.y, CONTENT_W, 16, 4).fill();
-    doc.fontSize(7).font('Helvetica').fillColor('#1E40AF')
+    doc.fillColor(hexToRGB('#EFF6FF')).strokeColor(hexToRGB('#BFDBFE')).lineWidth(0.5)
+      .roundedRect(MARGIN, doc.y, CONTENT_W, 16, 3).fillAndStroke();
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#1E40AF')
       .text(`--- FIM ISSUE ${idx + 1} ---`, MARGIN + 8, doc.y + 4, { lineBreak: false });
     doc.restore();
+
     doc.y += 24;
   });
 
-  // ═══ HEADERS/FOOTERS ═══
+  // Cabeçalhos e Rodapés com numeração total
   addHeaderFooter(doc);
 
-  // ═══ FINALIZE ═══
   doc.end();
 
   return new Promise((resolve, reject) => {
     stream.on('finish', () => {
       const stats = fs.statSync(outputPath);
+      const totalPages = doc.bufferedPageRange().count;
       console.log(`✅ PDF gerado com sucesso: ${outputPath}`);
+      console.log(`   Páginas: ${totalPages}`);
       console.log(`   Tamanho: ${(stats.size / 1024).toFixed(1)} KB`);
-      resolve(outputPath);
+      resolve({ outputPath, totalPages, size: stats.size });
     });
     stream.on('error', reject);
   });
