@@ -77,6 +77,7 @@ export interface FixedLesson {
   teacherId: string;
   day: string;
   slotIndex: number;
+  isManual?: boolean;
 }
 
 export interface WeekConfig {
@@ -121,6 +122,7 @@ export interface SetupData {
   subjectGroupings?: Record<string, string>; // subjectId -> grouping choice
   generalGrouping?: string; // Global grouping choice
   fixedLessons?: FixedLesson[];
+  pinnedLessons?: FixedLesson[];
   failures?: SchedulingFailure[];
   isLicensed?: boolean;
   licenseStatus?: string;

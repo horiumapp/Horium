@@ -177,5 +177,54 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                 expect(streak, `Matéria ${key} teve aulas consecutivas quando a regra exige INTERCALADAS`).toBeLessThanOrEqual(1);
             });
         });
+
+        it('regenerates a fresh timetable when reprocessed and does not lock previous generated results', () => {
+            const setupData: any = {
+                classes: [
+                    { id: 'c1', name: '1º A', lessonsPerSubject: { 's1': 4, 's2': 4, 's3': 4 } }
+                ],
+                teachers: [
+                    { id: 't1', name: 'Prof 1', subjects: ['s1'], classAssignments: { 's1': { 'c1': 'OBRIGATORIAMENTE' } } },
+                    { id: 't2', name: 'Prof 2', subjects: ['s2'], classAssignments: { 's2': { 'c1': 'OBRIGATORIAMENTE' } } },
+                    { id: 't3', name: 'Prof 3', subjects: ['s3'], classAssignments: { 's3': { 'c1': 'OBRIGATORIAMENTE' } } }
+                ],
+                subjects: [
+                    { id: 's1', name: 'Matemática' },
+                    { id: 's2', name: 'Português' },
+                    { id: 's3', name: 'Ciências' }
+                ],
+                weekConfig: {
+                    activeDays: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
+                    lessonsPerDayGlobal: 5
+                }
+            };
+
+            // 1ª Geração
+            const firstResult = runGeneratorEngine(setupData);
+            expect(firstResult.fixedLessons).toHaveLength(12);
+
+            // Simula reprocessamento onde o estado anterior continha status 'Finalizado' e as fixedLessons da 1ª rodada
+            const reprocessData = {
+                ...setupData,
+                status: 'Finalizado',
+                fixedLessons: firstResult.fixedLessons
+            };
+
+            const secondResult = runGeneratorEngine(reprocessData);
+            expect(secondResult.fixedLessons).toHaveLength(12);
+            expect(secondResult.failures).toHaveLength(0);
+
+            // Nenhuma matéria pode exceder o limite diário de 2 aulas
+            const dayMap: Record<string, number[]> = {};
+            secondResult.fixedLessons.forEach(fl => {
+                const k = `${fl.day}|${fl.subjectId}`;
+                if (!dayMap[k]) dayMap[k] = [];
+                dayMap[k].push(fl.slotIndex);
+            });
+            Object.values(dayMap).forEach(slots => {
+                expect(slots.length).toBeLessThanOrEqual(2);
+                expect(getMaxConsecutiveStreak(slots)).toBeLessThanOrEqual(2);
+            });
+        });
     });
 });

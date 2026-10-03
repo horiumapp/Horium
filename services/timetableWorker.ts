@@ -191,7 +191,25 @@ export function runGeneratorEngine(
     };
 
     const runAttempt = (): { fixedLessons: FixedLesson[]; failures: SchedulingFailure[]; score: number } => {
-        const initialFixed: FixedLesson[] = (data.fixedLessons || []).filter(fl =>
+        // Distingue aulas manualmente fixadas pelo usuário do resultado de uma execução anterior
+        const totalRequestedLessons = data.classes.reduce(
+            (sum, c) => sum + Object.values(c.lessonsPerSubject || {}).reduce((a, b) => a + b, 0),
+            0
+        );
+
+        let candidateFixed: FixedLesson[] = (data.pinnedLessons && data.pinnedLessons.length > 0)
+            ? data.pinnedLessons
+            : (data.fixedLessons || []);
+
+        if (candidateFixed.some(fl => fl.isManual)) {
+            candidateFixed = candidateFixed.filter(fl => fl.isManual);
+        } else if (data.status === 'Finalizado' || candidateFixed.length >= Math.max(10, totalRequestedLessons * 0.8)) {
+            // Se o status já estiver Finalizado ou a quantidade de aulas for a grade completa,
+            // trata-se do resultado da rodada anterior. Ao reprocessar, a grade deve ser reconstruída do zero!
+            candidateFixed = [];
+        }
+
+        const initialFixed: FixedLesson[] = candidateFixed.filter(fl =>
             data.classes.some(c => c.id === fl.classId) &&
             data.teachers.some(t => t.id === fl.teacherId) &&
             data.subjects.some(s => s.id === fl.subjectId)

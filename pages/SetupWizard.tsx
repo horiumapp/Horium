@@ -157,7 +157,17 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
       setGenMessage('Iniciando motor de busca profunda...');
 
       const schedule = generateSchedule();
-      const resultData = { ...data, schedule };
+      // Ao reprocessar, limpamos a grade anterior, preservando apenas as aulas que foram manualmente fixadas pelo usuário
+      const manualFixed = (data.pinnedLessons && data.pinnedLessons.length > 0)
+        ? data.pinnedLessons
+        : (data.fixedLessons || []).filter(fl => fl.isManual);
+
+      const resultData = {
+        ...data,
+        schedule,
+        fixedLessons: manualFixed,
+        status: 'Processando'
+      };
 
       const result = await generateTimetable(resultData, (p, m) => {
         setGenProgress(p);

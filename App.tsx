@@ -307,7 +307,17 @@ const App: React.FC = () => {
     setGenerationMessage('Iniciando motor de IA...');
 
     try {
-      const result = await generateTimetable(setupData, (progress, message) => {
+      const manualFixed = (setupData.pinnedLessons && setupData.pinnedLessons.length > 0)
+        ? setupData.pinnedLessons
+        : (setupData.fixedLessons || []).filter(fl => fl.isManual);
+
+      const dataToGenerate = {
+        ...setupData,
+        fixedLessons: manualFixed,
+        status: 'Processando'
+      };
+
+      const result = await generateTimetable(dataToGenerate, (progress, message) => {
         setGenerationProgress(progress);
         setGenerationMessage(message);
       });

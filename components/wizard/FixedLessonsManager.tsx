@@ -69,19 +69,22 @@ export const FixedLessonsManager: React.FC<FixedLessonsManagerProps> = ({ isOpen
             subjectId: selectedSubjectId,
             teacherId: selectedTeacherId,
             day,
-            slotIndex
+            slotIndex,
+            isManual: true
         };
 
         setData(prev => ({
             ...prev,
-            fixedLessons: [...(prev.fixedLessons || []), newFixed]
+            fixedLessons: [...(prev.fixedLessons || []), newFixed],
+            pinnedLessons: [...(prev.pinnedLessons || []), newFixed]
         }));
     };
 
     const handleDeallocate = (day: string, slotIndex: number) => {
         setData(prev => ({
             ...prev,
-            fixedLessons: (prev.fixedLessons || []).filter(fl => !(fl.classId === selectedClassId && fl.day === day && fl.slotIndex === slotIndex))
+            fixedLessons: (prev.fixedLessons || []).filter(fl => !(fl.classId === selectedClassId && fl.day === day && fl.slotIndex === slotIndex)),
+            pinnedLessons: (prev.pinnedLessons || []).filter(fl => !(fl.classId === selectedClassId && fl.day === day && fl.slotIndex === slotIndex))
         }));
     };
 
