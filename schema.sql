@@ -394,13 +394,33 @@ BEGIN
     WHERE id = p_license_id
     RETURNING schedule_id, user_id INTO v_schedule_id, v_user_id;
 
-    -- Sincroniza a tabela schedules se schedule_id estiver vinculado
+    -- Sincroniza a tabela schedules (mesmo se schedule_id era NULL originalmente na solicitação)
+    IF v_schedule_id IS NULL AND v_user_id IS NOT NULL THEN
+        SELECT id INTO v_schedule_id
+        FROM public.schedules
+        WHERE user_id = v_user_id AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1;
+
+        IF v_schedule_id IS NOT NULL THEN
+            UPDATE public.licenses
+            SET schedule_id = v_schedule_id
+            WHERE id = p_license_id;
+        END IF;
+    END IF;
+
     IF v_schedule_id IS NOT NULL THEN
         UPDATE public.schedules
         SET 
             is_licensed = true,
             updated_at = timezone('utc', now())
         WHERE id = v_schedule_id;
+    ELSIF v_user_id IS NOT NULL THEN
+        UPDATE public.schedules
+        SET 
+            is_licensed = true,
+            updated_at = timezone('utc', now())
+        WHERE user_id = v_user_id AND deleted_at IS NULL;
     END IF;
 
     -- Cria notificação única para o usuário
