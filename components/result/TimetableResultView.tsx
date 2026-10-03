@@ -406,6 +406,22 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2">
+                            {onReprocess && (
+                                <button
+                                    onClick={() => {
+                                        if (isLocked) {
+                                            onLicenseNeeded?.();
+                                            return;
+                                        }
+                                        onReprocess();
+                                    }}
+                                    title="Reprocessar e gerar uma nova grade de horários com os critérios configurados"
+                                    className="px-3.5 py-2 bg-primary hover:bg-primary/90 active:scale-95 text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm shadow-primary/20"
+                                >
+                                    <span className="material-symbols-outlined text-sm">refresh</span>
+                                    Reprocessar
+                                </button>
+                            )}
                             <button
                                 onClick={handlePrint}
                                 disabled={isLocked}
