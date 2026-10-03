@@ -4,9 +4,10 @@ import React, { useEffect, useState } from 'react';
 interface Step7ProcessProps {
     progress: number;
     message?: string;
+    onBack?: () => void;
 }
 
-export const Step7Process: React.FC<Step7ProcessProps> = ({ progress, message }) => {
+export const Step7Process: React.FC<Step7ProcessProps> = ({ progress, message, onBack }) => {
 
     return (
         <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gray-50 dark:bg-gray-900/50 min-h-[500px] animate-in fade-in duration-500">
@@ -40,6 +41,17 @@ export const Step7Process: React.FC<Step7ProcessProps> = ({ progress, message })
                     <div className="h-3 w-full rounded-full bg-[#dbe0e6] dark:bg-gray-800 overflow-hidden shadow-inner">
                         <div className="h-full rounded-full bg-primary transition-all duration-300 shadow-lg shadow-primary/40" style={{ width: `${progress}%` }}></div>
                     </div>
+
+                    {onBack && (
+                        <div className="text-center pt-4">
+                            <button
+                                onClick={onBack}
+                                className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline font-semibold transition-colors"
+                            >
+                                Voltar para as Opções
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
