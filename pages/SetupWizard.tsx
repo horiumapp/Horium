@@ -27,6 +27,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
   const [furthestStep, setFurthestStep] = useState(data.currentStep || 1);
   const [genProgress, setGenProgress] = useState(0);
   const [genMessage, setGenMessage] = useState('');
+  const isProcessingRef = React.useRef(false);
 
   // Sync local step with prop data
   React.useEffect(() => {
@@ -140,20 +141,24 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
   };
 
   const handleRegenerateIntelligence = async () => {
-    // Bloqueio de processamento sem licença
-    if (!data.isLicensed) {
+    if (isProcessingRef.current) return;
+
+    // Bloqueio de processamento se não possuir licença (aceita tanto por schedule quanto por conta aprovada)
+    const isEffectivelyLicensed = data.isLicensed || activeLicenseStatus === 'Aprovado';
+    if (!isEffectivelyLicensed) {
       onLicenseNeeded?.();
       return;
     }
 
-    handleStepChange(7);
-    setGenProgress(0);
-    setGenMessage('Iniciando motor de busca profunda...');
-
-    const schedule = generateSchedule();
-    const resultData = { ...data, schedule };
-
     try {
+      isProcessingRef.current = true;
+      handleStepChange(7);
+      setGenProgress(2);
+      setGenMessage('Iniciando motor de busca profunda...');
+
+      const schedule = generateSchedule();
+      const resultData = { ...data, schedule };
+
       const result = await generateTimetable(resultData, (p, m) => {
         setGenProgress(p);
         setGenMessage(m);
@@ -166,7 +171,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
         status: 'Finalizado'
       };
 
-      // Save it using the service for persistence
+      // Salva os dados no banco
       await scheduleService.saveSchedule(finalData);
 
       setData(prev => ({
@@ -182,8 +187,17 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
       console.error('Erro na geração de horários:', err);
       alert('Ocorreu um erro ao gerar os horários. Tente novamente.');
       handleStepChange(6);
+    } finally {
+      isProcessingRef.current = false;
     }
   };
+
+  // Se o usuário carregar ou navegar diretamente para o Step 7, inicia a geração automaticamente
+  React.useEffect(() => {
+    if (step === 7 && !isProcessingRef.current) {
+      handleRegenerateIntelligence();
+    }
+  }, [step]);
 
   const renderCurrentStep = () => {
     switch (step) {
@@ -258,6 +272,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
           <Step7Process
             progress={genProgress}
             message={genMessage}
+            onBack={() => handleStepChange(6)}
           />
         );
       case 8:
