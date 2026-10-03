@@ -730,9 +730,266 @@ export function runGeneratorEngine(
             }
         }
 
-        // 4. RESCUE PASS (Fase de Resgate de Aulas)
+        // 4. RESCUE PASS (Fase de Resgate de Aulas com Cadeia de Ejeção Augmenting Path)
         // Garante que NENHUM professor fique sem carga horária se houver slots válidos na grade escolar
         if (unplacedBlocks.length > 0) {
+            // Helper para verificar se um professor pode assumir um slot em uma turma
+            const canTeacherTakeSlotInClass = (
+                lesson: FixedLesson,
+                targetDay: string,
+                targetSlot: number,
+                ignoreLesson?: FixedLesson,
+                relaxSoftRules: boolean = false
+            ): boolean => {
+                const classId = lesson.classId;
+                const teacherId = lesson.teacherId;
+                const dIdx = originalDays.indexOf(targetDay);
+                if (dIdx < 0) return false;
+
+                const teacher = data.teachers.find(t => t.id === teacherId);
+                const classroom = data.classes.find(c => c.id === classId);
+                if (!teacher || !classroom) return false;
+
+                // Restrição física de disponibilidade (ND)
+                if (classroom.timeConstraints?.[`${dIdx}-${targetSlot}`] === 'ND') return false;
+                if (teacher.availability?.[`${dIdx}-${targetSlot}`] === 'ND') return false;
+
+                // Não pode sobrescrever aula fixada manualmente pelo usuário
+                if (initialFixed.some(fl => fl.day === targetDay && fl.slotIndex === targetSlot && fl.classId === classId)) {
+                    return false;
+                }
+
+                // O professor não pode estar dando aula em OUTRA turma neste mesmo dia e slot
+                if (currentFixed.some(o => o !== ignoreLesson && o.day === targetDay && o.slotIndex === targetSlot && o.teacherId === teacherId && o.classId !== classId)) {
+                    return false;
+                }
+
+                // Limite diário estrito do professor
+                const tLimit = teacher.dailyLimits?.[`${dIdx}`] !== undefined ? teacher.dailyLimits[`${dIdx}`] : slotsPerDay;
+                const currentDayLessons = currentFixed.filter(o => o !== ignoreLesson && o.day === targetDay && o.teacherId === teacherId).length;
+                const willIncreaseDayCount = lesson.day !== targetDay;
+                if (willIncreaseDayCount && currentDayLessons >= tLimit) {
+                    return false;
+                }
+
+                if (!relaxSoftRules) {
+                    const candidate: FixedLesson = {
+                        day: targetDay,
+                        slotIndex: targetSlot,
+                        classId,
+                        teacherId,
+                        subjectId: lesson.subjectId
+                    };
+                    const testList = currentFixed.filter(o => o !== ignoreLesson && !(o.day === targetDay && o.slotIndex === targetSlot && o.classId === classId));
+                    if (!isOk(candidate, testList)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            };
+
+            interface ChainNode {
+                lesson: FixedLesson;
+                targetDay: string;
+                targetSlot: number;
+                parent: ChainNode | null;
+                displacedLesson: FixedLesson | null;
+            }
+
+            // Cadeia de Ejeção Intra-Turma (Augmenting Path BFS)
+            const tryIntraClassEjectionChain = (
+                lessonToPlace: FixedLesson,
+                maxDepth: number = 5,
+                relaxSoftRules: boolean = false
+            ): boolean => {
+                const classId = lessonToPlace.classId;
+                const classroom = data.classes.find(c => c.id === classId);
+                if (!classroom) return false;
+
+                const queue: ChainNode[] = [];
+                const visitedSlots = new Set<string>();
+
+                // 1. Enfileira todos os slots válidos que o professor da aula a alocar pode assumir
+                for (const day of originalDays) {
+                    for (let slot = 0; slot < slotsPerDay; slot++) {
+                        if (canTeacherTakeSlotInClass(lessonToPlace, day, slot, undefined, relaxSoftRules)) {
+                            const occ = currentFixed.find(o => o.day === day && o.slotIndex === slot && o.classId === classId);
+                            if (!occ) {
+                                // Vaga livre encontrada diretamente!
+                                currentFixed.push({
+                                    ...lessonToPlace,
+                                    day,
+                                    slotIndex: slot
+                                });
+                                return true;
+                            } else {
+                                if (!initialFixed.some(fl => fl.day === day && fl.slotIndex === slot && fl.classId === classId)) {
+                                    visitedSlots.add(`${day}|${slot}`);
+                                    queue.push({
+                                        lesson: lessonToPlace,
+                                        targetDay: day,
+                                        targetSlot: slot,
+                                        parent: null,
+                                        displacedLesson: occ
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Busca em largura (BFS) por caminho aumentante
+                while (queue.length > 0) {
+                    const node = queue.shift()!;
+
+                    let depth = 1;
+                    let cur: ChainNode | null = node;
+                    while (cur.parent) { depth++; cur = cur.parent; }
+                    if (depth >= maxDepth) continue;
+
+                    const displaced = node.displacedLesson!;
+
+                    for (const candDay of originalDays) {
+                        for (let candSlot = 0; candSlot < slotsPerDay; candSlot++) {
+                            const slotKey = `${candDay}|${candSlot}`;
+                            if (visitedSlots.has(slotKey)) continue;
+
+                            if (canTeacherTakeSlotInClass(displaced, candDay, candSlot, displaced, relaxSoftRules)) {
+                                const nextOcc = currentFixed.find(o => o.day === candDay && o.slotIndex === candSlot && o.classId === classId);
+                                if (!nextOcc) {
+                                    // VAGA LIVRE ENCONTRADA! Executa o caminho aumentante
+                                    displaced.day = candDay;
+                                    displaced.slotIndex = candSlot;
+
+                                    let step: ChainNode | null = node;
+                                    while (step) {
+                                        if (step.parent) {
+                                            step.parent.displacedLesson!.day = step.targetDay;
+                                            step.parent.displacedLesson!.slotIndex = step.targetSlot;
+                                        } else {
+                                            currentFixed.push({
+                                                ...step.lesson,
+                                                day: step.targetDay,
+                                                slotIndex: step.targetSlot
+                                            });
+                                        }
+                                        step = step.parent;
+                                    }
+                                    return true;
+                                } else {
+                                    if (!initialFixed.some(fl => fl.day === candDay && fl.slotIndex === candSlot && fl.classId === classId)) {
+                                        visitedSlots.add(slotKey);
+                                        queue.push({
+                                            lesson: displaced,
+                                            targetDay: candDay,
+                                            targetSlot: candSlot,
+                                            parent: node,
+                                            displacedLesson: nextOcc
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            };
+
+            // Realocação Inter-Turmas (libera professor ocupado em outra turma)
+            const tryInterClassRelocation = (lessonToPlace: FixedLesson): boolean => {
+                const teacher = data.teachers.find(t => t.id === lessonToPlace.teacherId);
+                const classroom = data.classes.find(c => c.id === lessonToPlace.classId);
+                if (!teacher || !classroom) return false;
+
+                for (const day of originalDays) {
+                    const dIdx = originalDays.indexOf(day);
+                    if (teacher.dailyLimits?.[`${dIdx}`] !== undefined &&
+                        currentFixed.filter(o => o.day === day && o.teacherId === lessonToPlace.teacherId).length >= teacher.dailyLimits[`${dIdx}`]) {
+                        continue;
+                    }
+
+                    for (let slotIndex = 0; slotIndex < slotsPerDay; slotIndex++) {
+                        if (teacher.availability?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
+                        if (classroom.timeConstraints?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
+
+                        const busyLesson = currentFixed.find(o =>
+                            o.day === day && o.slotIndex === slotIndex &&
+                            o.teacherId === lessonToPlace.teacherId &&
+                            o.classId !== lessonToPlace.classId
+                        );
+
+                        if (!busyLesson) continue;
+                        if (initialFixed.some(fl => fl.day === day && fl.slotIndex === slotIndex && fl.classId === busyLesson.classId)) continue;
+
+                        const origDay = busyLesson.day;
+                        const origSlot = busyLesson.slotIndex;
+                        const bIdx = currentFixed.indexOf(busyLesson);
+                        currentFixed.splice(bIdx, 1);
+
+                        const relocated = tryIntraClassEjectionChain(busyLesson, 4, true);
+                        if (relocated) {
+                            const placed = tryIntraClassEjectionChain(lessonToPlace, 4, true);
+                            if (placed) {
+                                return true;
+                            }
+                            const newBIdx = currentFixed.indexOf(busyLesson);
+                            if (newBIdx >= 0) currentFixed.splice(newBIdx, 1);
+                            busyLesson.day = origDay;
+                            busyLesson.slotIndex = origSlot;
+                            currentFixed.push(busyLesson);
+                        } else {
+                            busyLesson.day = origDay;
+                            busyLesson.slotIndex = origSlot;
+                            currentFixed.push(busyLesson);
+                        }
+                    }
+                }
+
+                return false;
+            };
+
+            // Troca Direta entre duas turmas (Kempe Cross-Class Swap)
+            const tryCrossClassSwap = (lessonToPlace: FixedLesson): boolean => {
+                const classId = lessonToPlace.classId;
+                const classroom = data.classes.find(c => c.id === classId);
+                if (!classroom) return false;
+
+                for (const day1 of originalDays) {
+                    for (let s1 = 0; s1 < slotsPerDay; s1++) {
+                        const l1 = currentFixed.find(o => o.day === day1 && o.slotIndex === s1 && o.classId === classId);
+                        if (!l1 || initialFixed.some(fl => fl.day === day1 && fl.slotIndex === s1 && fl.classId === classId)) continue;
+
+                        for (const day2 of originalDays) {
+                            for (let s2 = 0; s2 < slotsPerDay; s2++) {
+                                if (day1 === day2 && s1 === s2) continue;
+
+                                for (const otherClass of data.classes) {
+                                    if (otherClass.id === classId) continue;
+                                    const l2 = currentFixed.find(o => o.day === day2 && o.slotIndex === s2 && o.classId === otherClass.id);
+                                    if (!l2 || initialFixed.some(fl => fl.day === day2 && fl.slotIndex === s2 && fl.classId === otherClass.id)) continue;
+
+                                    if (canTeacherTakeSlotInClass(l1, day2, s2, l1, true) &&
+                                        canTeacherTakeSlotInClass(l2, day1, s1, l2, true)) {
+                                        l1.day = day2; l1.slotIndex = s2;
+                                        l2.day = day1; l2.slotIndex = s1;
+
+                                        const placed = tryIntraClassEjectionChain(lessonToPlace, 3, true);
+                                        if (placed) return true;
+
+                                        l1.day = day1; l1.slotIndex = s1;
+                                        l2.day = day2; l2.slotIndex = s2;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            };
+
             for (const failedBlock of unplacedBlocks) {
                 const remainingLessons = failedBlock.size;
 
@@ -747,88 +1004,27 @@ export function runGeneratorEngine(
 
                     let placed = false;
 
-                    // Busca direta de slot livre que respeite restrições físicas (sem choque e sem ND)
-                    for (const day of originalDays) {
-                        if (placed) break;
-                        const dIdx = originalDays.indexOf(day);
-                        const teacher = data.teachers.find(t => t.id === singleLesson.teacherId);
-                        const classroom = data.classes.find(c => c.id === singleLesson.classId);
+                    // 1. Tenta colocar diretamente ou via cadeia de ejeção respeitando regras pedagógicas
+                    placed = tryIntraClassEjectionChain(singleLesson, 5, false);
 
-                        // Limite diário estrito do professor
-                        const teacherDayCount = currentFixed.filter(o => o.day === day && o.teacherId === singleLesson.teacherId).length;
-                        const tLimit = teacher?.dailyLimits?.[`${dIdx}`] !== undefined ? teacher.dailyLimits[`${dIdx}`] : slotsPerDay;
-                        if (teacherDayCount >= tLimit) continue;
-
-                        for (let slotIndex = 0; slotIndex < slotsPerDay; slotIndex++) {
-                            // Choque de turma ou professor
-                            if (currentFixed.some(o => o.day === day && o.slotIndex === slotIndex && (o.classId === singleLesson.classId || o.teacherId === singleLesson.teacherId))) {
-                                continue;
-                            }
-
-                            // Indisponibilidade ND
-                            if (teacher?.availability?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
-                            if (classroom?.timeConstraints?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
-
-                            currentFixed.push({
-                                ...singleLesson,
-                                day,
-                                slotIndex
-                            });
-                            placed = true;
-                            break;
-                        }
+                    // 2. Se não deu, tenta cadeia de ejeção relaxando regras pedagógicas (prioridade 100% carga horária)
+                    if (!placed) {
+                        placed = tryIntraClassEjectionChain(singleLesson, 5, true);
                     }
 
-                    // Se não achou slot livre direto, tenta troca (swap) de 1 nível com aula deslocável
+                    // 3. Se não deu, tenta realocação inter-turmas (liberar professor que está ocupado em outra turma)
                     if (!placed) {
-                        for (const day of originalDays) {
-                            if (placed) break;
-                            const dIdx = originalDays.indexOf(day);
-                            const teacher = data.teachers.find(t => t.id === singleLesson.teacherId);
-                            const classroom = data.classes.find(c => c.id === singleLesson.classId);
+                        placed = tryInterClassRelocation(singleLesson);
+                    }
 
-                            if (teacher?.dailyLimits?.[`${dIdx}`] !== undefined &&
-                                currentFixed.filter(o => o.day === day && o.teacherId === singleLesson.teacherId).length >= teacher.dailyLimits[`${dIdx}`]) {
-                                continue;
-                            }
-
-                            for (let slotIndex = 0; slotIndex < slotsPerDay; slotIndex++) {
-                                if (teacher?.availability?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
-                                if (classroom?.timeConstraints?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
-
-                                const classLessonHere = currentFixed.find(o => o.day === day && o.slotIndex === slotIndex && o.classId === singleLesson.classId);
-                                if (!classLessonHere) continue;
-                                if (initialFixed.some(fl => fl.day === day && fl.slotIndex === slotIndex && fl.classId === singleLesson.classId)) continue;
-                                if (currentFixed.some(o => o.day === day && o.slotIndex === slotIndex && o.teacherId === singleLesson.teacherId)) continue;
-
-                                const otherTeacher = data.teachers.find(t => t.id === classLessonHere.teacherId);
-                                for (const otherDay of originalDays) {
-                                    if (placed) break;
-                                    const otherDIdx = originalDays.indexOf(otherDay);
-                                    for (let otherSlot = 0; otherSlot < slotsPerDay; otherSlot++) {
-                                        if (otherDay === day && otherSlot === slotIndex) continue;
-                                        if (currentFixed.some(o => o.day === otherDay && o.slotIndex === otherSlot && (o.classId === classLessonHere.classId || o.teacherId === classLessonHere.teacherId))) continue;
-                                        if (otherTeacher?.availability?.[`${otherDIdx}-${otherSlot}`] === 'ND') continue;
-                                        if (classroom?.timeConstraints?.[`${otherDIdx}-${otherSlot}`] === 'ND') continue;
-
-                                        classLessonHere.day = otherDay;
-                                        classLessonHere.slotIndex = otherSlot;
-                                        currentFixed.push({
-                                            ...singleLesson,
-                                            day,
-                                            slotIndex
-                                        });
-                                        placed = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
+                    // 4. Se ainda não deu, tenta troca direta entre turmas (Kempe swap)
+                    if (!placed) {
+                        placed = tryCrossClassSwap(singleLesson);
                     }
 
                     if (!placed) {
                         const key = `${failedBlock.assignment.teacherId}|${failedBlock.assignment.classId}|${failedBlock.assignment.subjectId}`;
-                        failedAssignmentWeights[key] = (failedAssignmentWeights[key] || 0) + 1;
+                        failedAssignmentWeights[key] = (failedAssignmentWeights[key] || 0) + 20;
                         failures.push({
                             teacherId: failedBlock.assignment.teacherId,
                             classId: failedBlock.assignment.classId,
@@ -1038,8 +1234,7 @@ export function runGeneratorEngine(
 
     let bestResult = { fixedLessons: [] as FixedLesson[], failures: [] as SchedulingFailure[], score: -Infinity };
     const numClasses = Math.max(1, data.classes.length);
-    // Para escolas com muitas turmas (ex: 19 turmas), 60 a 90 iterações já encontram excelente balanceamento em poucos segundos
-    const maxIters = Math.min(300, Math.max(50, Math.floor(1200 / numClasses)));
+    const maxIters = 400; // Explora até 400 iterações com GRASP e cadeias de ejeção
     const startTime = Date.now();
     const maxTimeBudgetMs = 15000; // Máximo de 15 segundos para tempo de resposta interativo garantido
 
@@ -1050,8 +1245,8 @@ export function runGeneratorEngine(
     const progressStep = Math.max(1, Math.floor(maxIters / 35));
 
     for (let iter = 1; iter <= maxIters; iter++) {
-        // Encerra com a melhor solução encontrada caso exceda o tempo de busca
-        if (iter > 10 && (Date.now() - startTime) > maxTimeBudgetMs) {
+        // Encerra caso exceda o tempo de busca
+        if (iter > 15 && (Date.now() - startTime) > maxTimeBudgetMs) {
             if (onProgress) onProgress(100, "Grade ideal otimizada e finalizada!");
             break;
         }
@@ -1062,17 +1257,18 @@ export function runGeneratorEngine(
             bestResult = attempt;
         }
 
-        // Parada antecipada se solução for 100% perfeita sem falhas e com score excelente
-        if (bestResult.failures.length === 0 && bestResult.score >= (data.classes.length * 100) + (bestResult.fixedLessons.length * 50)) {
-            if (onProgress) onProgress(100, "Grade ideal encontrada com perfeição!");
+        // Parada antecipada: Se já alcançou 0 falhas (100% de carga horária para todos os professores)
+        // e já rodou pelo menos 40 iterações para refinar as janelas e distribuição
+        if (bestResult.failures.length === 0 && (iter >= 40 || (Date.now() - startTime) > 8000)) {
+            if (onProgress) onProgress(100, "Grade 100% completa e otimizada!");
             break;
         }
 
         if (iter % progressStep === 0 && onProgress) {
             const progress = Math.min(99, Math.max(5, Math.round((iter / maxIters) * 95)));
             const msg = bestResult.failures.length === 0
-                ? `Otimizando janelas e continuidade (${progress}%)...`
-                : `Explorando combinações pedagógicas (${progress}%)...`;
+                ? `100% das aulas alocadas! Otimizando janelas e continuidade (${progress}%)...`
+                : `Alocando professores (${progress}%)... (${bestResult.fixedLessons.length} aulas alocadas)`;
             onProgress(progress, msg);
         }
     }
