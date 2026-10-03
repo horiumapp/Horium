@@ -16,8 +16,9 @@ export function parseGroupingRule(rawGrouping?: string): GroupingRule {
         return { maxDaily: 1, maxConsecutive: 1, allowConsecutive: false, requireDouble: false };
     }
 
-    // 2. Aulas intercaladas (não permite tempos seguidos)
-    if (g.includes('intercalad')) {
+    // 2. Aulas estritamente intercaladas (não permite tempos seguidos)
+    // ATENÇÃO: NÃO acionar se for opção de aulas LIVRES (ex: 'LIVRES (Intercaladas ou Seguidas)')
+    if (g.includes('intercalad') && !g.includes('livre') && !g.includes('ou seguidas') && !g.includes('seguidas')) {
         let maxD = 2;
         if (g.includes('3 aulas') || g.includes('máximo 3')) maxD = 3;
         else if (g.includes('4 aulas') || g.includes('máximo 4')) maxD = 4;
@@ -25,29 +26,32 @@ export function parseGroupingRule(rawGrouping?: string): GroupingRule {
         return { maxDaily: maxD, maxConsecutive: 1, allowConsecutive: false, requireDouble: false };
     }
 
-    // 3. Aulas triplas / até 3 aulas seguidas
-    if (g.includes('tripla') || g.includes('3 aulas por dia seguidas') || g.includes('máximo 3 aulas por dia seguidas') || g.includes('3 aulas seguidas') || g.includes('3-2')) {
-        return { maxDaily: 3, maxConsecutive: 3, allowConsecutive: true, requireDouble: false };
+    // 3. Agrupamento Livre -> Sem limite artificial de aulas diárias ou consecutivas
+    if (g.includes('agrupamento livre')) {
+        return { maxDaily: 99, maxConsecutive: 99, allowConsecutive: true, requireDouble: false };
     }
 
-    // 4. Até 4 aulas seguidas
-    if (g.includes('4 aulas por dia seguidas') || g.includes('máximo 4 aulas por dia seguidas') || g.includes('4 aulas seguidas') || g.includes('4 aulas no mesmo dia')) {
-        return { maxDaily: 4, maxConsecutive: 4, allowConsecutive: true, requireDouble: false };
-    }
-
-    // 5. Até 5 aulas seguidas
-    if (g.includes('5 aulas por dia seguidas') || g.includes('máximo 5 aulas por dia seguidas') || g.includes('5 aulas seguidas')) {
+    // 4. Aulas até 5 por dia (seguidas ou livres)
+    if (g.includes('5 aulas') || g.includes('máximo 5') || g.includes('até 5')) {
         return { maxDaily: 5, maxConsecutive: 5, allowConsecutive: true, requireDouble: false };
     }
 
-    // 6. Aulas duplas obrigatórias
+    // 5. Aulas até 4 por dia (seguidas ou livres)
+    if (g.includes('4 aulas') || g.includes('máximo 4') || g.includes('até 4')) {
+        return { maxDaily: 4, maxConsecutive: 4, allowConsecutive: true, requireDouble: false };
+    }
+
+    // 6. Aulas triplas / até 3 aulas por dia (seguidas ou livres)
+    if (g.includes('tripla') || g.includes('3 aulas') || g.includes('máximo 3') || g.includes('até 3') || g.includes('3-2') || g.includes('3-1')) {
+        return { maxDaily: 3, maxConsecutive: 3, allowConsecutive: true, requireDouble: false };
+    }
+
+    // 7. Aulas duplas obrigatórias
     if (g.includes('somente permitirá aulas duplas')) {
         return { maxDaily: 2, maxConsecutive: 2, allowConsecutive: true, requireDouble: true };
     }
 
-    // 7. Padrão Horium e Escolas (No máximo 2 aulas por dia seguidas)
-    // Cobre "Agrupar no máximo 2 aulas por dia SEGUIDAS", "Permitir no máximo 2 aulas por dia LIVRES",
-    // "Agrupamento Livre", "Não Especificado", "2-1", "2-1-1", "2-2-1", etc.
+    // 8. Padrão Horium e Escolas (No máximo 2 aulas por dia seguidas)
     return { maxDaily: 2, maxConsecutive: 2, allowConsecutive: true, requireDouble: false };
 }
 
@@ -88,6 +92,13 @@ export function runGeneratorEngine(
 ): { fixedLessons: FixedLesson[]; failures: SchedulingFailure[] } {
     const data = ensureScheduleSlots(rawSetupData);
 
+    const originalDays = (data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0)
+        ? data.weekConfig.activeDays
+        : (data.schedule && data.schedule.length > 0 && data.schedule[0]?.day ? data.schedule.map(s => s.day) : ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']);
+
+    const slotsPerDay = (data.schedule && data.schedule[0]?.slots?.filter(s => s.type === 'AULA').length) ||
+        data.weekConfig?.lessonsPerDayGlobal || 5;
+
     const failedAssignmentWeights: Record<string, number> = {};
 
     const getGroupingRuleFor = (teacherId: string, classId: string, subjectId: string): GroupingRule => {
@@ -99,9 +110,52 @@ export function runGeneratorEngine(
         return parseGroupingRule(raw);
     };
 
+    const getAvailableDaysCount = (teacherId: string, classId: string): number => {
+        const teacher = data.teachers.find(t => t.id === teacherId);
+        const classroom = data.classes.find(c => c.id === classId);
+
+        const viableDays = originalDays.filter((_, dIdx) => {
+            const tLimit = teacher?.dailyLimits?.[`${dIdx}`];
+            if (tLimit !== undefined && tLimit <= 0) return false;
+
+            let hasSlot = false;
+            for (let sIdx = 0; sIdx < slotsPerDay; sIdx++) {
+                const tAvail = teacher?.availability?.[`${dIdx}-${sIdx}`];
+                const cAvail = classroom?.timeConstraints?.[`${dIdx}-${sIdx}`];
+                if (tAvail !== 'ND' && cAvail !== 'ND') {
+                    hasSlot = true;
+                    break;
+                }
+            }
+            return hasSlot;
+        });
+
+        return Math.max(1, viableDays.length);
+    };
+
+    const getEffectiveGroupingRule = (teacherId: string, classId: string, subjectId: string): GroupingRule => {
+        const baseRule = getGroupingRuleFor(teacherId, classId, subjectId);
+        const classroom = data.classes.find(c => c.id === classId);
+        const totalSubjectLessons = classroom?.lessonsPerSubject?.[subjectId] || 1;
+        const availableDaysCount = getAvailableDaysCount(teacherId, classId);
+
+        // Se o professor/turma só tem X dias disponíveis, a matéria PRECISA de pelo menos ceil(total / X) aulas por dia
+        const minDailyNeeded = Math.ceil(totalSubjectLessons / availableDaysCount);
+        const effectiveMaxDaily = Math.max(baseRule.maxDaily, minDailyNeeded);
+        const effectiveMaxConsecutive = Math.max(baseRule.maxConsecutive, minDailyNeeded > baseRule.maxDaily ? minDailyNeeded : baseRule.maxConsecutive);
+
+        return {
+            maxDaily: effectiveMaxDaily,
+            maxConsecutive: effectiveMaxConsecutive,
+            allowConsecutive: baseRule.allowConsecutive || minDailyNeeded > 1,
+            requireDouble: baseRule.requireDouble
+        };
+    };
+
     const calculateScore = (fixed: FixedLesson[], fails: SchedulingFailure[]) => {
-        let score = (data.classes.length * 100) - (fails.reduce((acc, f) => acc + (data.classes.find(c => c.id === f.classId)?.lessonsPerSubject[f.subjectId] || 1), 0) * 5000);
-        score += fixed.length * 50;
+        // Falhas não alocadas têm penalidade massiva: a prioridade absoluta é garantir 100% da carga horária!
+        let score = (data.classes.length * 100) - (fails.reduce((acc, f) => acc + (data.classes.find(c => c.id === f.classId)?.lessonsPerSubject[f.subjectId] || 1), 0) * 100000);
+        score += fixed.length * 500;
 
         const teacherLessons: Record<string, FixedLesson[]> = {};
         const classLessons: Record<string, FixedLesson[]> = {};
@@ -134,7 +188,7 @@ export function runGeneratorEngine(
         Object.entries(classLessons).forEach(([cKey, lessons]) => {
             if (lessons.length === 0) return;
             const [classId, , subjectId] = cKey.split('|');
-            const rule = getGroupingRuleFor(lessons[0].teacherId, classId, subjectId);
+            const rule = getEffectiveGroupingRule(lessons[0].teacherId, classId, subjectId);
 
             // 1. Violação de limite diário da matéria na turma
             if (lessons.length > rule.maxDaily) {
@@ -143,7 +197,7 @@ export function runGeneratorEngine(
 
             const streak = getMaxConsecutiveStreak(lessons.map(l => l.slotIndex));
 
-            // 2. Violação grave: Mais tempos seguidos do que o permitido (ex: 3 tempos seguidos quando a regra permite até 2)
+            // 2. Violação grave: Mais tempos seguidos do que o permitido
             if (streak > rule.maxConsecutive) {
                 score -= (streak - rule.maxConsecutive) * 80000;
             }
@@ -159,13 +213,13 @@ export function runGeneratorEngine(
             }
         });
 
-        // Penalidade por professor ter mais de 2 tempos seguidos na mesma turma (a menos que a matéria permita tripla)
+        // Penalidade por professor ter mais de 2 tempos seguidos na mesma turma (a menos que a matéria permita mais)
         Object.entries(teacherClassDayLessons).forEach(([tcKey, lessons]) => {
             if (lessons.length > 2) {
                 const [teacherId, classId] = tcKey.split('|');
                 const streak = getMaxConsecutiveStreak(lessons.map(l => l.slotIndex));
                 const maxAllowedConsec = lessons.reduce((max, l) => {
-                    const r = getGroupingRuleFor(teacherId, classId, l.subjectId);
+                    const r = getEffectiveGroupingRule(teacherId, classId, l.subjectId);
                     return Math.max(max, r.maxConsecutive);
                 }, 2);
                 if (streak > maxAllowedConsec) {
