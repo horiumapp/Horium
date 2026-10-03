@@ -580,11 +580,18 @@ BEGIN
     -- Validação do Paywall no Servidor
     IF NOT v_is_licensed AND NOT EXISTS (
         SELECT 1 FROM public.licenses
-        WHERE schedule_id = p_schedule_id
+        WHERE (schedule_id = p_schedule_id OR (user_id = v_owner_id AND (schedule_id IS NULL OR schedule_id = p_schedule_id)))
           AND payment_status = 'Aprovado'
           AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
     ) AND NOT public.is_admin() THEN
         RAISE EXCEPTION 'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.';
+    END IF;
+
+    -- Auto-sincronização caso o horário ainda não estivesse marcado como licenciado
+    IF NOT v_is_licensed THEN
+        UPDATE public.schedules
+        SET is_licensed = true, updated_at = timezone('utc', now())
+        WHERE id = p_schedule_id;
     END IF;
 
     -- Busca a solução prioritariamente na tabela protegida schedule_solutions
