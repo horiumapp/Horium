@@ -101,16 +101,35 @@ export const scheduleService = {
      * Busca a solução detalhada (fixedLessons) protegida por paywall server-side
      */
     async getScheduleSolution(scheduleId: string): Promise<FixedLesson[]> {
-        const { data, error } = await supabase.rpc('get_schedule_solution', {
-            p_schedule_id: scheduleId
-        });
+        try {
+            const { data, error } = await supabase.rpc('get_schedule_solution', {
+                p_schedule_id: scheduleId
+            });
 
-        if (error) {
-            console.error('Error fetching schedule solution (RPC):', error);
-            throw new Error(error.message);
+            if (!error && data && Array.isArray(data) && data.length > 0) {
+                return data as FixedLesson[];
+            }
+        } catch (rpcErr) {
+            console.warn('RPC get_schedule_solution falhou:', rpcErr);
         }
 
-        return (data as FixedLesson[]) || [];
+        // Fallback resiliente: se a RPC ou tabela schedule_solutions ainda não existir no Supabase,
+        // busca diretamente do campo data na tabela schedules para não perder as aulas salvas
+        try {
+            const { data: schedItem } = await supabase
+                .from('schedules')
+                .select('data')
+                .eq('id', scheduleId)
+                .single();
+
+            if (schedItem?.data?.fixedLessons && Array.isArray(schedItem.data.fixedLessons) && schedItem.data.fixedLessons.length > 0) {
+                return schedItem.data.fixedLessons as FixedLesson[];
+            }
+        } catch (fallbackErr) {
+            console.warn("Fallback de fixedLessons da tabela schedules falhou:", fallbackErr);
+        }
+
+        return [];
     },
 
     async saveSchedule(scheduleData: SetupData): Promise<SetupData> {
