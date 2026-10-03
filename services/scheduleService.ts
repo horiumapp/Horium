@@ -144,11 +144,8 @@ export const scheduleService = {
 
         const normalized = ensureScheduleSlots(scheduleData);
 
-        // Extract ID if it exists and remove it from the data object to avoid redundancy
-        const { id, ...rest } = normalized;
-
+        let fixedLessonsToSave = rest.fixedLessons;
         if (id && id.length > 30) { // UUID check
-            let fixedLessonsToSave = rest.fixedLessons;
             if (!fixedLessonsToSave || fixedLessonsToSave.length === 0) {
                 try {
                     const { data: existing } = await supabase
@@ -163,17 +160,19 @@ export const scheduleService = {
                     console.warn('Erro ao verificar fixedLessons existentes no salvamento:', e);
                 }
             }
+        }
 
-            const payload = {
-                user_id: user.id,
-                name: rest.institution?.name || 'Nova Grade',
-                data: {
-                    ...rest,
-                    fixedLessons: fixedLessonsToSave || []
-                },
-                updated_at: new Date().toISOString()
-            };
+        const payload = {
+            user_id: user.id,
+            name: rest.institution?.name || 'Nova Grade',
+            data: {
+                ...rest,
+                fixedLessons: fixedLessonsToSave || []
+            },
+            updated_at: new Date().toISOString()
+        };
 
+        if (id && id.length > 30) { // UUID check
             const { data, error } = await supabase
                 .from('schedules')
                 .update(payload)

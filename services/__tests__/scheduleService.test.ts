@@ -81,6 +81,12 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
             data: { user: { id: 'test-user-id' } },
             error: null
         });
+        mockRpc.mockImplementation((rpcName: string) => {
+            if (rpcName === 'is_current_user_admin') {
+                return Promise.resolve({ data: false, error: null });
+            }
+            return Promise.resolve({ data: null, error: null });
+        });
     });
 
     it('saveSchedule: deve manter fixedLessons na memória do cliente mesmo após o banco remover do campo data', async () => {
