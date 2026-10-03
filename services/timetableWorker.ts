@@ -1,5 +1,5 @@
 import { SetupData, FixedLesson, SchedulingFailure } from '../types';
-import { ensureScheduleSlots } from './scheduleService';
+import { ensureScheduleSlots } from '../utils/scheduleUtils';
 
 interface Assignment {
     teacherId: string;
@@ -515,6 +515,10 @@ export function runGeneratorEngine(
 
     let bestResult = { fixedLessons: [] as FixedLesson[], failures: [] as SchedulingFailure[], score: -Infinity };
     const maxIters = 600;
+
+    if (onProgress) {
+        onProgress(3, "Iniciando motor de balanceamento pedagógico...");
+    }
 
     for (let iter = 1; iter <= maxIters; iter++) {
         const attempt = runAttempt();
