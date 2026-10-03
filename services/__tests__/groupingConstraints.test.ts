@@ -226,5 +226,54 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                 expect(getMaxConsecutiveStreak(slots)).toBeLessThanOrEqual(2);
             });
         });
+
+        it('correctly allocates 10 lessons for a teacher available on 2 days (e.g. CETAM-INFO)', () => {
+            // Days: Segunda (0), Terça (1), Quarta (2), Quinta (3), Sexta (4)
+            // Teacher CETAM-INFO is available only on Terça (1) and Quarta (2)
+            const availability: Record<string, 'D' | 'ND'> = {};
+            for (let d = 0; d < 5; d++) {
+                for (let s = 0; s < 5; s++) {
+                    // Only available on Terça (d=1) and Quarta (d=2)
+                    availability[`${d}-${s}`] = (d === 1 || d === 2) ? 'D' : 'ND';
+                }
+            }
+
+            const setupData: any = {
+                classes: [
+                    {
+                        id: 'c_201',
+                        name: '2º 01',
+                        lessonsPerSubject: { 's_info': 10 }
+                    }
+                ],
+                teachers: [
+                    {
+                        id: 't_cetam_info',
+                        name: 'CETAM-INFO',
+                        subjects: ['s_info'],
+                        availability,
+                        classAssignments: { 's_info': { 'c_201': 'OBRIGATORIAMENTE' } }
+                    }
+                ],
+                subjects: [
+                    { id: 's_info', name: 'Informática' }
+                ],
+                generalGrouping: 'Agrupar no máximo 2 aulas por dia SEGUIDAS',
+                weekConfig: {
+                    activeDays: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
+                    lessonsPerDayGlobal: 5
+                }
+            };
+
+            const result = runGeneratorEngine(setupData);
+            expect(result.failures).toHaveLength(0);
+            expect(result.fixedLessons).toHaveLength(10);
+            
+            // Check that all 10 lessons were allocated on Terça and Quarta (5 on each)
+            const tercaLessons = result.fixedLessons.filter(fl => fl.day === 'Terça');
+            const quartaLessons = result.fixedLessons.filter(fl => fl.day === 'Quarta');
+            expect(tercaLessons).toHaveLength(5);
+            expect(quartaLessons).toHaveLength(5);
+        });
     });
 });
