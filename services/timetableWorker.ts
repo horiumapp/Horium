@@ -923,26 +923,30 @@ export function runGeneratorEngine(
                         if (!busyLesson) continue;
                         if (initialFixed.some(fl => fl.day === day && fl.slotIndex === slotIndex && fl.classId === busyLesson.classId)) continue;
 
-                        const origDay = busyLesson.day;
-                        const origSlot = busyLesson.slotIndex;
-                        const bIdx = currentFixed.indexOf(busyLesson);
-                        currentFixed.splice(bIdx, 1);
+                        // TRANSAÇÃO ATÔMICA COM SNAPSHOT: impede criação de aulas duplicadas ou fantasmas
+                        const snapshot = currentFixed.map(l => ({ ...l }));
 
-                        const relocated = tryIntraClassEjectionChain(busyLesson, 4, true);
+                        // Remove a aula ocupada da outra turma
+                        const bIdx = currentFixed.findIndex(o =>
+                            o.day === day && o.slotIndex === slotIndex &&
+                            o.classId === busyLesson.classId && o.teacherId === busyLesson.teacherId
+                        );
+                        if (bIdx >= 0) currentFixed.splice(bIdx, 1);
+
+                        // Tenta realocar a aula da outra turma
+                        const relocated = tryIntraClassEjectionChain(busyLesson, 6, true);
                         if (relocated) {
-                            const placed = tryIntraClassEjectionChain(lessonToPlace, 4, true);
+                            // Tenta posicionar a aula desejada na turma alvo
+                            const placed = tryIntraClassEjectionChain(lessonToPlace, 6, true);
                             if (placed) {
                                 return true;
                             }
-                            const newBIdx = currentFixed.indexOf(busyLesson);
-                            if (newBIdx >= 0) currentFixed.splice(newBIdx, 1);
-                            busyLesson.day = origDay;
-                            busyLesson.slotIndex = origSlot;
-                            currentFixed.push(busyLesson);
-                        } else {
-                            busyLesson.day = origDay;
-                            busyLesson.slotIndex = origSlot;
-                            currentFixed.push(busyLesson);
+                        }
+
+                        // Reverte 100% para o estado original caso falhe
+                        currentFixed.length = 0;
+                        for (const item of snapshot) {
+                            currentFixed.push({ ...item });
                         }
                     }
                 }
@@ -950,7 +954,7 @@ export function runGeneratorEngine(
                 return false;
             };
 
-            // Troca Direta entre duas turmas (Kempe Cross-Class Swap)
+            // Troca Direta entre duas turmas (Kempe Cross-Class Swap) com Transação Snapshot
             const tryCrossClassSwap = (lessonToPlace: FixedLesson): boolean => {
                 const classId = lessonToPlace.classId;
                 const classroom = data.classes.find(c => c.id === classId);
@@ -972,14 +976,24 @@ export function runGeneratorEngine(
 
                                     if (canTeacherTakeSlotInClass(l1, day2, s2, l1, true) &&
                                         canTeacherTakeSlotInClass(l2, day1, s1, l2, true)) {
-                                        l1.day = day2; l1.slotIndex = s2;
-                                        l2.day = day1; l2.slotIndex = s1;
+                                        
+                                        const snapshot = currentFixed.map(l => ({ ...l }));
 
-                                        const placed = tryIntraClassEjectionChain(lessonToPlace, 3, true);
-                                        if (placed) return true;
+                                        const cl1 = currentFixed.find(o => o.day === day1 && o.slotIndex === s1 && o.classId === classId)!;
+                                        const cl2 = currentFixed.find(o => o.day === day2 && o.slotIndex === s2 && o.classId === otherClass.id)!;
+                                        cl1.day = day2; cl1.slotIndex = s2;
+                                        cl2.day = day1; cl2.slotIndex = s1;
 
-                                        l1.day = day1; l1.slotIndex = s1;
-                                        l2.day = day2; l2.slotIndex = s2;
+                                        const placed = tryIntraClassEjectionChain(lessonToPlace, 5, true);
+                                        if (placed) {
+                                            return true;
+                                        }
+
+                                        // Reverte 100%
+                                        currentFixed.length = 0;
+                                        for (const item of snapshot) {
+                                            currentFixed.push({ ...item });
+                                        }
                                     }
                                 }
                             }
@@ -1005,19 +1019,19 @@ export function runGeneratorEngine(
                     let placed = false;
 
                     // 1. Tenta colocar diretamente ou via cadeia de ejeção respeitando regras pedagógicas
-                    placed = tryIntraClassEjectionChain(singleLesson, 5, false);
+                    placed = tryIntraClassEjectionChain(singleLesson, 8, false);
 
                     // 2. Se não deu, tenta cadeia de ejeção relaxando regras pedagógicas (prioridade 100% carga horária)
                     if (!placed) {
-                        placed = tryIntraClassEjectionChain(singleLesson, 5, true);
+                        placed = tryIntraClassEjectionChain(singleLesson, 8, true);
                     }
 
-                    // 3. Se não deu, tenta realocação inter-turmas (liberar professor que está ocupado em outra turma)
+                    // 3. Se não deu, tenta realocação inter-turmas atômica
                     if (!placed) {
                         placed = tryInterClassRelocation(singleLesson);
                     }
 
-                    // 4. Se ainda não deu, tenta troca direta entre turmas (Kempe swap)
+                    // 4. Se ainda não deu, tenta troca direta entre turmas atômica
                     if (!placed) {
                         placed = tryCrossClassSwap(singleLesson);
                     }
@@ -1228,6 +1242,21 @@ export function runGeneratorEngine(
         if (manualMoves) {
             compact();
         }
+
+        // Deduplicação estrita de integridade: garante que nenhuma turma nem professor tenham 2 aulas no mesmo slot
+        const uniqueFixed: FixedLesson[] = [];
+        const seenClassSlots = new Set<string>();
+        const seenTeacherSlots = new Set<string>();
+        for (const fl of currentFixed) {
+            const classKey = `${fl.classId}|${fl.day}|${fl.slotIndex}`;
+            const teacherKey = `${fl.teacherId}|${fl.day}|${fl.slotIndex}`;
+            if (!seenClassSlots.has(classKey) && !seenTeacherSlots.has(teacherKey)) {
+                seenClassSlots.add(classKey);
+                seenTeacherSlots.add(teacherKey);
+                uniqueFixed.push(fl);
+            }
+        }
+        currentFixed = uniqueFixed;
 
         return { fixedLessons: currentFixed, failures, score: calculateScore(currentFixed, failures) };
     };
