@@ -3,6 +3,7 @@ import { SetupData, TimeSlot, DaySchedule, FixedLesson } from '../types';
 
 export { formatTime, ensureScheduleSlots } from '../utils/scheduleUtils';
 import { ensureScheduleSlots } from '../utils/scheduleUtils';
+import { adminLicenseService } from './adminLicenseService';
 
 export const scheduleService = {
     async getSchedules(): Promise<SetupData[]> {
@@ -45,6 +46,8 @@ export const scheduleService = {
             return l.payment_status === 'Aguardando' || l.payment_status === 'under_review';
         });
 
+        const isAdmin = await adminLicenseService.isCurrentUserAdmin().catch(() => false);
+
         return (schedulesData || []).map(item => {
             // 1. Licença vinculada diretamente por schedule_id
             const specificLicense = (licensesData || []).find(l => l.schedule_id === item.id);
@@ -52,7 +55,10 @@ export const scheduleService = {
             let isApproved = false;
             let licenseStatus = 'Sem Licença';
 
-            if (specificLicense) {
+            if (isAdmin) {
+                isApproved = true;
+                licenseStatus = 'Aprovado';
+            } else if (specificLicense) {
                 const isNotExpired = !specificLicense.valid_until || specificLicense.valid_until >= todayStr;
                 if (specificLicense.payment_status === 'Aprovado') {
                     if (isNotExpired) {
@@ -141,14 +147,33 @@ export const scheduleService = {
         // Extract ID if it exists and remove it from the data object to avoid redundancy
         const { id, ...rest } = normalized;
 
-        const payload = {
-            user_id: user.id,
-            name: rest.institution?.name || 'Nova Grade',
-            data: rest,
-            updated_at: new Date().toISOString()
-        };
-
         if (id && id.length > 30) { // UUID check
+            let fixedLessonsToSave = rest.fixedLessons;
+            if (!fixedLessonsToSave || fixedLessonsToSave.length === 0) {
+                try {
+                    const { data: existing } = await supabase
+                        .from('schedules')
+                        .select('data')
+                        .eq('id', id)
+                        .single();
+                    if (existing?.data?.fixedLessons && Array.isArray(existing.data.fixedLessons) && existing.data.fixedLessons.length > 0) {
+                        fixedLessonsToSave = existing.data.fixedLessons;
+                    }
+                } catch (e) {
+                    console.warn('Erro ao verificar fixedLessons existentes no salvamento:', e);
+                }
+            }
+
+            const payload = {
+                user_id: user.id,
+                name: rest.institution?.name || 'Nova Grade',
+                data: {
+                    ...rest,
+                    fixedLessons: fixedLessonsToSave || []
+                },
+                updated_at: new Date().toISOString()
+            };
+
             const { data, error } = await supabase
                 .from('schedules')
                 .update(payload)

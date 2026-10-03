@@ -7,6 +7,7 @@ import { generateTimetable } from './services/timetableGenerator';
 import { authService } from './services/authService';
 import { supabase } from './services/supabaseClient';
 import { audio } from './services/audioService';
+import { adminLicenseService } from './services/adminLicenseService';
 import { Modal } from './components/ui/Modal';
 import { Button } from './components/ui/Button';
 
@@ -116,6 +117,12 @@ const App: React.FC = () => {
       return;
     }
     try {
+      const isAdmin = await adminLicenseService.isCurrentUserAdmin().catch(() => false);
+      if (isAdmin) {
+        setActiveLicenseStatus('Aprovado');
+        return;
+      }
+
       const { data: userLicenses, error: licenseError } = await supabase
         .from('licenses')
         .select('payment_status, valid_until')
@@ -178,9 +185,10 @@ const App: React.FC = () => {
 
               let finalSchedule = draftData || lastSchedule;
               if (finalSchedule) {
-                // Se o servidor indicar que a grade NÃO é licenciada, impede que um rascunho local
+                // Se o servidor indicar que a grade NÃO é licenciada e o usuário não é admin, impede que um rascunho local
                 // reidrate fixedLessons ou force isLicensed como true
-                const isServerLicensed = !!lastSchedule?.isLicensed;
+                const isAdmin = await adminLicenseService.isCurrentUserAdmin().catch(() => false);
+                const isServerLicensed = !!lastSchedule?.isLicensed || isAdmin;
                 if (!isServerLicensed) {
                   finalSchedule = {
                     ...finalSchedule,
