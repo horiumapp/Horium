@@ -66,8 +66,13 @@ const App: React.FC = () => {
     if (!setupData.id || loading || currentView === AppView.PROCESSING || currentView === AppView.LOGIN || !session) return;
 
     // Backup local imediato para não perder dados digitados mesmo com erro no banco
+    // Defesa de paywall: grades sem licença aprovada não persistem a solução (fixedLessons) no navegador
     try {
-      localStorage.setItem(`horium_draft_${setupData.id}`, JSON.stringify(setupData));
+      const isActuallyLicensed = setupData.isLicensed || activeLicenseStatus === 'Aprovado';
+      const draftToSave = isActuallyLicensed
+        ? setupData
+        : { ...setupData, fixedLessons: [] };
+      localStorage.setItem(`horium_draft_${setupData.id}`, JSON.stringify(draftToSave));
     } catch (e) {
       console.warn('Erro ao salvar rascunho local:', e);
     }
@@ -171,8 +176,19 @@ const App: React.FC = () => {
                 console.warn('Erro ao recuperar rascunho local:', e);
               }
 
-              const finalSchedule = draftData || lastSchedule;
+              let finalSchedule = draftData || lastSchedule;
               if (finalSchedule) {
+                // Se o servidor indicar que a grade NÃO é licenciada, impede que um rascunho local
+                // reidrate fixedLessons ou force isLicensed como true
+                const isServerLicensed = !!lastSchedule?.isLicensed;
+                if (!isServerLicensed) {
+                  finalSchedule = {
+                    ...finalSchedule,
+                    isLicensed: false,
+                    licenseStatus: lastSchedule?.licenseStatus || 'Sem Licença',
+                    fixedLessons: []
+                  };
+                }
                 setSetupData(finalSchedule);
                 setView(savedView);
               } else {

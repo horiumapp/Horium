@@ -11,6 +11,7 @@ interface LicenseSelectionProps {
 
 export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
     onSelectPurchase,
+    onSelectBudget,
     onStartTestMode,
     onBack
 }) => {
@@ -184,6 +185,15 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                         <span className="flex-1 text-center">Adquirir Nova Licença</span>
                         <div className="bg-white/20 rounded-full w-8 h-8 flex items-center justify-center group-hover:bg-white/30 transition-colors">
                             <span className="material-symbols-outlined text-sm">play_arrow</span>
+                        </div>
+                    </button>
+                    <button
+                        onClick={onSelectBudget}
+                        className="group flex items-center justify-between bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-600 px-6 py-3 rounded-lg font-bold text-base shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all active:scale-[0.98]"
+                    >
+                        <span className="flex-1 text-center">Gerar Orçamento / Proposta Comercial</span>
+                        <div className="bg-primary/10 rounded-full w-8 h-8 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-sm text-primary">request_quote</span>
                         </div>
                     </button>
                     <button

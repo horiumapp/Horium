@@ -136,8 +136,10 @@ BEGIN
         NEW.id := gen_random_uuid();
     END IF;
 
-    -- Se o payload contiver fixedLessons com itens alocados, salva na tabela protegida schedule_solutions
-    IF NEW.data ? 'fixedLessons' AND jsonb_array_length(COALESCE(NEW.data -> 'fixedLessons', '[]'::jsonb)) > 0 THEN
+    -- Se o payload contiver fixedLessons com array de itens alocados, salva na tabela protegida schedule_solutions
+    IF NEW.data ? 'fixedLessons' 
+       AND jsonb_typeof(NEW.data -> 'fixedLessons') = 'array' 
+       AND jsonb_array_length(NEW.data -> 'fixedLessons') > 0 THEN
         INSERT INTO public.schedule_solutions (schedule_id, user_id, fixed_lessons, updated_at)
         VALUES (NEW.id, NEW.user_id, NEW.data -> 'fixedLessons', timezone('utc', now()))
         ON CONFLICT (schedule_id) DO UPDATE 
@@ -234,6 +236,27 @@ DROP POLICY IF EXISTS "Users can update their own notifications" ON public.notif
 CREATE POLICY "Users can update their own notifications" ON public.notifications
 FOR UPDATE TO authenticated USING (auth.uid() = user_id OR public.is_admin()) WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
+-- Trigger para impedir que usuários comuns alterem o conteúdo das notificações administrativas (apenas is_read pode ser modificado)
+CREATE OR REPLACE FUNCTION public.protect_notification_content()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT public.is_admin() THEN
+        IF NEW.title IS DISTINCT FROM OLD.title OR 
+           NEW.message IS DISTINCT FROM OLD.message OR 
+           NEW.user_id IS DISTINCT FROM OLD.user_id THEN
+            RAISE EXCEPTION 'Apenas o status de leitura da notificação pode ser atualizado.';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_notification_content ON public.notifications;
+CREATE TRIGGER trg_protect_notification_content
+BEFORE UPDATE ON public.notifications
+FOR EACH ROW
+EXECUTE FUNCTION public.protect_notification_content();
+
 -- INSERT restrito: apenas admins e service_role podem criar notificações.
 -- Notificações para usuários comuns são criadas via RPCs SECURITY DEFINER (ex: approve_license_rpc).
 DROP POLICY IF EXISTS "Users can insert notifications" ON public.notifications;
@@ -310,6 +333,34 @@ DROP POLICY IF EXISTS "Users can view their own audit_logs" ON public.audit_logs
 CREATE POLICY "Users can view their own audit_logs" ON public.audit_logs
 FOR SELECT TO authenticated 
 USING (auth.uid() = user_id);
+
+-- Triggers automáticos para auditoria de operações em licenças e horários
+CREATE OR REPLACE FUNCTION public.log_audit_event()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.audit_logs (table_name, record_id, action, old_data, new_data, user_id, created_at)
+    VALUES (
+        TG_TABLE_NAME,
+        COALESCE(NEW.id, OLD.id),
+        TG_OP,
+        CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN to_jsonb(OLD) ELSE NULL END,
+        CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN to_jsonb(NEW) ELSE NULL END,
+        auth.uid(),
+        timezone('utc', now())
+    );
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_audit_licenses ON public.licenses;
+CREATE TRIGGER trg_audit_licenses
+AFTER INSERT OR UPDATE OR DELETE ON public.licenses
+FOR EACH ROW EXECUTE FUNCTION public.log_audit_event();
+
+DROP TRIGGER IF EXISTS trg_audit_schedules ON public.schedules;
+CREATE TRIGGER trg_audit_schedules
+AFTER INSERT OR UPDATE OR DELETE ON public.schedules
+FOR EACH ROW EXECUTE FUNCTION public.log_audit_event();
 
 
 -- 7. FUNÇÕES SEGURAS PARA ADMINISTRAÇÃO E REGRAS DE NEGÓCIO (RPC COM SECURITY DEFINER)
@@ -415,12 +466,6 @@ BEGIN
             is_licensed = true,
             updated_at = timezone('utc', now())
         WHERE id = v_schedule_id;
-    ELSIF v_user_id IS NOT NULL THEN
-        UPDATE public.schedules
-        SET 
-            is_licensed = true,
-            updated_at = timezone('utc', now())
-        WHERE user_id = v_user_id AND deleted_at IS NULL;
     END IF;
 
     -- Cria notificação única para o usuário
@@ -489,15 +534,25 @@ BEGIN
         RAISE EXCEPTION 'Usuário não autenticado.';
     END IF;
 
-    -- Se schedule_id for fornecido, valida propriedade
+    -- Se schedule_id for fornecido, valida propriedade e quantidade mínima de turmas
     IF p_schedule_id IS NOT NULL THEN
-        SELECT user_id INTO v_schedule_owner
-        FROM public.schedules
-        WHERE id = p_schedule_id;
+        DECLARE
+            v_actual_classes_count INTEGER;
+        BEGIN
+            SELECT user_id, jsonb_array_length(COALESCE(data->'classes', '[]'::jsonb))
+            INTO v_schedule_owner, v_actual_classes_count
+            FROM public.schedules
+            WHERE id = p_schedule_id;
 
-        IF v_schedule_owner IS NULL OR v_schedule_owner <> auth.uid() THEN
-            RAISE EXCEPTION 'A grade especificada não pertence ao usuário autenticado.';
-        END IF;
+            IF v_schedule_owner IS NULL OR v_schedule_owner <> auth.uid() THEN
+                RAISE EXCEPTION 'A grade especificada não pertence ao usuário autenticado.';
+            END IF;
+
+            IF v_actual_classes_count > 0 AND p_classes_amount < v_actual_classes_count THEN
+                RAISE EXCEPTION 'A quantidade contratada (% turmas) não pode ser inferior ao total de turmas cadastradas na grade (% turmas).',
+                    p_classes_amount, v_actual_classes_count;
+            END IF;
+        END;
     END IF;
 
     -- Validação da duração e determinação do preço unitário oficial
@@ -577,17 +632,25 @@ BEGIN
         RAISE EXCEPTION 'Acesso negado.';
     END IF;
 
-    -- Validação do Paywall no Servidor
-    IF NOT v_is_licensed AND NOT EXISTS (
-        SELECT 1 FROM public.licenses
-        WHERE (schedule_id = p_schedule_id OR (user_id = v_owner_id AND (schedule_id IS NULL OR schedule_id = p_schedule_id)))
-          AND payment_status = 'Aprovado'
-          AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
-    ) AND NOT public.is_admin() THEN
-        RAISE EXCEPTION 'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.';
+    -- Validação do Paywall no Servidor (Valida estritamente vigência na tabela licenses)
+    IF NOT public.is_admin() THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM public.licenses
+            WHERE (schedule_id = p_schedule_id OR (user_id = v_owner_id AND schedule_id IS NULL))
+              AND payment_status = 'Aprovado'
+              AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
+        ) THEN
+            -- Se a licença expirou ou não existe, garante que is_licensed seja false na tabela schedules
+            IF v_is_licensed THEN
+                UPDATE public.schedules
+                SET is_licensed = false, updated_at = timezone('utc', now())
+                WHERE id = p_schedule_id;
+            END IF;
+            RAISE EXCEPTION 'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.';
+        END IF;
     END IF;
 
-    -- Auto-sincronização caso o horário ainda não estivesse marcado como licenciado
+    -- Auto-sincronização caso a licença esteja ativa mas o campo is_licensed ainda estivesse false
     IF NOT v_is_licensed THEN
         UPDATE public.schedules
         SET is_licensed = true, updated_at = timezone('utc', now())
@@ -643,11 +706,12 @@ USING (
 );
 
 DROP POLICY IF EXISTS "Users and admins can delete receipts" ON storage.objects;
-CREATE POLICY "Users and admins can delete receipts" ON storage.objects
+DROP POLICY IF EXISTS "Admins can delete receipts" ON storage.objects;
+CREATE POLICY "Admins can delete receipts" ON storage.objects
 FOR DELETE TO authenticated 
 USING (
     bucket_id = 'receipts' 
-    AND ((storage.foldername(name))[1] = auth.uid()::text OR public.is_admin())
+    AND public.is_admin()
 );
 
 -- Políticas de Storage para Anexos de Tickets (tickets-attachments)

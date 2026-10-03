@@ -23,14 +23,9 @@ export const generateTimetable = async (
                     if (isResolved) return;
                     isResolved = true;
                     worker.terminate();
-                    console.warn("Web Worker não respondeu a tempo (timeout de 8s). Executando diretamente...");
-                    try {
-                        const fallbackResult = runGeneratorEngine(normalizedData, onProgress);
-                        resolve(fallbackResult);
-                    } catch (fallbackErr) {
-                        reject(fallbackErr);
-                    }
-                }, 8000);
+                    console.warn("Web Worker não respondeu a tempo (timeout de 30s).");
+                    reject(new Error("O tempo limite de processamento de 30 segundos foi excedido. Tente simplificar restrições de professores ou horários fixos."));
+                }, 30000);
 
                 worker.onmessage = (e: MessageEvent) => {
                     const msg = e.data;
@@ -47,13 +42,8 @@ export const generateTimetable = async (
                         isResolved = true;
                         clearTimeout(timeoutId);
                         worker.terminate();
-                        console.warn("Worker retornou erro, executando fallback direto:", msg.error);
-                        try {
-                            const fallbackResult = runGeneratorEngine(normalizedData, onProgress);
-                            resolve(fallbackResult);
-                        } catch (fallbackErr) {
-                            reject(fallbackErr);
-                        }
+                        console.error("Worker retornou erro:", msg.error);
+                        reject(new Error(msg.error || "Erro durante o processamento do horário."));
                     }
                 };
 
@@ -62,13 +52,8 @@ export const generateTimetable = async (
                     isResolved = true;
                     clearTimeout(timeoutId);
                     worker.terminate();
-                    console.warn("Worker error, executando fallback direto:", err);
-                    try {
-                        const fallbackResult = runGeneratorEngine(normalizedData, onProgress);
-                        resolve(fallbackResult);
-                    } catch (fallbackErr) {
-                        reject(fallbackErr);
-                    }
+                    console.error("Worker error:", err);
+                    reject(new Error("Falha no worker de processamento do horário."));
                 };
 
                 worker.postMessage({ setupData: normalizedData });

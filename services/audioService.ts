@@ -124,6 +124,31 @@ class AudioService {
             console.error("Audio playback failed", e);
         }
     }
+
+    // A subtle "pop" sound for deletion or modal dismiss
+    public playPop() {
+        if (this.isMuted) return;
+        try {
+            const ctx = this.getContext();
+            const osc = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(320, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.08);
+
+            gainNode.gain.setValueAtTime(0.08, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+
+            osc.connect(gainNode);
+            gainNode.connect(ctx.destination);
+
+            osc.start();
+            osc.stop(ctx.currentTime + 0.08);
+        } catch (e) {
+            console.error("Audio playback failed", e);
+        }
+    }
 }
 
 export const audio = new AudioService();
