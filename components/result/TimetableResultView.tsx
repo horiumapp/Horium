@@ -24,7 +24,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
     isStandalonePage = false,
 }) => {
     const normalizedData = useMemo(() => ensureScheduleSlots(data), [data]);
-    const isLocked = !normalizedData.isLicensed;
+    const isLocked = !normalizedData.isLicensed && activeLicenseStatus !== 'Aprovado';
     const [viewMode, setViewMode] = useState<ViewMode>('CLASS');
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<{ day: string; slotIndex: number; classId: string; teacherId: string } | null>(null);
