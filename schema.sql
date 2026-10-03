@@ -515,6 +515,40 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
+-- RPC para listagem administrativa de chamados com e-mail do autor (Admin)
+DROP FUNCTION IF EXISTS public.get_admin_tickets();
+CREATE OR REPLACE FUNCTION public.get_admin_tickets()
+RETURNS TABLE (
+    id UUID,
+    user_id UUID,
+    user_email TEXT,
+    subject TEXT,
+    description TEXT,
+    image_url TEXT,
+    status TEXT,
+    created_at TIMESTAMP WITH TIME ZONE
+) AS $$
+BEGIN
+    IF NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Acesso negado. Apenas administradores podem acessar esta função.';
+    END IF;
+
+    RETURN QUERY
+    SELECT 
+        t.id,
+        t.user_id,
+        u.email::TEXT AS user_email,
+        t.subject,
+        t.description,
+        t.image_url,
+        t.status,
+        t.created_at
+    FROM public.tickets t
+    LEFT JOIN auth.users u ON u.id = t.user_id
+    ORDER BY t.created_at DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
 -- RPC para solicitar compra de licença com cálculo seguro de preço no servidor (Prevenção de BOLA / Tampering)
 DROP FUNCTION IF EXISTS public.request_license_order(UUID, TEXT, INTEGER, TEXT);
 CREATE OR REPLACE FUNCTION public.request_license_order(

@@ -183,11 +183,16 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                 const newFixed = (normalizedData.fixedLessons || []).map(fl => {
                     if (fl.day === selectedSlot.day && fl.slotIndex === selectedSlot.slotIndex &&
                         fl.classId === selectedSlot.classId && fl.teacherId === selectedSlot.teacherId) {
-                        return { ...fl, day, slotIndex };
+                        return { ...fl, day, slotIndex, isManual: true };
                     }
                     return fl;
                 });
-                setData(prev => ({ ...prev, fixedLessons: newFixed }));
+                const manualLessons = newFixed.filter(fl => fl.isManual);
+                setData(prev => ({
+                    ...prev,
+                    fixedLessons: newFixed,
+                    pinnedLessons: manualLessons
+                }));
                 setSelectedSlot(null);
             } else {
                 // Se clicar em outra aula, troca a seleção
@@ -516,7 +521,12 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                                         >
                                                             {lessonItem ? (
                                                                 <div className="flex flex-col items-center justify-center leading-tight">
-                                                                    <span className="font-black text-xs text-gray-900 dark:text-gray-100">{subject?.shortName || subject?.name}</span>
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        <span className="font-black text-xs text-gray-900 dark:text-gray-100">{subject?.shortName || subject?.name}</span>
+                                                                        {lessonItem.isManual && (
+                                                                            <span className="material-symbols-outlined text-[11px] text-amber-600 dark:text-amber-400" title="Aula fixada manualmente">push_pin</span>
+                                                                        )}
+                                                                    </div>
                                                                     <span className="text-[10px] text-gray-500 font-medium">{teacher?.name}</span>
                                                                 </div>
                                                             ) : (
@@ -569,7 +579,12 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                                         >
                                                             {lessonItem ? (
                                                                 <div className="flex flex-col items-center justify-center leading-tight">
-                                                                    <span className="font-black text-xs text-gray-900 dark:text-gray-100">{subject?.shortName || subject?.name}</span>
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        <span className="font-black text-xs text-gray-900 dark:text-gray-100">{subject?.shortName || subject?.name}</span>
+                                                                        {lessonItem.isManual && (
+                                                                            <span className="material-symbols-outlined text-[11px] text-amber-600 dark:text-amber-400" title="Aula fixada manualmente">push_pin</span>
+                                                                        )}
+                                                                    </div>
                                                                     {otherEntity && <span className="text-[10px] text-gray-500 font-medium">({otherEntity})</span>}
                                                                 </div>
                                                             ) : (

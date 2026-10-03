@@ -299,6 +299,48 @@ export function runGeneratorEngine(
 
             let left = Math.max(0, asg.lessons - alreadyFixed);
             const rule = asg.rule;
+            const gLower = asg.grouping.toLowerCase();
+
+            // 3.1 Particionamento explícito pedagógico solicitado na configuração (ex: 2-1-1, 3-2, 2-2-1)
+            let explicitPartition: number[] | null = null;
+            if (gLower.includes('2-1-1-1')) {
+                explicitPartition = [2, 1, 1, 1];
+            } else if (gLower.includes('2-1-1')) {
+                explicitPartition = [2, 1, 1];
+            } else if (gLower.includes('2-2-1')) {
+                explicitPartition = [2, 2, 1];
+            } else if (gLower.includes('3-2')) {
+                explicitPartition = [3, 2];
+            } else if (gLower.includes('2-1')) {
+                explicitPartition = [2, 1];
+            } else if (gLower.includes('3-1')) {
+                explicitPartition = [3, 1];
+            }
+
+            if (explicitPartition && rule.allowConsecutive) {
+                const isConsecutiveBlock = (size: number) => {
+                    if (size === 1) return false;
+                    if (gLower.includes('intercalad') || gLower.includes('livre')) return false;
+                    return true;
+                };
+
+                let remainingLeft = left;
+                for (const blockSize of explicitPartition) {
+                    if (remainingLeft >= blockSize) {
+                        blocks.push({
+                            assignment: asg,
+                            size: blockSize,
+                            consecutive: isConsecutiveBlock(blockSize)
+                        });
+                        remainingLeft -= blockSize;
+                    }
+                }
+                while (remainingLeft > 0) {
+                    blocks.push({ assignment: asg, size: 1, consecutive: false });
+                    remainingLeft--;
+                }
+                return;
+            }
 
             // Se a regra não permite aulas seguidas (ex: intercaladas ou no máximo 1 por dia)
             if (!rule.allowConsecutive || rule.maxConsecutive === 1) {
@@ -310,7 +352,7 @@ export function runGeneratorEngine(
             }
 
             // Se a regra permite triplas (ex: 3-2 seguidas ou aulas triplas)
-            if (rule.maxConsecutive >= 3 && (asg.grouping.toLowerCase().includes('tripla') || asg.grouping.toLowerCase().includes('3-2') || asg.grouping.toLowerCase().includes('3 aulas por dia seguidas') || asg.grouping.toLowerCase().includes('3 aulas seguidas'))) {
+            if (rule.maxConsecutive >= 3 && (gLower.includes('tripla') || gLower.includes('3-2') || gLower.includes('3 aulas por dia seguidas') || gLower.includes('3 aulas seguidas'))) {
                 if (left >= 3) {
                     blocks.push({ assignment: asg, size: 3, consecutive: true });
                     left -= 3;
@@ -318,7 +360,7 @@ export function runGeneratorEngine(
             }
 
             // Se a regra permite quádruplas
-            if (rule.maxConsecutive >= 4 && (asg.grouping.toLowerCase().includes('4 aulas seguidas') || asg.grouping.toLowerCase().includes('4 aulas no mesmo dia'))) {
+            if (rule.maxConsecutive >= 4 && (gLower.includes('4 aulas seguidas') || gLower.includes('4 aulas no mesmo dia'))) {
                 if (left >= 4) {
                     blocks.push({ assignment: asg, size: 4, consecutive: true });
                     left -= 4;
