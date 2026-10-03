@@ -24,9 +24,8 @@ const PlansPage: React.FC<PlansPageProps> = ({
   const [step, setStep] = useState<'SELECTION' | 'SUMMARY'>('SELECTION');
   const [numClasses, setNumClasses] = useState(initialClasses);
   const [duration, setDuration] = useState<PlanDuration>('06 meses');
-  const [paymentMethod, setPaymentMethod] = useState<'CARD' | 'PIX' | 'BOLETO'>('CARD');
   const [showPriceTable, setShowPriceTable] = useState(false);
-  const [showPixQR, setShowPixQR] = useState(false);
+  const [showPixQR, setShowPixQR] = useState(true);
 
   // Pix specific states added from LicensePurchase
   const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutes
@@ -75,9 +74,8 @@ const PlansPage: React.FC<PlansPageProps> = ({
     setIsExpired(false);
   };
 
-  const handleChooseOtherMethod = () => {
-    setShowPixQR(false);
-    setPaymentMethod('CARD');
+  const handleBackToSelection = () => {
+    setStep('SELECTION');
     setTimeLeft(15 * 60);
     setIsExpired(false);
     setPaymentStatus('pending');
@@ -404,10 +402,10 @@ const PlansPage: React.FC<PlansPageProps> = ({
               <div className="w-full pt-4 mt-2">
                 <Button
                   variant="outline"
-                  onClick={handleChooseOtherMethod}
+                  onClick={handleBackToSelection}
                   className="w-full py-3 border-2 border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 rounded-[14px] font-black text-[10px] uppercase tracking-widest text-gray-600 dark:text-gray-400 transition-all h-auto"
                 >
-                  Escolher outro método
+                  Alterar Turmas ou Plano
                 </Button>
               </div>
             </div>
@@ -421,7 +419,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
               <Button onClick={handleGenerateNewPix} className="w-full h-12 shadow-md">
                 Gerar Novo Código
               </Button>
-              <Button variant="ghost" onClick={handleChooseOtherMethod} className="w-full mt-2 text-xs text-gray-500">
+              <Button variant="ghost" onClick={handleBackToSelection} className="w-full mt-2 text-xs text-gray-500">
                 Voltar
               </Button>
             </div>
@@ -470,61 +468,15 @@ const PlansPage: React.FC<PlansPageProps> = ({
 
         {/* Lado Direito: Pagamento */}
         <div className="flex-1 p-8 md:p-12 bg-gray-50/30 dark:bg-gray-900/10 flex flex-col overflow-y-auto">
-          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight mb-8 shrink-0">Método de Pagamento</h2>
+          <div className="flex items-center justify-between mb-8 shrink-0">
+            <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight">Método de Pagamento</h2>
+            <span className="text-[10px] bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light font-black px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-primary animate-pulse"></span>
+              PIX Oficial
+            </span>
+          </div>
 
-          {!showPixQR ? (
-            <div className="flex flex-col h-full">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
-                <button
-                  onClick={() => setPaymentMethod('CARD')}
-                  className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 gap-3 ${paymentMethod === 'CARD'
-                    ? 'border-primary bg-white dark:bg-gray-800 shadow-xl shadow-primary/10 scale-105'
-                    : 'border-transparent bg-white dark:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700'}`}
-                >
-                  <span className={`material-symbols-outlined text-[32px] ${paymentMethod === 'CARD' ? 'text-primary' : 'text-gray-400'}`}>credit_card</span>
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${paymentMethod === 'CARD' ? 'text-primary' : 'text-gray-500'}`}>Cartão de Crédito</span>
-                </button>
-
-                <button
-                  onClick={() => setPaymentMethod('PIX')}
-                  className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 gap-3 ${paymentMethod === 'PIX'
-                    ? 'border-primary bg-white dark:bg-gray-800 shadow-xl shadow-primary/10 scale-105'
-                    : 'border-transparent bg-white dark:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700'}`}
-                >
-                  <div className={`text-xl flex items-center justify-center font-black ${paymentMethod === 'PIX' ? 'text-primary' : 'text-gray-400'}`}>
-                    PIX
-                  </div>
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${paymentMethod === 'PIX' ? 'text-primary' : 'text-gray-500'}`}>PIX</span>
-                </button>
-
-                <button
-                  onClick={() => setPaymentMethod('BOLETO')}
-                  className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 gap-3 sm:col-span-2 ${paymentMethod === 'BOLETO'
-                    ? 'border-primary bg-white dark:bg-gray-800 shadow-xl shadow-primary/10'
-                    : 'border-transparent bg-white dark:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-700'}`}
-                >
-                  <span className={`material-symbols-outlined text-[32px] ${paymentMethod === 'BOLETO' ? 'text-primary' : 'text-gray-400'}`}>barcode_scanner</span>
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${paymentMethod === 'BOLETO' ? 'text-primary' : 'text-gray-500'}`}>Boleto Bancário</span>
-                </button>
-              </div>
-
-              <button
-                onClick={() => {
-                  if (paymentMethod === 'PIX') {
-                    setShowPixQR(true);
-                  } else {
-                    alert('Método em desenvolvimento');
-                  }
-                }}
-                className="w-full py-6 mt-auto bg-primary hover:bg-primary/90 text-white rounded-[24px] font-black uppercase tracking-widest text-sm shadow-2xl shadow-primary/30 transition-all active:scale-95 flex items-center justify-center gap-3"
-              >
-                Finalizar Pagamento
-                <span className="material-symbols-outlined">payments</span>
-              </button>
-            </div>
-          ) : (
-            renderPaymentContent()
-          )}
+          {renderPaymentContent()}
         </div>
       </div>
     );

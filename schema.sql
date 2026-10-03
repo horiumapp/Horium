@@ -282,8 +282,13 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     old_data JSONB,
     new_data JSONB,
     user_id UUID,
+    client_ip TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
 );
+
+-- Garante retrocompatibilidade se a tabela já existir sem a coluna client_ip
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS client_ip TEXT;
+
 
 -- Habilitar RLS para audit_logs
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;

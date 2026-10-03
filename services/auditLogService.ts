@@ -8,6 +8,7 @@ export interface AuditLogEntry {
     oldData?: any;
     newData?: any;
     userId?: string;
+    clientIp?: string;
     createdAt: string;
 }
 
@@ -39,6 +40,7 @@ export const auditLogService = {
             oldData: item.old_data,
             newData: item.new_data,
             userId: item.user_id,
+            clientIp: item.client_ip,
             createdAt: item.created_at
         }));
     }

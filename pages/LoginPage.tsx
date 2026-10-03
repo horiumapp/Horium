@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { authService } from '../services/authService';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 import { SignUpForm } from '../components/SignUpForm';
 import { LOGO_SVG } from '../constants';
 import { EmailVerificationForm } from '../components/EmailVerificationForm';
@@ -20,11 +21,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isSupabaseConfigured) {
+      setError('O Supabase ainda não foi configurado. Adicione suas credenciais no arquivo .env.local para continuar.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       await authService.signIn(email, password);
       onLogin();
+
     } catch (err: any) {
       console.error('Login error:', err);
       // If email not confirmed, we could automatically show verification
@@ -147,6 +153,24 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+            {!isSupabaseConfigured && (
+              <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-xl shrink-0 mt-0.5">warning</span>
+                  <div className="space-y-1.5 w-full">
+                    <p className="font-bold text-amber-900 dark:text-amber-100 text-sm">Configuração do Supabase pendente</p>
+                    <p className="leading-relaxed">
+                      Para autenticação e salvamento no banco de dados, preencha o arquivo <code className="font-mono bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded text-amber-900 dark:text-amber-200">.env.local</code> na raiz do projeto:
+                    </p>
+                    <div className="font-mono text-[11px] bg-white/80 dark:bg-black/50 p-2.5 rounded border border-amber-200 dark:border-amber-800/60 select-all leading-snug">
+                      VITE_SUPABASE_URL=https://seu-projeto.supabase.co<br />
+                      VITE_SUPABASE_ANON_KEY=sua-chave-anon
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className={`mb-6 p-4 rounded-lg text-sm font-medium border ${error.includes('sucesso') ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
                 {error}
