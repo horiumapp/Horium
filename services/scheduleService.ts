@@ -144,6 +144,8 @@ export const scheduleService = {
 
         const normalized = ensureScheduleSlots(scheduleData);
 
+        const { id, ...rest } = normalized;
+
         let fixedLessonsToSave = rest.fixedLessons;
         if (id && id.length > 30) { // UUID check
             if (!fixedLessonsToSave || fixedLessonsToSave.length === 0) {

@@ -330,5 +330,45 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         expect(schedules[0].licenseStatus).toBe('Aguardando');
         expect(schedules[0].fixedLessons).toEqual([]);
     });
+
+    it('getSchedules: deve liberar fixedLessons quando o usuário for administrador', async () => {
+        mockRpc.mockImplementation((rpcName: string) => {
+            if (rpcName === 'is_current_user_admin') {
+                return Promise.resolve({ data: true, error: null });
+            }
+            return Promise.resolve({ data: null, error: null });
+        });
+
+        const rawSchedule = {
+            id: 'admin-sched-id',
+            user_id: 'test-user-id',
+            is_licensed: false,
+            created_at: '2026-09-01T12:00:00Z',
+            data: {
+                institution: { name: 'Escola Admin' },
+                fixedLessons: [{ classId: 'c1', subjectId: 's1', teacherId: 't1', day: 'Segunda', slotIndex: 0 }]
+            }
+        };
+
+        const mockSchedulesChain = {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            is: vi.fn().mockReturnThis(),
+            order: vi.fn().mockResolvedValue({ data: [rawSchedule], error: null })
+        };
+
+        mockFrom.mockImplementation((table: string) => {
+            if (table === 'schedules') return mockSchedulesChain;
+            if (table === 'licenses') return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ data: [], error: null }) };
+            return {};
+        });
+
+        const schedules = await scheduleService.getSchedules();
+
+        expect(schedules.length).toBe(1);
+        expect(schedules[0].isLicensed).toBe(true);
+        expect(schedules[0].licenseStatus).toBe('Aprovado');
+        expect(schedules[0].fixedLessons).toHaveLength(1);
+    });
 });
 
