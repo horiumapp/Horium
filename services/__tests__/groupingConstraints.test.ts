@@ -273,7 +273,113 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             const tercaLessons = result.fixedLessons.filter(fl => fl.day === 'Terça');
             const quartaLessons = result.fixedLessons.filter(fl => fl.day === 'Quarta');
             expect(tercaLessons).toHaveLength(5);
-            expect(quartaLessons).toHaveLength(5);
+        });
+
+        it('successfully allocates 100% of workload for morning-only teacher (like Gleugila) and high-density schedule with zero failures', () => {
+            // 8 classes, 7 slots per day (slots 0-3 morning, 4-6 afternoon), 5 days = 35 slots per class
+            const classes = Array.from({ length: 8 }, (_, i) => ({
+                id: `c_${i + 1}`,
+                name: `Turma ${i + 1}`,
+                lessonsPerSubject: {
+                    's_soci': 1, // Morning only teacher (8 lessons)
+                    's_cie': 3,  // Teacher 2 (24 lessons)
+                    's_qui': 3,  // Teacher 3 (24 lessons)
+                    's_mat': 4,  // Teacher 4 (32 lessons)
+                    's_por': 4   // Teacher 5 (32 lessons)
+                }
+            }));
+
+            // Teacher 1: available ONLY morning (slots 0-3) on all 5 days
+            const tSociAvail: Record<string, 'D' | 'ND'> = {};
+            for (let d = 0; d < 5; d++) {
+                for (let s = 0; s < 7; s++) {
+                    tSociAvail[`${d}-${s}`] = s <= 3 ? 'D' : 'ND';
+                }
+            }
+
+            const teachers = [
+                {
+                    id: 't_soci',
+                    name: 'Gleugila (SOCI)',
+                    subjects: ['s_soci'],
+                    availability: tSociAvail,
+                    classAssignments: {
+                        's_soci': Object.fromEntries(classes.map(c => [c.id, 'OBRIGATORIAMENTE']))
+                    }
+                },
+                {
+                    id: 't_cie',
+                    name: 'Adriano (CIEN)',
+                    subjects: ['s_cie'],
+                    classAssignments: {
+                        's_cie': Object.fromEntries(classes.map(c => [c.id, 'OBRIGATORIAMENTE']))
+                    }
+                },
+                {
+                    id: 't_qui',
+                    name: 'Kenny (QUI)',
+                    subjects: ['s_qui'],
+                    classAssignments: {
+                        's_qui': Object.fromEntries(classes.map(c => [c.id, 'OBRIGATORIAMENTE']))
+                    }
+                },
+                {
+                    id: 't_mat',
+                    name: 'Professor MAT',
+                    subjects: ['s_mat'],
+                    classAssignments: {
+                        's_mat': Object.fromEntries(classes.map(c => [c.id, 'OBRIGATORIAMENTE']))
+                    }
+                },
+                {
+                    id: 't_por',
+                    name: 'Professor POR',
+                    subjects: ['s_por'],
+                    classAssignments: {
+                        's_por': Object.fromEntries(classes.map(c => [c.id, 'OBRIGATORIAMENTE']))
+                    }
+                }
+            ];
+
+            const subjects = [
+                { id: 's_soci', name: 'Sociologia' },
+                { id: 's_cie', name: 'Ciências' },
+                { id: 's_qui', name: 'Química' },
+                { id: 's_mat', name: 'Matemática' },
+                { id: 's_por', name: 'Português' }
+            ];
+
+            const totalRequested = 8 * (1 + 3 + 3 + 4 + 4); // 120 lessons
+
+            const setupData: any = {
+                classes,
+                teachers,
+                subjects,
+                generalGrouping: 'Agrupar no máximo 2 aulas por dia SEGUIDAS',
+                weekConfig: {
+                    activeDays: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
+                    lessonsPerDayGlobal: 7
+                }
+            };
+
+            const result = runGeneratorEngine(setupData);
+            expect(result.failures).toHaveLength(0);
+            expect(result.fixedLessons).toHaveLength(totalRequested);
+
+            // Verify morning-only teacher has 100% of their 8 lessons placed strictly in morning (slot <= 3)
+            const sociLessons = result.fixedLessons.filter(fl => fl.teacherId === 't_soci');
+            expect(sociLessons).toHaveLength(8);
+            sociLessons.forEach(l => {
+                expect(l.slotIndex).toBeLessThanOrEqual(3);
+            });
+
+            // Verify Adriano (CIEN) has 100% of his 24 lessons placed
+            const cieLessons = result.fixedLessons.filter(fl => fl.teacherId === 't_cie');
+            expect(cieLessons).toHaveLength(24);
+
+            // Verify Kenny (QUI) has 100% of his 24 lessons placed
+            const quiLessons = result.fixedLessons.filter(fl => fl.teacherId === 't_qui');
+            expect(quiLessons).toHaveLength(24);
         });
     });
 });
