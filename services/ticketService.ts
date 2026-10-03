@@ -4,6 +4,7 @@ export interface TicketData {
     id?: string;
     createdAt?: string;
     userId?: string;
+    userEmail?: string;
     subject: string;
     description: string;
     imageUrl?: string;
@@ -103,5 +104,92 @@ export const ticketService = {
         }
 
         return data?.signedUrl || '';
+    },
+
+    /**
+     * Busca todos os chamados com e-mail do solicitante para a Área Administrativa
+     */
+    async getAllTickets(): Promise<TicketData[]> {
+        // Tenta buscar via RPC segura get_admin_tickets
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_admin_tickets');
+
+        if (!rpcError && rpcData) {
+            return rpcData.map((d: any) => ({
+                id: d.id,
+                createdAt: d.created_at,
+                userId: d.user_id,
+                userEmail: d.user_email || 'Email não disponível',
+                subject: d.subject,
+                description: d.description,
+                imageUrl: d.image_url,
+                status: d.status
+            }));
+        }
+
+        // Fallback para select direto na tabela tickets
+        const { data, error } = await supabase
+            .from('tickets')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching tickets:', error);
+            throw error;
+        }
+
+        return (data || []).map((d: any) => ({
+            id: d.id,
+            createdAt: d.created_at,
+            userId: d.user_id,
+            userEmail: 'Email não disponível',
+            subject: d.subject,
+            description: d.description,
+            imageUrl: d.image_url,
+            status: d.status
+        }));
+    },
+
+    /**
+     * Busca chamados do usuário logado
+     */
+    async getUserTickets(): Promise<TicketData[]> {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return [];
+
+        const { data, error } = await supabase
+            .from('tickets')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching user tickets:', error);
+            throw error;
+        }
+
+        return (data || []).map((d: any) => ({
+            id: d.id,
+            createdAt: d.created_at,
+            userId: d.user_id,
+            subject: d.subject,
+            description: d.description,
+            imageUrl: d.image_url,
+            status: d.status
+        }));
+    },
+
+    /**
+     * Atualiza o status do chamado (Apenas Admin)
+     */
+    async updateTicketStatus(ticketId: string, status: 'aberto' | 'em_andamento' | 'fechado'): Promise<void> {
+        const { error } = await supabase
+            .from('tickets')
+            .update({ status })
+            .eq('id', ticketId);
+
+        if (error) {
+            console.error('Error updating ticket status:', error);
+            throw error;
+        }
     }
 };
