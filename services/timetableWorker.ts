@@ -766,7 +766,7 @@ export function runGeneratorEngine(
             compact();
         }
 
-        return { fixedLessons: currentFixed, failures, score: calculateScore(currentFixed, failures) };, failures, score: calculateScore(currentFixed, failures) };
+        return { fixedLessons: currentFixed, failures, score: calculateScore(currentFixed, failures) };
     };
 
     let bestResult = { fixedLessons: [] as FixedLesson[], failures: [] as SchedulingFailure[], score: -Infinity };
