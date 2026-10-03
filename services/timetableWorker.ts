@@ -459,7 +459,7 @@ export function runGeneratorEngine(
 
         const shuffle = <T>(a: T[]) => [...a].sort(() => Math.random() - 0.5);
 
-        // Ordenação Heurística
+        // Ordenação Heurística com perturbação estocástica
         blocks.sort((a, b) => {
             const keyA = `${a.assignment.teacherId}|${a.assignment.classId}|${a.assignment.subjectId}`;
             const keyB = `${b.assignment.teacherId}|${b.assignment.classId}|${b.assignment.subjectId}`;
@@ -469,11 +469,12 @@ export function runGeneratorEngine(
 
             if (b.size !== a.size) return b.size - a.size;
 
-            const flexA = teacherFlexibility[a.assignment.teacherId] || 999;
-            const flexB = teacherFlexibility[b.assignment.teacherId] || 999;
-            if (Math.abs(flexA - flexB) > 0.01) return flexA - flexB;
+            const flexA = (teacherFlexibility[a.assignment.teacherId] || 999) + (Math.random() - 0.5) * 0.05;
+            const flexB = (teacherFlexibility[b.assignment.teacherId] || 999) + (Math.random() - 0.5) * 0.05;
+            if (Math.abs(flexA - flexB) > 0.02) return flexA - flexB;
 
-            return 0;
+            // Explora diferentes permutações de blocos empatados a cada tentativa
+            return Math.random() - 0.5;
         });
 
         // Validação de posicionamento estrita
@@ -576,7 +577,8 @@ export function runGeneratorEngine(
                     const score1 = (isAdjacentT1 ? 2 : 0) + (isAdjacentC1 ? 1 : 0);
                     const score2 = (isAdjacentT2 ? 2 : 0) + (isAdjacentC2 ? 1 : 0);
 
-                    return score2 - score1;
+                    if (score1 !== score2) return score2 - score1;
+                    return Math.random() - 0.5;
                 });
 
                 let swapAttempts = 0;
