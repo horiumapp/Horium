@@ -134,9 +134,10 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
                                 </div>
                             </td>
                         </tr>
-                    ))}
+                    );
+                })}
                 </tbody>
             </table>
-        </div >
+        </div>
     );
 };
