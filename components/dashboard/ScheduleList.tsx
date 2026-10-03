@@ -113,12 +113,12 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
                                         <span className="text-[9px] font-bold uppercase text-gray-600">Duplicar</span>
                                     </button>
                                     <button
-                                        onClick={() => schedule.isLicensed && onViewSolutions(schedule)}
-                                        className={`flex flex-col items-center gap-1 group ${!schedule.isLicensed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title={!schedule.isLicensed ? 'Liberação pendente para ver soluções' : ''}
+                                        onClick={() => isLicensed && onViewSolutions(schedule)}
+                                        className={`flex flex-col items-center gap-1 group ${!isLicensed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title={!isLicensed ? 'Liberação pendente para ver soluções' : ''}
                                     >
-                                        <div className={`size-12 bg-white border border-gray-300 rounded flex items-center justify-center ${schedule.isLicensed ? 'group-hover:bg-purple-50' : ''} transition-colors`}>
-                                            <span className={`material-symbols-outlined text-2xl ${schedule.isLicensed ? 'text-purple-400' : 'text-gray-400'}`}>grid_view</span>
+                                        <div className={`size-12 bg-white border border-gray-300 rounded flex items-center justify-center ${isLicensed ? 'group-hover:bg-purple-50' : ''} transition-colors`}>
+                                            <span className={`material-symbols-outlined text-2xl ${isLicensed ? 'text-purple-400' : 'text-gray-400'}`}>grid_view</span>
                                         </div>
                                         <span className="text-[9px] font-bold uppercase text-gray-600 text-center leading-none">Ver<br />Soluções</span>
                                     </button>
