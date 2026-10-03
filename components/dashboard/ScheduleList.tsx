@@ -30,46 +30,37 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {schedules.map((schedule) => (
-                        <tr key={schedule.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                            <td className="px-4 py-4 align-top text-center">
-                                {(() => {
-                                    const status = schedule.licenseStatus || 'Sem Licença';
-                                    const isApproved = schedule.isLicensed;
-                                    const isPending = status === 'Aguardando' || status === 'under_review';
+                    {schedules.map((schedule) => {
+                        const isLicensed = schedule.isLicensed || activeLicenseStatus === 'Aprovado';
+                        const status = schedule.licenseStatus || activeLicenseStatus || 'Sem Licença';
+                        const isPending = !isLicensed && (status === 'Aguardando' || status === 'under_review' || activeLicenseStatus === 'Aguardando' || activeLicenseStatus === 'under_review');
 
-                                    if (isApproved) {
-                                        return (
-                                            <div className="flex flex-col items-center gap-1">
-                                                <div className="size-10 bg-green-500/10 rounded-xl flex items-center justify-center">
-                                                    <span className="material-symbols-outlined text-green-500 text-xl font-bold">check_circle</span>
-                                                </div>
-                                                <span className="text-[10px] font-black text-green-600 uppercase tracking-tighter">Liberado</span>
+                        return (
+                            <tr key={schedule.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                <td className="px-4 py-4 align-top text-center">
+                                    {isLicensed ? (
+                                        <div className="flex flex-col items-center gap-1">
+                                            <div className="size-10 bg-green-500/10 rounded-xl flex items-center justify-center">
+                                                <span className="material-symbols-outlined text-green-500 text-xl font-bold">check_circle</span>
                                             </div>
-                                        );
-                                    }
-
-                                    if (isPending) {
-                                        return (
-                                            <div className="flex flex-col items-center gap-1">
-                                                <div className="size-10 bg-amber-500/10 rounded-xl flex items-center justify-center animate-pulse">
-                                                    <span className="material-symbols-outlined text-amber-500 text-xl font-bold">hourglass_empty</span>
-                                                </div>
-                                                <span className="text-[9px] font-black text-amber-600 uppercase tracking-tight leading-none text-center">Aguardando<br />Liberação</span>
+                                            <span className="text-[10px] font-black text-green-600 uppercase tracking-tighter">Liberado</span>
+                                        </div>
+                                    ) : isPending ? (
+                                        <div className="flex flex-col items-center gap-1">
+                                            <div className="size-10 bg-amber-500/10 rounded-xl flex items-center justify-center animate-pulse">
+                                                <span className="material-symbols-outlined text-amber-500 text-xl font-bold">hourglass_empty</span>
                                             </div>
-                                        );
-                                    }
-
-                                    return (
+                                            <span className="text-[9px] font-black text-amber-600 uppercase tracking-tight leading-none text-center">Aguardando<br />Liberação</span>
+                                        </div>
+                                    ) : (
                                         <div className="flex flex-col items-center gap-1">
                                             <div className="size-10 bg-gray-100 dark:bg-gray-800 text-gray-400 rounded-xl flex items-center justify-center">
                                                 <span className="material-symbols-outlined text-2xl font-bold">lock</span>
                                             </div>
                                             <span className="text-[10px] text-gray-400 uppercase font-black text-center leading-tight">Sem<br />Licença</span>
                                         </div>
-                                    );
-                                })()}
-                            </td>
+                                    )}
+                                </td>
                             <td className="px-4 py-4 align-top">
                                 <div className="flex flex-col">
                                     <button

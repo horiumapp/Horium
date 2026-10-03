@@ -88,7 +88,7 @@ export const scheduleService = {
         // Fetch licenses for this user
         const { data: licensesData, error: licensesError } = await supabase
             .from('licenses')
-            .select('schedule_id, payment_status, valid_until')
+            .select('schedule_id, payment_status, valid_until, classes_amount, created_at')
             .eq('user_id', user.id);
 
         if (licensesError) {
@@ -97,15 +97,27 @@ export const scheduleService = {
 
         const todayStr = new Date().toISOString().split('T')[0];
 
+        // Licenças ativas devidamente validadas e aprovadas pelo administrador
+        const activeApprovedUserLicenses = (licensesData || []).filter(l => {
+            const isNotExpired = !l.valid_until || l.valid_until >= todayStr;
+            return l.payment_status === 'Aprovado' && isNotExpired;
+        });
+
+        // Licenças pendentes aguardando validação do administrador
+        const pendingUserLicenses = (licensesData || []).filter(l => {
+            return l.payment_status === 'Aguardando' || l.payment_status === 'under_review';
+        });
+
         return (schedulesData || []).map(item => {
-            const scheduleLicense = (licensesData || []).find(l => l.schedule_id === item.id);
+            // 1. Licença vinculada diretamente por schedule_id
+            const specificLicense = (licensesData || []).find(l => l.schedule_id === item.id);
 
             let isApproved = false;
             let licenseStatus = 'Sem Licença';
 
-            if (scheduleLicense) {
-                const isNotExpired = !scheduleLicense.valid_until || scheduleLicense.valid_until >= todayStr;
-                if (scheduleLicense.payment_status === 'Aprovado') {
+            if (specificLicense) {
+                const isNotExpired = !specificLicense.valid_until || specificLicense.valid_until >= todayStr;
+                if (specificLicense.payment_status === 'Aprovado') {
                     if (isNotExpired) {
                         isApproved = true;
                         licenseStatus = 'Aprovado';
@@ -114,11 +126,19 @@ export const scheduleService = {
                         licenseStatus = 'Expirada';
                     }
                 } else {
-                    licenseStatus = scheduleLicense.payment_status || 'Sem Licença';
+                    licenseStatus = specificLicense.payment_status || 'Sem Licença';
                 }
             } else if (item.is_licensed === true) {
                 isApproved = true;
                 licenseStatus = 'Aprovado';
+            } else if (activeApprovedUserLicenses.length > 0) {
+                // Administrador já verificou e aprovou a licença do usuário
+                isApproved = true;
+                licenseStatus = 'Aprovado';
+            } else if (pendingUserLicenses.length > 0) {
+                // Pagamento enviado, mas ainda aguardando validação pelo administrador
+                isApproved = false;
+                licenseStatus = 'Aguardando';
             }
 
             const normalizedData = ensureScheduleSlots(item.data || {});
