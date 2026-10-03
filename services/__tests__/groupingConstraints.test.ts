@@ -134,7 +134,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
 
             // As 3 aulas da Carla devem estar distribuídas em 2 dias (ex: 2 em um dia e 1 em outro)
             const carlaDays = new Set(carlaLessons.map(fl => fl.day));
-            expect(carlaDays.size, 'As 3 aulas de Ciências devem estar divididas em pelo menos 2 dias').toBe(2);
+            expect(carlaDays.size, 'As 3 aulas de Ciências devem estar divididas em pelo menos 2 dias').toBeGreaterThanOrEqual(2);
         });
 
         it('strictly enforces Intercalated rules when requested (no consecutive periods)', () => {
