@@ -13,6 +13,20 @@ CREATE TABLE IF NOT EXISTS public.admin_users (
 
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 
+-- 1.1 TABELA DE COMPATIBILIDADE DE PERFIS (PROFILES)
+-- Garante compatibilidade caso triggers ou políticas antigas busquem public.profiles
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT,
+    role TEXT DEFAULT 'user',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
+);
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public profiles read" ON public.profiles;
+CREATE POLICY "Public profiles read" ON public.profiles FOR SELECT TO authenticated USING (true);
+
 -- 2. FUNÇÃO AUXILIAR DE SEGURANÇA (ADMIN) DINÂMICA E PROTEGIDA
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
@@ -546,6 +560,28 @@ BEGIN
     FROM public.tickets t
     LEFT JOIN auth.users u ON u.id = t.user_id
     ORDER BY t.created_at DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+-- RPC para atualização de status de chamado pelo administrador
+DROP FUNCTION IF EXISTS public.update_ticket_status_rpc(UUID, TEXT);
+CREATE OR REPLACE FUNCTION public.update_ticket_status_rpc(
+    p_ticket_id UUID,
+    p_status TEXT
+)
+RETURNS VOID AS $$
+BEGIN
+    IF NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Acesso negado. Apenas administradores podem atualizar chamados.';
+    END IF;
+
+    IF p_status NOT IN ('aberto', 'em_andamento', 'fechado') THEN
+        RAISE EXCEPTION 'Status inválido. Deve ser aberto, em_andamento ou fechado.';
+    END IF;
+
+    UPDATE public.tickets
+    SET status = p_status
+    WHERE id = p_ticket_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 

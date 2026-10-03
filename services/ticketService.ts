@@ -182,6 +182,17 @@ export const ticketService = {
      * Atualiza o status do chamado (Apenas Admin)
      */
     async updateTicketStatus(ticketId: string, status: 'aberto' | 'em_andamento' | 'fechado'): Promise<void> {
+        // Tenta primeiro via RPC dedicada (Security Definer) para contornar políticas RLS legadas
+        const { error: rpcError } = await supabase.rpc('update_ticket_status_rpc', {
+            p_ticket_id: ticketId,
+            p_status: status
+        });
+
+        if (!rpcError) {
+            return;
+        }
+
+        // Se a RPC não existir ou falhar, tenta o update direto na tabela como fallback
         const { error } = await supabase
             .from('tickets')
             .update({ status })
