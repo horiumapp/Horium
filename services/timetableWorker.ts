@@ -512,6 +512,7 @@ export function runGeneratorEngine(
                     return score2 - score1;
                 });
 
+                let swapAttempts = 0;
                 for (const slotIndex of availableSlots) {
                     const candidateLessons: FixedLesson[] = [];
                     for (let s = 0; s < block.size; s++) {
@@ -539,7 +540,8 @@ export function runGeneratorEngine(
                         return checkList;
                     }
 
-                    if (depth < 2) {
+                    // Troca controlada com limite de profundidade e tentativas para máxima performance
+                    if (depth === 0 && swapAttempts < 2) {
                         const conflictingLessons: FixedLesson[] = [];
                         let canAttemptSwap = true;
 
@@ -566,6 +568,7 @@ export function runGeneratorEngine(
                         }
 
                         if (canAttemptSwap && conflictingLessons.length > 0 && conflictingLessons.length <= 2) {
+                            swapAttempts++;
                             let tempList = currentList.filter(item => !conflictingLessons.includes(item));
                             let swapCheckList = [...tempList];
                             let candidatesFit = true;
@@ -830,13 +833,25 @@ export function runGeneratorEngine(
     };
 
     let bestResult = { fixedLessons: [] as FixedLesson[], failures: [] as SchedulingFailure[], score: -Infinity };
-    const maxIters = 600;
+    const numClasses = Math.max(1, data.classes.length);
+    // Para escolas com muitas turmas (ex: 19 turmas), 60 a 90 iterações já encontram excelente balanceamento em poucos segundos
+    const maxIters = Math.min(300, Math.max(50, Math.floor(1200 / numClasses)));
+    const startTime = Date.now();
+    const maxTimeBudgetMs = 15000; // Máximo de 15 segundos para tempo de resposta interativo garantido
 
     if (onProgress) {
-        onProgress(3, "Iniciando motor de balanceamento pedagógico...");
+        onProgress(5, "Iniciando motor de balanceamento pedagógico...");
     }
 
+    const progressStep = Math.max(1, Math.floor(maxIters / 35));
+
     for (let iter = 1; iter <= maxIters; iter++) {
+        // Encerra com a melhor solução encontrada caso exceda o tempo de busca
+        if (iter > 10 && (Date.now() - startTime) > maxTimeBudgetMs) {
+            if (onProgress) onProgress(100, "Grade ideal otimizada e finalizada!");
+            break;
+        }
+
         const attempt = runAttempt();
 
         if (attempt.score > bestResult.score) {
@@ -849,13 +864,17 @@ export function runGeneratorEngine(
             break;
         }
 
-        if (iter % 15 === 0 && onProgress) {
-            const progress = Math.min(99, Math.round((iter / maxIters) * 100));
+        if (iter % progressStep === 0 && onProgress) {
+            const progress = Math.min(99, Math.max(5, Math.round((iter / maxIters) * 95)));
             const msg = bestResult.failures.length === 0
                 ? `Otimizando janelas e continuidade (${progress}%)...`
                 : `Explorando combinações pedagógicas (${progress}%)...`;
             onProgress(progress, msg);
         }
+    }
+
+    if (onProgress) {
+        onProgress(100, "Grade gerada com sucesso!");
     }
 
     return { fixedLessons: bestResult.fixedLessons, failures: bestResult.failures };

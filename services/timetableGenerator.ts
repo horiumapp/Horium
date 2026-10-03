@@ -23,9 +23,9 @@ export const generateTimetable = async (
                     if (isResolved) return;
                     isResolved = true;
                     worker.terminate();
-                    console.warn("Web Worker não respondeu a tempo (timeout de 30s).");
-                    reject(new Error("O tempo limite de processamento de 30 segundos foi excedido. Tente simplificar restrições de professores ou horários fixos."));
-                }, 30000);
+                    console.warn("Web Worker não respondeu a tempo (timeout de 45s).");
+                    reject(new Error("O tempo limite de processamento de 45 segundos foi excedido. Tente simplificar restrições de professores ou horários fixos."));
+                }, 45000);
 
                 worker.onmessage = (e: MessageEvent) => {
                     const msg = e.data;
@@ -63,6 +63,7 @@ export const generateTimetable = async (
         }
     }
 
-    // Fallback síncrono/in-thread
+    // Fallback in-thread com yield para não congelar o paint do React
+    await new Promise(resolve => setTimeout(resolve, 50));
     return runGeneratorEngine(normalizedData, onProgress);
 };
