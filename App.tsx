@@ -417,7 +417,8 @@ const App: React.FC = () => {
 
   const handleViewSolutions = (schedule: SetupData) => {
     setSetupData(schedule);
-    if (!schedule.isLicensed) {
+    const isLicensed = schedule.isLicensed || activeLicenseStatus === 'Aprovado';
+    if (!isLicensed) {
       alert('Para visualizar as tabelas e exportar esta grade de horários, é necessário possuir uma licença ativa. Você será redirecionado para a página de planos.');
       setView(AppView.PLANS);
       return;
