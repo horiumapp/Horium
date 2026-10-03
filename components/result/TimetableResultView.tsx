@@ -136,10 +136,12 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                     });
                 });
             }
+            const teacherFailures = (normalizedData.failures || []).filter(f => f.teacherId === selectedId).length;
+            total = Math.max(total, allocated + teacherFailures);
         }
 
         return { allocated, total };
-    }, [normalizedData.fixedLessons, selectedId, viewMode, normalizedData.classes, normalizedData.teachers]);
+    }, [normalizedData.fixedLessons, normalizedData.failures, selectedId, viewMode, normalizedData.classes, normalizedData.teachers]);
 
     const checkMovePossibility = (teacherId: string, classId: string, day: string, slotIndex: number, currentFixed: FixedLesson[]) => {
         const teacherConflict = currentFixed.some(fl => fl.day === day && fl.slotIndex === slotIndex && fl.teacherId === teacherId);
