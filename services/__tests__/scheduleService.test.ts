@@ -238,4 +238,91 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         expect(schedules[0].licenseStatus).toBe('Aprovado');
         expect(schedules[0].fixedLessons).toEqual(approvedLessons);
     });
+
+    it('getSchedules: deve liberar a grade quando o administrador aprovou licença global/usuário (schedule_id nulo)', async () => {
+        const approvedLessons: FixedLesson[] = [
+            { classId: 'c1', subjectId: 's1', teacherId: 't1', day: 'Segunda', slotIndex: 0 }
+        ];
+
+        const rawSchedule = {
+            id: 'schedule-without-direct-id',
+            user_id: 'test-user-id',
+            is_licensed: false,
+            created_at: '2026-10-02T12:00:00Z',
+            data: {
+                institution: { name: 'Centro Esperança' },
+                fixedLessons: approvedLessons
+            }
+        };
+
+        const mockSchedulesChain = {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            is: vi.fn().mockReturnThis(),
+            order: vi.fn().mockResolvedValue({ data: [rawSchedule], error: null })
+        };
+
+        const mockLicensesChain = {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockResolvedValue({
+                data: [{ schedule_id: null, payment_status: 'Aprovado', valid_until: '2027-04-02' }],
+                error: null
+            })
+        };
+
+        mockFrom.mockImplementation((table: string) => {
+            if (table === 'schedules') return mockSchedulesChain;
+            if (table === 'licenses') return mockLicensesChain;
+            return {};
+        });
+
+        const schedules = await scheduleService.getSchedules();
+
+        expect(schedules.length).toBe(1);
+        expect(schedules[0].isLicensed).toBe(true);
+        expect(schedules[0].licenseStatus).toBe('Aprovado');
+        expect(schedules[0].fixedLessons).toEqual(approvedLessons);
+    });
+
+    it('getSchedules: deve manter grade bloqueada enquanto aguarda aprovação do administrador', async () => {
+        const rawSchedule = {
+            id: 'schedule-pending-review',
+            user_id: 'test-user-id',
+            is_licensed: false,
+            created_at: '2026-10-02T12:00:00Z',
+            data: {
+                institution: { name: 'Centro Esperança' },
+                fixedLessons: [{ classId: 'c1', subjectId: 's1', teacherId: 't1', day: 'Segunda', slotIndex: 0 }]
+            }
+        };
+
+        const mockSchedulesChain = {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            is: vi.fn().mockReturnThis(),
+            order: vi.fn().mockResolvedValue({ data: [rawSchedule], error: null })
+        };
+
+        const mockLicensesChain = {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockResolvedValue({
+                data: [{ schedule_id: null, payment_status: 'Aguardando', valid_until: null }],
+                error: null
+            })
+        };
+
+        mockFrom.mockImplementation((table: string) => {
+            if (table === 'schedules') return mockSchedulesChain;
+            if (table === 'licenses') return mockLicensesChain;
+            return {};
+        });
+
+        const schedules = await scheduleService.getSchedules();
+
+        expect(schedules.length).toBe(1);
+        expect(schedules[0].isLicensed).toBe(false);
+        expect(schedules[0].licenseStatus).toBe('Aguardando');
+        expect(schedules[0].fixedLessons).toEqual([]);
+    });
 });
+
