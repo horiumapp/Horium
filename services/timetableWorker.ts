@@ -159,6 +159,21 @@ export function runGeneratorEngine(
             }
         });
 
+        // Penalidade por professor ter mais de 2 tempos seguidos na mesma turma (a menos que a matéria permita tripla)
+        Object.entries(teacherClassDayLessons).forEach(([tcKey, lessons]) => {
+            if (lessons.length > 2) {
+                const [teacherId, classId] = tcKey.split('|');
+                const streak = getMaxConsecutiveStreak(lessons.map(l => l.slotIndex));
+                const maxAllowedConsec = lessons.reduce((max, l) => {
+                    const r = getGroupingRuleFor(teacherId, classId, l.subjectId);
+                    return Math.max(max, r.maxConsecutive);
+                }, 2);
+                if (streak > maxAllowedConsec) {
+                    score -= (streak - maxAllowedConsec) * 70000;
+                }
+            }
+        });
+
         // Penalidade por sair e voltar para a mesma sala no mesmo dia
         Object.values(teacherClassDayLessons).forEach(lessons => {
             if (lessons.length > 1) {
@@ -193,6 +208,7 @@ export function runGeneratorEngine(
                         if (status === 'OBRIGATORIAMENTE') {
                             const classroom = data.classes.find(c => c.id === classId);
                             if (classroom) {
+                                const rule = getGroupingRuleFor(teacher.id, classId, subjectId);
                                 assignments.push({
                                     teacherId: teacher.id,
                                     classId,
@@ -202,7 +218,8 @@ export function runGeneratorEngine(
                                         data.teacherGroupings?.[teacher.id] ||
                                         data.subjectGroupings?.[subjectId] ||
                                         data.generalGrouping ||
-                                        'Não Especificado'
+                                        'Não Especificado',
+                                    rule
                                 });
                             }
                         }
@@ -224,6 +241,7 @@ export function runGeneratorEngine(
 
                     if (eligibleTeachers.length > 0) {
                         const chosenTeacher = eligibleTeachers[Math.floor(Math.random() * eligibleTeachers.length)];
+                        const rule = getGroupingRuleFor(chosenTeacher.id, classroom.id, subjectId);
                         assignments.push({
                             teacherId: chosenTeacher.id,
                             classId: classroom.id,
@@ -233,7 +251,8 @@ export function runGeneratorEngine(
                                 data.teacherGroupings?.[chosenTeacher.id] ||
                                 data.subjectGroupings?.[subjectId] ||
                                 data.generalGrouping ||
-                                'Não Especificado'
+                                'Não Especificado',
+                            rule
                         });
                     }
                 }
@@ -251,7 +270,7 @@ export function runGeneratorEngine(
             teacherFlexibility[t.id] = totalRequestedAulas > 0 ? availCount / totalRequestedAulas : 999;
         });
 
-        // 3. Decompor em blocos
+        // 3. Decompor em blocos respeitando as regras de agrupamento
         const blocks: Block[] = [];
         assignments.forEach(asg => {
             const alreadyFixed = currentFixed.filter(f =>
@@ -261,13 +280,48 @@ export function runGeneratorEngine(
             ).length;
 
             let left = Math.max(0, asg.lessons - alreadyFixed);
-            const double = (asg.grouping || '').toLowerCase().match(/dupla|seguida|junta/);
-            if (double) {
-                let safety = 0;
-                while (left >= 2 && safety < 100) { blocks.push({ assignment: asg, size: 2, consecutive: true }); left -= 2; safety++; }
+            const rule = asg.rule;
+
+            // Se a regra não permite aulas seguidas (ex: intercaladas ou no máximo 1 por dia)
+            if (!rule.allowConsecutive || rule.maxConsecutive === 1) {
+                while (left > 0) {
+                    blocks.push({ assignment: asg, size: 1, consecutive: false });
+                    left--;
+                }
+                return;
             }
+
+            // Se a regra permite triplas (ex: 3-2 seguidas ou aulas triplas)
+            if (rule.maxConsecutive >= 3 && (asg.grouping.toLowerCase().includes('tripla') || asg.grouping.toLowerCase().includes('3-2') || asg.grouping.toLowerCase().includes('3 aulas por dia seguidas') || asg.grouping.toLowerCase().includes('3 aulas seguidas'))) {
+                if (left >= 3) {
+                    blocks.push({ assignment: asg, size: 3, consecutive: true });
+                    left -= 3;
+                }
+            }
+
+            // Se a regra permite quádruplas
+            if (rule.maxConsecutive >= 4 && (asg.grouping.toLowerCase().includes('4 aulas seguidas') || asg.grouping.toLowerCase().includes('4 aulas no mesmo dia'))) {
+                if (left >= 4) {
+                    blocks.push({ assignment: asg, size: 4, consecutive: true });
+                    left -= 4;
+                }
+            }
+
+            // Padrão: Blocos de 2 (aulas duplas)
+            let safety = 0;
+            while (left >= 2 && safety < 100) {
+                blocks.push({ assignment: asg, size: 2, consecutive: true });
+                left -= 2;
+                safety++;
+            }
+
+            // Restantes como avulsas (size 1)
             let safetySingle = 0;
-            while (left > 0 && safetySingle < 100) { blocks.push({ assignment: asg, size: 1, consecutive: true }); left--; safetySingle++; }
+            while (left > 0 && safetySingle < 100) {
+                blocks.push({ assignment: asg, size: 1, consecutive: false });
+                left--;
+                safetySingle++;
+            }
         });
 
         const originalDays = (data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0)
@@ -278,15 +332,6 @@ export function runGeneratorEngine(
             data.weekConfig?.lessonsPerDayGlobal || 5;
 
         const shuffle = <T>(a: T[]) => [...a].sort(() => Math.random() - 0.5);
-
-        // Limite por Princípio da Casa dos Pombos
-        const maxAllowedDailyLessons: Record<string, number> = {};
-        assignments.forEach(asg => {
-            const key = `${asg.teacherId}|${asg.classId}`;
-            const total = asg.lessons;
-            const daysCount = originalDays.length || 5;
-            maxAllowedDailyLessons[key] = Math.ceil(total / daysCount);
-        });
 
         // Ordenação Heurística
         blocks.sort((a, b) => {
@@ -305,32 +350,77 @@ export function runGeneratorEngine(
             return 0;
         });
 
-        // Validação de posicionamento
+        // Validação de posicionamento estrita
         const isOk = (f: FixedLesson, candidateList: FixedLesson[]) => {
+            // 1. Conflito de slot na turma ou no professor
             if (candidateList.some(o => o.day === f.day && o.slotIndex === f.slotIndex && (o.classId === f.classId || o.teacherId === f.teacherId))) {
                 return false;
             }
 
+            // 2. Indisponibilidade do professor
             const dIdx = originalDays.indexOf(f.day);
             const teacher = data.teachers.find(t => t.id === f.teacherId);
             if (teacher?.availability?.[`${dIdx}-${f.slotIndex}`] === 'ND') {
                 return false;
             }
 
+            // 3. Indisponibilidade da turma
             const classroom = data.classes.find(c => c.id === f.classId);
             if (classroom?.timeConstraints?.[`${dIdx}-${f.slotIndex}`] === 'ND') {
                 return false;
             }
 
+            // 4. Limite diário de aulas do professor
             const teacherDayCount = candidateList.filter(o => o.day === f.day && o.teacherId === f.teacherId).length;
             const tLimit = teacher?.dailyLimits?.[`${dIdx}`] !== undefined ? teacher.dailyLimits[`${dIdx}`] : slotsPerDay;
             if (teacherDayCount >= tLimit) {
                 return false;
             }
 
-            const pigeonMax = maxAllowedDailyLessons[`${f.teacherId}|${f.classId}`] || slotsPerDay;
-            const sameTeacherClassDayCount = candidateList.filter(o => o.day === f.day && o.teacherId === f.teacherId && o.classId === f.classId).length;
-            if (sameTeacherClassDayCount >= pigeonMax) {
+            // 5. Regra de agrupamento pedagógico para a matéria nesta turma
+            const rule = getGroupingRuleFor(f.teacherId, f.classId, f.subjectId);
+            const totalSubjectLessons = classroom?.lessonsPerSubject?.[f.subjectId] || 1;
+            const minDailyNeeded = Math.ceil(totalSubjectLessons / Math.max(1, originalDays.length));
+            const effectiveMaxDaily = Math.max(rule.maxDaily, minDailyNeeded);
+            const effectiveMaxConsecutive = Math.max(rule.maxConsecutive, minDailyNeeded > rule.maxDaily ? minDailyNeeded : rule.maxConsecutive);
+
+            // 5.1 Limite diário da matéria na turma
+            const existingSubjectLessons = candidateList.filter(o => o.day === f.day && o.classId === f.classId && o.subjectId === f.subjectId);
+            if (existingSubjectLessons.length >= effectiveMaxDaily) {
+                return false;
+            }
+
+            // 5.2 Limite de aulas seguidas (streak) da matéria na turma
+            const subjectSlots = [...existingSubjectLessons.map(o => o.slotIndex), f.slotIndex];
+            const subjectStreak = getMaxConsecutiveStreak(subjectSlots);
+            if (subjectStreak > effectiveMaxConsecutive) {
+                return false;
+            }
+
+            // 5.3 Proibição de aulas seguidas se a regra for intercalada / avulsa
+            if (!rule.allowConsecutive && subjectStreak > 1) {
+                return false;
+            }
+
+            // 5.4 Limite diário e streak do mesmo professor com a mesma turma
+            const existingTeacherClassLessons = candidateList.filter(o => o.day === f.day && o.classId === f.classId && o.teacherId === f.teacherId);
+            const teacherClassTotalLessons = Object.entries(classroom?.lessonsPerSubject || {})
+                .filter(([subId]) => {
+                    const asg = assignments.find(a => a.classId === f.classId && a.subjectId === subId);
+                    return asg?.teacherId === f.teacherId;
+                })
+                .reduce((sum, [, count]) => sum + count, 0);
+            const minTeacherClassDailyNeeded = Math.ceil(teacherClassTotalLessons / Math.max(1, originalDays.length));
+            const effectiveTeacherClassMaxDaily = Math.max(effectiveMaxDaily, minTeacherClassDailyNeeded);
+            const effectiveTeacherClassMaxStreak = Math.max(effectiveMaxConsecutive, minTeacherClassDailyNeeded > effectiveMaxDaily ? minTeacherClassDailyNeeded : effectiveMaxConsecutive);
+
+            if (existingTeacherClassLessons.length >= effectiveTeacherClassMaxDaily) {
+                return false;
+            }
+
+            const teacherClassSlots = [...existingTeacherClassLessons.map(o => o.slotIndex), f.slotIndex];
+            const teacherClassStreak = getMaxConsecutiveStreak(teacherClassSlots);
+            if (teacherClassStreak > effectiveTeacherClassMaxStreak) {
                 return false;
             }
 
@@ -374,8 +464,19 @@ export function runGeneratorEngine(
                         });
                     }
 
-                    if (candidateLessons.every(f => isOk(f, currentList))) {
-                        return [...currentList, ...candidateLessons];
+                    // Validação cumulativa dos candidatos do bloco
+                    let checkList = [...currentList];
+                    let allOk = true;
+                    for (const f of candidateLessons) {
+                        if (!isOk(f, checkList)) {
+                            allOk = false;
+                            break;
+                        }
+                        checkList.push(f);
+                    }
+
+                    if (allOk) {
+                        return checkList;
                     }
 
                     if (depth < 2) {
@@ -406,33 +507,45 @@ export function runGeneratorEngine(
 
                         if (canAttemptSwap && conflictingLessons.length > 0 && conflictingLessons.length <= 2) {
                             let tempList = currentList.filter(item => !conflictingLessons.includes(item));
-                            tempList = [...tempList, ...candidateLessons];
-
-                            let successfullyRelocated = true;
-                            for (const displaced of conflictingLessons) {
-                                const displacedBlock: Block = {
-                                    assignment: {
-                                        teacherId: displaced.teacherId,
-                                        classId: displaced.classId,
-                                        subjectId: displaced.subjectId,
-                                        lessons: 1,
-                                        grouping: '1 aula'
-                                    },
-                                    size: 1,
-                                    consecutive: false
-                                };
-
-                                const relocatedResult = tryPlace(displacedBlock, depth + 1, tempList);
-                                if (relocatedResult) {
-                                    tempList = relocatedResult;
-                                } else {
-                                    successfullyRelocated = false;
+                            let swapCheckList = [...tempList];
+                            let candidatesFit = true;
+                            for (const f of candidateLessons) {
+                                if (!isOk(f, swapCheckList)) {
+                                    candidatesFit = false;
                                     break;
                                 }
+                                swapCheckList.push(f);
                             }
 
-                            if (successfullyRelocated) {
-                                return tempList;
+                            if (candidatesFit) {
+                                tempList = swapCheckList;
+                                let successfullyRelocated = true;
+                                for (const displaced of conflictingLessons) {
+                                    const displacedBlock: Block = {
+                                        assignment: {
+                                            teacherId: displaced.teacherId,
+                                            classId: displaced.classId,
+                                            subjectId: displaced.subjectId,
+                                            lessons: 1,
+                                            grouping: '1 aula',
+                                            rule: getGroupingRuleFor(displaced.teacherId, displaced.classId, displaced.subjectId)
+                                        },
+                                        size: 1,
+                                        consecutive: false
+                                    };
+
+                                    const relocatedResult = tryPlace(displacedBlock, depth + 1, tempList);
+                                    if (relocatedResult) {
+                                        tempList = relocatedResult;
+                                    } else {
+                                        successfullyRelocated = false;
+                                        break;
+                                    }
+                                }
+
+                                if (successfullyRelocated) {
+                                    return tempList;
+                                }
                             }
                         }
                     }
@@ -461,7 +574,7 @@ export function runGeneratorEngine(
             }
         }
 
-        // Compactação Automática
+        // Compactação Automática com respeito estrito aos limites de aulas seguidas
         const compact = () => {
             let moved = true;
             let loopCount = 0;
@@ -493,7 +606,7 @@ export function runGeneratorEngine(
 
                         classBlocks.forEach(blk => {
                             const isProtected = blk.some(f => initialFixed.some(fl =>
-                                fl.day === f.day && fl.slotIndex === f.slotIndex && fl.classId === f.classId && fl.teacherId === f.teacherId
+                                fl.day === s.day && fl.slotIndex === f.slotIndex && fl.classId === f.classId && fl.teacherId === f.teacherId
                             ));
                             if (isProtected) return;
 
@@ -503,6 +616,32 @@ export function runGeneratorEngine(
                                 const prev = blk[0].slotIndex - 1;
 
                                 let canMoveBlock = true;
+                                const targetSlots = blk.map((_, i) => prev + i);
+                                const fSample = blk[0];
+                                const rule = getGroupingRuleFor(fSample.teacherId, fSample.classId, fSample.subjectId);
+
+                                // Não pode fundir blocos na mesma turma criando mais aulas consecutivas do que permitido
+                                const otherSubjectLessons = currentFixed.filter(o =>
+                                    o.day === s.day && o.classId === fSample.classId && o.subjectId === fSample.subjectId && !blk.includes(o)
+                                );
+                                const combinedSubjectSlots = [...otherSubjectLessons.map(o => o.slotIndex), ...targetSlots];
+                                if (getMaxConsecutiveStreak(combinedSubjectSlots) > rule.maxConsecutive) {
+                                    canMoveBlock = false;
+                                }
+                                if (!rule.allowConsecutive && getMaxConsecutiveStreak(combinedSubjectSlots) > 1) {
+                                    canMoveBlock = false;
+                                }
+
+                                const otherTeacherLessons = currentFixed.filter(o =>
+                                    o.day === s.day && o.classId === fSample.classId && o.teacherId === fSample.teacherId && !blk.includes(o)
+                                );
+                                const combinedTeacherSlots = [...otherTeacherLessons.map(o => o.slotIndex), ...targetSlots];
+                                if (getMaxConsecutiveStreak(combinedTeacherSlots) > rule.maxConsecutive) {
+                                    canMoveBlock = false;
+                                }
+
+                                if (!canMoveBlock) break;
+
                                 for (let i = 0; i < blk.length; i++) {
                                     const newSlot = prev + i;
                                     const f = blk[i];
@@ -534,7 +673,7 @@ export function runGeneratorEngine(
 
         compact();
 
-        // Fechamento de Janelas de Professores
+        // Fechamento de Janelas de Professores respeitando limites de aulas consecutivas
         let manualMoves = false;
         (data.teachers || []).forEach(t => {
             (data.schedule || []).forEach(s => {
@@ -560,7 +699,7 @@ export function runGeneratorEngine(
                 teacherBlocks.forEach((blk, idx) => {
                     if (idx === 0) return;
                     const isProtected = blk.some(f => initialFixed.some(fl =>
-                        fl.day === f.day && fl.slotIndex === f.slotIndex && fl.classId === f.classId && fl.teacherId === f.teacherId
+                        fl.day === s.day && fl.slotIndex === f.slotIndex && fl.classId === f.classId && fl.teacherId === f.teacherId
                     ));
                     if (isProtected) return;
 
@@ -570,6 +709,31 @@ export function runGeneratorEngine(
                     if (blk[0].slotIndex > gapStart) {
                         let canMoveBlock = true;
                         const target = gapStart;
+                        const targetSlots = blk.map((_, i) => target + i);
+                        const fSample = blk[0];
+                        const rule = getGroupingRuleFor(fSample.teacherId, fSample.classId, fSample.subjectId);
+
+                        // Não pode fundir blocos na mesma turma criando mais aulas consecutivas do que permitido
+                        const otherSubjectLessons = currentFixed.filter(o =>
+                            o.day === s.day && o.classId === fSample.classId && o.subjectId === fSample.subjectId && !blk.includes(o)
+                        );
+                        const combinedSubjectSlots = [...otherSubjectLessons.map(o => o.slotIndex), ...targetSlots];
+                        if (getMaxConsecutiveStreak(combinedSubjectSlots) > rule.maxConsecutive) {
+                            canMoveBlock = false;
+                        }
+                        if (!rule.allowConsecutive && getMaxConsecutiveStreak(combinedSubjectSlots) > 1) {
+                            canMoveBlock = false;
+                        }
+
+                        const otherTeacherLessons = currentFixed.filter(o =>
+                            o.day === s.day && o.classId === fSample.classId && o.teacherId === fSample.teacherId && !blk.includes(o)
+                        );
+                        const combinedTeacherSlots = [...otherTeacherLessons.map(o => o.slotIndex), ...targetSlots];
+                        if (getMaxConsecutiveStreak(combinedTeacherSlots) > rule.maxConsecutive) {
+                            canMoveBlock = false;
+                        }
+
+                        if (!canMoveBlock) return;
 
                         for (let i = 0; i < blk.length; i++) {
                             const newSlot = target + i;
@@ -602,7 +766,7 @@ export function runGeneratorEngine(
             compact();
         }
 
-        return { fixedLessons: currentFixed, failures, score: calculateScore(currentFixed, failures) };
+        return { fixedLessons: currentFixed, failures, score: calculateScore(currentFixed, failures) };, failures, score: calculateScore(currentFixed, failures) };
     };
 
     let bestResult = { fixedLessons: [] as FixedLesson[], failures: [] as SchedulingFailure[], score: -Infinity };
