@@ -280,19 +280,21 @@ export function runGeneratorEngine(
                         if (status === 'OBRIGATORIAMENTE') {
                             const classroom = data.classes.find(c => c.id === classId);
                             if (classroom) {
-                                const rule = getGroupingRuleFor(teacher.id, classId, subjectId);
-                                assignments.push({
-                                    teacherId: teacher.id,
-                                    classId,
-                                    subjectId,
-                                    lessons: classroom.lessonsPerSubject?.[subjectId] || 0,
-                                    grouping: data.assignmentGroupings?.[`${teacher.id}|${classId}|${subjectId}`] ||
-                                        data.teacherGroupings?.[teacher.id] ||
-                                        data.subjectGroupings?.[subjectId] ||
-                                        data.generalGrouping ||
-                                        'Não Especificado',
-                                    rule
-                                });
+                                if (!assignments.some(a => a.classId === classId && a.subjectId === subjectId)) {
+                                    const rule = getEffectiveGroupingRule(teacher.id, classId, subjectId);
+                                    assignments.push({
+                                        teacherId: teacher.id,
+                                        classId,
+                                        subjectId,
+                                        lessons: classroom.lessonsPerSubject?.[subjectId] || 0,
+                                        grouping: data.assignmentGroupings?.[`${teacher.id}|${classId}|${subjectId}`] ||
+                                            data.teacherGroupings?.[teacher.id] ||
+                                            data.subjectGroupings?.[subjectId] ||
+                                            data.generalGrouping ||
+                                            'Não Especificado',
+                                        rule
+                                    });
+                                }
                             }
                         }
                     });
@@ -300,7 +302,7 @@ export function runGeneratorEngine(
             }
         });
 
-        // 1.1 Coletar matérias de turmas sem atribuição OBRIGATÓRIA (PODERÁ)
+        // 1.1 Coletar matérias de turmas sem atribuição OBRIGATÓRIA (PODERÁ) com balanceamento de carga docente
         data.classes.forEach(classroom => {
             Object.entries(classroom.lessonsPerSubject || {}).forEach(([subjectId, lessonCount]) => {
                 if (lessonCount <= 0) return;
@@ -312,8 +314,25 @@ export function runGeneratorEngine(
                     );
 
                     if (eligibleTeachers.length > 0) {
-                        const chosenTeacher = eligibleTeachers[Math.floor(Math.random() * eligibleTeachers.length)];
-                        const rule = getGroupingRuleFor(chosenTeacher.id, classroom.id, subjectId);
+                        // Equilibra a carga docente entre todos os professores aptos
+                        const sortedEligibles = [...eligibleTeachers].sort((tA, tB) => {
+                            const isPoderaA = tA.classAssignments?.[subjectId]?.[classroom.id] === 'PODERÁ' ? 1 : 0;
+                            const isPoderaB = tB.classAssignments?.[subjectId]?.[classroom.id] === 'PODERÁ' ? 1 : 0;
+                            if (isPoderaA !== isPoderaB) return isPoderaB - isPoderaA;
+
+                            const loadA = assignments.filter(a => a.teacherId === tA.id).reduce((sum, a) => sum + a.lessons, 0);
+                            const loadB = assignments.filter(a => a.teacherId === tB.id).reduce((sum, a) => sum + a.lessons, 0);
+                            return loadA - loadB;
+                        });
+
+                        const minLoad = assignments.filter(a => a.teacherId === sortedEligibles[0].id).reduce((sum, a) => sum + a.lessons, 0);
+                        const candidates = sortedEligibles.filter(t => {
+                            const l = assignments.filter(a => a.teacherId === t.id).reduce((sum, a) => sum + a.lessons, 0);
+                            return l <= minLoad + 2;
+                        });
+
+                        const chosenTeacher = candidates[Math.floor(Math.random() * candidates.length)];
+                        const rule = getEffectiveGroupingRule(chosenTeacher.id, classroom.id, subjectId);
                         assignments.push({
                             teacherId: chosenTeacher.id,
                             classId: classroom.id,
@@ -438,13 +457,6 @@ export function runGeneratorEngine(
             }
         });
 
-        const originalDays = (data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0)
-            ? data.weekConfig.activeDays
-            : (data.schedule && data.schedule.length > 0 && data.schedule[0]?.day ? data.schedule.map(s => s.day) : ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']);
-
-        const slotsPerDay = (data.schedule && data.schedule[0]?.slots?.filter(s => s.type === 'AULA').length) ||
-            data.weekConfig?.lessonsPerDayGlobal || 5;
-
         const shuffle = <T>(a: T[]) => [...a].sort(() => Math.random() - 0.5);
 
         // Ordenação Heurística
@@ -492,9 +504,10 @@ export function runGeneratorEngine(
             }
 
             // 5. Regra de agrupamento pedagógico para a matéria nesta turma
-            const rule = getGroupingRuleFor(f.teacherId, f.classId, f.subjectId);
+            const rule = getEffectiveGroupingRule(f.teacherId, f.classId, f.subjectId);
             const totalSubjectLessons = classroom?.lessonsPerSubject?.[f.subjectId] || 1;
-            const minDailyNeeded = Math.ceil(totalSubjectLessons / Math.max(1, originalDays.length));
+            const availableDaysCount = getAvailableDaysCount(f.teacherId, f.classId);
+            const minDailyNeeded = Math.ceil(totalSubjectLessons / availableDaysCount);
             const effectiveMaxDaily = Math.max(rule.maxDaily, minDailyNeeded);
             const effectiveMaxConsecutive = Math.max(rule.maxConsecutive, minDailyNeeded > rule.maxDaily ? minDailyNeeded : rule.maxConsecutive);
 
@@ -524,7 +537,7 @@ export function runGeneratorEngine(
                     return asg?.teacherId === f.teacherId;
                 })
                 .reduce((sum, [, count]) => sum + count, 0);
-            const minTeacherClassDailyNeeded = Math.ceil(teacherClassTotalLessons / Math.max(1, originalDays.length));
+            const minTeacherClassDailyNeeded = Math.ceil(teacherClassTotalLessons / availableDaysCount);
             const effectiveTeacherClassMaxDaily = Math.max(effectiveMaxDaily, minTeacherClassDailyNeeded);
             const effectiveTeacherClassMaxStreak = Math.max(effectiveMaxConsecutive, minTeacherClassDailyNeeded > effectiveMaxDaily ? minTeacherClassDailyNeeded : effectiveMaxConsecutive);
 
@@ -672,22 +685,157 @@ export function runGeneratorEngine(
             return null;
         };
 
-        // Alocação dos blocos
+        // Alocação dos blocos com divisão adaptativa caso blocos agrupados não caibam inteiros
+        const tryPlaceBlockWithFallback = (b: Block, list: FixedLesson[]): FixedLesson[] | null => {
+            // 1. Tenta colocar o bloco com seu tamanho original
+            const res = tryPlace(b, 0, list);
+            if (res) return res;
+
+            // 2. Se for bloco maior que 1 e não couber agrupado (ex: slots ímpares no dia ou restrições de horários),
+            // divide em sub-blocos ou aulas individuais para garantir 100% da carga horária!
+            if (b.size > 1 && !b.assignment.rule.requireDouble) {
+                const subSize1 = Math.floor(b.size / 2);
+                const subSize2 = b.size - subSize1;
+
+                const subBlock1: Block = {
+                    assignment: b.assignment,
+                    size: subSize1,
+                    consecutive: subSize1 > 1 && b.consecutive
+                };
+                const subBlock2: Block = {
+                    assignment: b.assignment,
+                    size: subSize2,
+                    consecutive: subSize2 > 1 && b.consecutive
+                };
+
+                const res1 = tryPlaceBlockWithFallback(subBlock1, list);
+                if (res1) {
+                    const res2 = tryPlaceBlockWithFallback(subBlock2, res1);
+                    if (res2) return res2;
+                }
+            }
+
+            return null;
+        };
+
+        const unplacedBlocks: Block[] = [];
         for (const block of blocks) {
-            const resultList = tryPlace(block, 0, currentFixed);
+            const resultList = tryPlaceBlockWithFallback(block, currentFixed);
             if (resultList) {
                 currentFixed = resultList;
             } else {
-                const key = `${block.assignment.teacherId}|${block.assignment.classId}|${block.assignment.subjectId}`;
-                failedAssignmentWeights[key] = (failedAssignmentWeights[key] || 0) + 1;
+                unplacedBlocks.push(block);
+            }
+        }
 
-                failures.push({
-                    teacherId: block.assignment.teacherId,
-                    classId: block.assignment.classId,
-                    subjectId: block.assignment.subjectId,
-                    reason: 'NO_AVAILABILITY',
-                    details: `Não foi possível encontrar slot para ${block.size} aula(s) de ${data.subjects.find(s => s.id === block.assignment.subjectId)?.name}.`
-                });
+        // 4. RESCUE PASS (Fase de Resgate de Aulas)
+        // Garante que NENHUM professor fique sem carga horária se houver slots válidos na grade escolar
+        if (unplacedBlocks.length > 0) {
+            for (const failedBlock of unplacedBlocks) {
+                const remainingLessons = failedBlock.size;
+
+                for (let l = 0; l < remainingLessons; l++) {
+                    const singleLesson: FixedLesson = {
+                        day: '',
+                        slotIndex: -1,
+                        classId: failedBlock.assignment.classId,
+                        teacherId: failedBlock.assignment.teacherId,
+                        subjectId: failedBlock.assignment.subjectId
+                    };
+
+                    let placed = false;
+
+                    // Busca direta de slot livre que respeite restrições físicas (sem choque e sem ND)
+                    for (const day of originalDays) {
+                        if (placed) break;
+                        const dIdx = originalDays.indexOf(day);
+                        const teacher = data.teachers.find(t => t.id === singleLesson.teacherId);
+                        const classroom = data.classes.find(c => c.id === singleLesson.classId);
+
+                        // Limite diário estrito do professor
+                        const teacherDayCount = currentFixed.filter(o => o.day === day && o.teacherId === singleLesson.teacherId).length;
+                        const tLimit = teacher?.dailyLimits?.[`${dIdx}`] !== undefined ? teacher.dailyLimits[`${dIdx}`] : slotsPerDay;
+                        if (teacherDayCount >= tLimit) continue;
+
+                        for (let slotIndex = 0; slotIndex < slotsPerDay; slotIndex++) {
+                            // Choque de turma ou professor
+                            if (currentFixed.some(o => o.day === day && o.slotIndex === slotIndex && (o.classId === singleLesson.classId || o.teacherId === singleLesson.teacherId))) {
+                                continue;
+                            }
+
+                            // Indisponibilidade ND
+                            if (teacher?.availability?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
+                            if (classroom?.timeConstraints?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
+
+                            currentFixed.push({
+                                ...singleLesson,
+                                day,
+                                slotIndex
+                            });
+                            placed = true;
+                            break;
+                        }
+                    }
+
+                    // Se não achou slot livre direto, tenta troca (swap) de 1 nível com aula deslocável
+                    if (!placed) {
+                        for (const day of originalDays) {
+                            if (placed) break;
+                            const dIdx = originalDays.indexOf(day);
+                            const teacher = data.teachers.find(t => t.id === singleLesson.teacherId);
+                            const classroom = data.classes.find(c => c.id === singleLesson.classId);
+
+                            if (teacher?.dailyLimits?.[`${dIdx}`] !== undefined &&
+                                currentFixed.filter(o => o.day === day && o.teacherId === singleLesson.teacherId).length >= teacher.dailyLimits[`${dIdx}`]) {
+                                continue;
+                            }
+
+                            for (let slotIndex = 0; slotIndex < slotsPerDay; slotIndex++) {
+                                if (teacher?.availability?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
+                                if (classroom?.timeConstraints?.[`${dIdx}-${slotIndex}`] === 'ND') continue;
+
+                                const classLessonHere = currentFixed.find(o => o.day === day && o.slotIndex === slotIndex && o.classId === singleLesson.classId);
+                                if (!classLessonHere) continue;
+                                if (initialFixed.some(fl => fl.day === day && fl.slotIndex === slotIndex && fl.classId === singleLesson.classId)) continue;
+                                if (currentFixed.some(o => o.day === day && o.slotIndex === slotIndex && o.teacherId === singleLesson.teacherId)) continue;
+
+                                const otherTeacher = data.teachers.find(t => t.id === classLessonHere.teacherId);
+                                for (const otherDay of originalDays) {
+                                    if (placed) break;
+                                    const otherDIdx = originalDays.indexOf(otherDay);
+                                    for (let otherSlot = 0; otherSlot < slotsPerDay; otherSlot++) {
+                                        if (otherDay === day && otherSlot === slotIndex) continue;
+                                        if (currentFixed.some(o => o.day === otherDay && o.slotIndex === otherSlot && (o.classId === classLessonHere.classId || o.teacherId === classLessonHere.teacherId))) continue;
+                                        if (otherTeacher?.availability?.[`${otherDIdx}-${otherSlot}`] === 'ND') continue;
+                                        if (classroom?.timeConstraints?.[`${otherDIdx}-${otherSlot}`] === 'ND') continue;
+
+                                        classLessonHere.day = otherDay;
+                                        classLessonHere.slotIndex = otherSlot;
+                                        currentFixed.push({
+                                            ...singleLesson,
+                                            day,
+                                            slotIndex
+                                        });
+                                        placed = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!placed) {
+                        const key = `${failedBlock.assignment.teacherId}|${failedBlock.assignment.classId}|${failedBlock.assignment.subjectId}`;
+                        failedAssignmentWeights[key] = (failedAssignmentWeights[key] || 0) + 1;
+                        failures.push({
+                            teacherId: failedBlock.assignment.teacherId,
+                            classId: failedBlock.assignment.classId,
+                            subjectId: failedBlock.assignment.subjectId,
+                            reason: 'NO_AVAILABILITY',
+                            details: `Não foi possível encontrar slot para 1 aula de ${data.subjects.find(s => s.id === failedBlock.assignment.subjectId)?.name}.`
+                        });
+                    }
+                }
             }
         }
 
@@ -735,7 +883,7 @@ export function runGeneratorEngine(
                                 let canMoveBlock = true;
                                 const targetSlots = blk.map((_, i) => prev + i);
                                 const fSample = blk[0];
-                                const rule = getGroupingRuleFor(fSample.teacherId, fSample.classId, fSample.subjectId);
+                                const rule = getEffectiveGroupingRule(fSample.teacherId, fSample.classId, fSample.subjectId);
 
                                 // Não pode fundir blocos na mesma turma criando mais aulas consecutivas do que permitido
                                 const otherSubjectLessons = currentFixed.filter(o =>
@@ -828,7 +976,7 @@ export function runGeneratorEngine(
                         const target = gapStart;
                         const targetSlots = blk.map((_, i) => target + i);
                         const fSample = blk[0];
-                        const rule = getGroupingRuleFor(fSample.teacherId, fSample.classId, fSample.subjectId);
+                        const rule = getEffectiveGroupingRule(fSample.teacherId, fSample.classId, fSample.subjectId);
 
                         // Não pode fundir blocos na mesma turma criando mais aulas consecutivas do que permitido
                         const otherSubjectLessons = currentFixed.filter(o =>
