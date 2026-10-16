@@ -321,19 +321,20 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
           {currentStepMeta ? ` · ${currentStepMeta.title}` : ''}
         </p>
         <div className="overflow-x-auto custom-scrollbar pb-2">
-          <ol className="flex min-w-[760px] justify-between px-2 relative">
-            <div className="absolute top-5 left-6 right-6 h-0.5 bg-gray-200 dark:bg-gray-700" aria-hidden="true"></div>
-            <div
-              className="absolute top-5 left-6 h-0.5 bg-primary transition-all"
-              style={{ width: `calc((100% - 3rem) * ${(step - 1) / (steps.length - 1)})` }}
-              aria-hidden="true"
-            ></div>
+          <ol className="flex min-w-[760px]">
             {steps.map((s) => {
               const reached = s.n <= furthestStep;
               const isCurrent = step === s.n;
               const isDone = step > s.n;
               return (
-                <li key={s.n} className="relative z-10">
+                <li key={s.n} className="relative flex-1 flex justify-center min-w-0">
+                  {s.n > 1 && (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute top-[19px] h-0.5 ${s.n <= step ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'}`}
+                      style={{ left: 'calc(-50% + 24px)', width: 'calc(100% - 48px)' }}
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -342,13 +343,13 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
                     disabled={!reached}
                     aria-current={isCurrent ? 'step' : undefined}
                     aria-label={`${s.title}${isDone ? ', concluída' : isCurrent ? ', atual' : ''}`}
-                    className={`flex flex-col items-center gap-1.5 w-16 ${reached ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                    className={`relative z-10 flex flex-col items-center gap-1.5 w-full px-1 ${reached ? 'cursor-pointer' : 'cursor-not-allowed'}`}
                   >
                     <span
                       className={`size-10 rounded-full flex items-center justify-center text-sm font-semibold border-2 ${isCurrent
                         ? 'bg-primary border-primary text-white shadow-sm shadow-primary/30'
                         : isDone
-                          ? 'bg-primary/10 border-primary text-primary'
+                          ? 'bg-white dark:bg-[#101822] border-primary text-primary'
                           : 'bg-white dark:bg-[#101822] border-gray-200 dark:border-gray-700 text-gray-400'
                         }`}
                     >
