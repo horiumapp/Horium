@@ -1,7 +1,7 @@
-
+﻿
 import React, { useState, useMemo } from 'react';
 import { Modal } from '../ui/Modal';
-import { SetupData, Teacher, Subject, ClassRoom } from '../../types';
+import { SetupData } from '../../types';
 import { GROUPING_OPTIONS_2_LESSONS, GROUPING_OPTIONS_3_LESSONS, GROUPING_OPTIONS_4_LESSONS, GROUPING_OPTIONS_5_LESSONS, GROUPING_OPTIONS_10_LESSONS } from '../../constants';
 
 interface DetailedGroupingManagerProps {
@@ -43,7 +43,11 @@ export const DetailedGroupingManager: React.FC<DetailedGroupingManagerProps> = (
                 });
             }
         });
-        return list;
+        return list.sort((a, b) =>
+            a.classroom.name.localeCompare(b.classroom.name, 'pt-BR', { numeric: true, sensitivity: 'base' }) ||
+            a.subject.name.localeCompare(b.subject.name, 'pt-BR') ||
+            a.teacher.name.localeCompare(b.teacher.name, 'pt-BR')
+        );
     }, [data]);
 
     const filteredAssignments = useMemo(() => {
@@ -70,134 +74,130 @@ export const DetailedGroupingManager: React.FC<DetailedGroupingManagerProps> = (
         setFilters({ classId: 'all', subjectId: 'all', teacherId: 'all', lessons: 'all' });
     };
 
+    const filtersActive = filters.classId !== 'all' || filters.subjectId !== 'all' || filters.teacherId !== 'all' || filters.lessons !== 'all';
+    const fieldClass = 'h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+
+    const sortedClasses = [...data.classes].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true, sensitivity: 'base' }));
+
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="full" className="p-0 overflow-hidden bg-[#e0e0e0]">
-            {/* Header */}
-            <div className="bg-primary p-3 flex justify-between items-center text-white border-b border-gray-300">
-                <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-lg">settings</span>
-                    <h2 className="text-sm font-black uppercase">Agrupamento Detalhado</h2>
-                </div>
-                <button onClick={onClose} className="hover:bg-white/10 rounded-full p-1 transition-colors">
-                    <span className="material-symbols-outlined">close</span>
-                </button>
-            </div>
-
-            {/* Filters Bar */}
-            <div className="bg-[#f0f0f0] p-2 flex flex-wrap items-center gap-4 text-[11px] font-bold text-gray-700 border-b border-gray-300 uppercase shadow-sm">
-                <span>Filtrar:</span>
-
-                <div className="flex items-center gap-1">
-                    <label>Turma:</label>
-                    <select
-                        value={filters.classId}
-                        onChange={(e) => setFilters(prev => ({ ...prev, classId: e.target.value }))}
-                        className="min-w-[160px] bg-white border border-gray-400 rounded px-2 pr-6 py-0.5 outline-none focus:ring-1 focus:ring-primary h-6 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E')] bg-[length:12px] bg-[right_4px_center] bg-no-repeat transition-all"
+        <Modal isOpen={isOpen} onClose={onClose} size="full" scrollable={false}>
+            <div className="flex min-h-0 flex-1 flex-col">
+                <div className="bg-gradient-to-r from-[#1259bd] to-primary px-5 py-4 text-white flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 min-w-0">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-sm font-bold text-primary">1</span>
+                        <div className="min-w-0">
+                            <h2 className="text-base font-bold tracking-tight">Agrupamento detalhado</h2>
+                            <p className="text-sm text-white/80 mt-0.5 leading-snug">
+                                Regra de cada aula fixada na etapa de professores. Esta opção prevalece sobre as demais.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                        className="size-10 shrink-0 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
                     >
-                        <option value="all">Todas as salas / turmas</option>
-                        {[...data.classes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
                 </div>
 
-                <div className="flex items-center gap-1">
-                    <label>Disciplina:</label>
-                    <select
-                        value={filters.subjectId}
-                        onChange={(e) => setFilters(prev => ({ ...prev, subjectId: e.target.value }))}
-                        className="min-w-[150px] bg-white border border-gray-400 rounded px-2 pr-6 py-0.5 outline-none focus:ring-1 focus:ring-primary h-6 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E')] bg-[length:12px] bg-[right_4px_center] bg-no-repeat transition-all"
-                    >
-                        <option value="all">Todas as disciplinas</option>
-                        {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                <div className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/60 px-5 py-4">
+                    <div className="flex flex-wrap items-end gap-3">
+                        <label className="flex min-w-[180px] flex-1 flex-col gap-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Turma</span>
+                            <select value={filters.classId} onChange={(e) => setFilters(prev => ({ ...prev, classId: e.target.value }))} className={fieldClass}>
+                                <option value="all">Todas as turmas</option>
+                                {sortedClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </label>
+                        <label className="flex min-w-[180px] flex-1 flex-col gap-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Disciplina</span>
+                            <select value={filters.subjectId} onChange={(e) => setFilters(prev => ({ ...prev, subjectId: e.target.value }))} className={fieldClass}>
+                                <option value="all">Todas as disciplinas</option>
+                                {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                        </label>
+                        <label className="flex min-w-[180px] flex-1 flex-col gap-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Professor</span>
+                            <select value={filters.teacherId} onChange={(e) => setFilters(prev => ({ ...prev, teacherId: e.target.value }))} className={fieldClass}>
+                                <option value="all">Todos os professores</option>
+                                {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                        </label>
+                        <label className="flex w-28 flex-col gap-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Aulas</span>
+                            <select value={filters.lessons} onChange={(e) => setFilters(prev => ({ ...prev, lessons: e.target.value }))} className={fieldClass}>
+                                <option value="all">Todas</option>
+                                {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
+                            </select>
+                        </label>
+                        <button
+                            type="button"
+                            onClick={clearFilters}
+                            disabled={!filtersActive}
+                            className="h-10 shrink-0 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-600 hover:border-primary/40 hover:text-primary disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                        >
+                            Limpar
+                        </button>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        {filteredAssignments.length} de {assignments.length} {assignments.length === 1 ? 'atribuição' : 'atribuições'}
+                    </p>
                 </div>
 
-                <div className="flex items-center gap-1">
-                    <label>Professor:</label>
-                    <select
-                        value={filters.teacherId}
-                        onChange={(e) => setFilters(prev => ({ ...prev, teacherId: e.target.value }))}
-                        className="min-w-[160px] bg-white border border-gray-400 rounded px-2 pr-6 py-0.5 outline-none focus:ring-1 focus:ring-primary h-6 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E')] bg-[length:12px] bg-[right_4px_center] bg-no-repeat transition-all"
-                    >
-                        <option value="all">Todos os professores</option>
-                        {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+                    <div className="sticky top-0 z-10 grid grid-cols-[minmax(88px,0.7fr)_minmax(130px,1fr)_minmax(140px,1.1fr)_72px_minmax(220px,1.8fr)] gap-3 border-b border-gray-200 bg-white/95 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+                        <span>Turma</span>
+                        <span>Disciplina</span>
+                        <span>Professor</span>
+                        <span>Aulas</span>
+                        <span>Agrupamento</span>
+                    </div>
 
-                <div className="flex items-center gap-1">
-                    <label>Núm. Aulas:</label>
-                    <select
-                        value={filters.lessons}
-                        onChange={(e) => setFilters(prev => ({ ...prev, lessons: e.target.value }))}
-                        className="bg-white border border-gray-400 rounded px-1 pr-6 py-0.5 outline-none focus:ring-1 focus:ring-primary h-6 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E')] bg-[length:12px] bg-[right_4px_center] bg-no-repeat"
-                    >
-                        <option value="all">Todos</option>
-                        {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                </div>
-
-                <button
-                    onClick={clearFilters}
-                    className="bg-white border border-gray-400 rounded px-2 py-0.5 hover:bg-gray-100 transition-colors shadow-sm"
-                >
-                    Limpar todos os filtros
-                </button>
-            </div>
-
-            <div className="p-0 h-[calc(100vh-140px)] overflow-hidden flex flex-col bg-white">
-                <div className="bg-[#dccfb4] p-3 text-center text-xs font-bold text-gray-700 uppercase border-b border-gray-300">
-                    Informe a configuração desejada para o agrupamento de aulas de cada professor que foi fixado nas turmas da ETAPA 5.
-                </div>
-
-                {/* Table Header */}
-                <div className="grid grid-cols-[120px_150px_180px_120px_1fr] bg-[#dccfb4]/40 border-b border-gray-300 px-4 py-2 text-[11px] font-black uppercase text-gray-600">
-                    <span className="text-primary italic">Turma</span>
-                    <span className="text-green-600 italic">Disciplina</span>
-                    <span className="text-blue-600 italic">Professor Obrigatório</span>
-                    <span>Núm. Aulas</span>
-                    <span>Escolha a configuração de agrupamento para cada caso</span>
-                </div>
-
-                {/* Table Body */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    {filteredAssignments.map((a, idx) => {
+                    {filteredAssignments.map((a) => {
                         const defaultGrouping = (a.lessons === 1 || a.lessons === 2) ? 'No máximo 1 aula por dia' : 'Não Especificado';
                         const grouping = data.assignmentGroupings?.[a.key] || defaultGrouping;
+                        const options = a.lessons === 2 ? GROUPING_OPTIONS_2_LESSONS
+                            : a.lessons === 3 ? GROUPING_OPTIONS_3_LESSONS
+                                : a.lessons === 4 ? GROUPING_OPTIONS_4_LESSONS
+                                    : a.lessons === 5 ? GROUPING_OPTIONS_5_LESSONS
+                                        : a.lessons === 10 ? GROUPING_OPTIONS_10_LESSONS
+                                            : ['Não Especificado'];
 
                         return (
                             <div
                                 key={a.key}
-                                className={`grid grid-cols-[120px_150px_180px_120px_1fr] gap-0 px-4 py-1 items-center border-b border-gray-100 hover:bg-blue-50/30 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                                className="grid grid-cols-[minmax(88px,0.7fr)_minmax(130px,1fr)_minmax(140px,1.1fr)_72px_minmax(220px,1.8fr)] gap-3 items-center border-b border-gray-100 px-5 py-2.5 hover:bg-primary/[0.04] dark:border-gray-800 dark:hover:bg-white/[0.03]"
                             >
-                                <span className="text-xs font-bold text-blue-800">{a.classroom.name}</span>
-                                <span className="text-xs font-bold text-green-700">{a.subject.name}</span>
-                                <span className="text-xs font-bold text-gray-500">{a.teacher.name}</span>
-                                <span className="text-xs font-bold text-gray-700">({a.lessons} {a.lessons === 1 ? 'aula' : 'aulas'})</span>
-
-                                <div className="pl-4">
-                                    {a.lessons === 1 ? (
-                                        <div className="text-[11px] font-bold text-gray-800 py-1">No máximo 1 aula por dia</div>
-                                    ) : (
-                                        <select
-                                            value={grouping}
-                                            onChange={(e) => handleUpdateGrouping(a.key, e.target.value)}
-                                            className="w-full border border-gray-300 rounded px-2 pr-8 py-1 text-[11px] font-bold outline-none focus:ring-1 focus:ring-primary shadow-sm h-8 bg-white appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E')] bg-[length:14px] bg-[right_8px_center] bg-no-repeat uppercase"
-                                        >
-                                            {a.lessons === 2 ? GROUPING_OPTIONS_2_LESSONS.map(o => <option key={o} value={o}>{o}</option>) :
-                                                a.lessons === 3 ? GROUPING_OPTIONS_3_LESSONS.map(o => <option key={o} value={o}>{o}</option>) :
-                                                    a.lessons === 4 ? GROUPING_OPTIONS_4_LESSONS.map(o => <option key={o} value={o}>{o}</option>) :
-                                                        a.lessons === 5 ? GROUPING_OPTIONS_5_LESSONS.map(o => <option key={o} value={o}>{o}</option>) :
-                                                            a.lessons === 10 ? GROUPING_OPTIONS_10_LESSONS.map(o => <option key={o} value={o}>{o}</option>) :
-                                                                <option value="Não Especificado">Não Especificado</option>}
-                                        </select>
-                                    )}
-                                </div>
+                                <span className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{a.classroom.name}</span>
+                                <span className="flex items-center gap-2 min-w-0">
+                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: a.subject.color || '#94a3b8' }} />
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{a.subject.name}</span>
+                                </span>
+                                <span className="text-sm text-gray-600 dark:text-gray-300 truncate">{a.teacher.name}</span>
+                                <span className="inline-flex h-7 w-fit items-center rounded-lg bg-gray-100 px-2 text-xs font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                    {a.lessons}
+                                </span>
+                                {a.lessons === 1 ? (
+                                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">No máximo 1 aula por dia</span>
+                                ) : (
+                                    <select
+                                        value={grouping}
+                                        onChange={(e) => handleUpdateGrouping(a.key, e.target.value)}
+                                        className={fieldClass}
+                                    >
+                                        {options.map(o => <option key={o} value={o}>{o}</option>)}
+                                    </select>
+                                )}
                             </div>
                         );
                     })}
 
                     {filteredAssignments.length === 0 && (
-                        <div className="p-20 text-center text-gray-400 italic bg-gray-50">
-                            Nenhuma atribuição encontrada para os filtros selecionados.
+                        <div className="px-6 py-16 text-center">
+                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Nenhuma atribuição com esses filtros</p>
+                            <p className="text-xs text-gray-500 mt-1">Limpe os filtros ou ajuste turma, disciplina e professor.</p>
                         </div>
                     )}
                 </div>

@@ -6,8 +6,9 @@ interface ModalProps {
     onClose: () => void;
     title?: string;
     children: React.ReactNode;
-    size?: 'sm' | 'md' | 'lg' | 'xl';
+    size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
     headerColor?: string; // Optional custom header color
+    scrollable?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -16,7 +17,8 @@ export const Modal: React.FC<ModalProps> = ({
     title,
     children,
     size = 'md',
-    headerColor = 'bg-primary'
+    headerColor = 'bg-primary',
+    scrollable = true
 }) => {
     if (!isOpen) return null;
 
@@ -24,7 +26,8 @@ export const Modal: React.FC<ModalProps> = ({
         sm: 'max-w-md',
         md: 'max-w-xl',
         lg: 'max-w-3xl',
-        xl: 'max-w-5xl'
+        xl: 'max-w-5xl',
+        full: 'max-w-[calc(100vw-2rem)]'
     };
 
     return (
@@ -56,7 +59,7 @@ export const Modal: React.FC<ModalProps> = ({
                         </button>
                     </div>
                 )}
-                <div className="max-h-[80vh] overflow-y-auto custom-scrollbar">
+                <div className={scrollable ? 'max-h-[80vh] overflow-y-auto custom-scrollbar' : 'flex h-[min(860px,calc(100vh-2rem))] min-h-0 flex-col overflow-hidden'}>
                     {children}
                 </div>
             </div>
