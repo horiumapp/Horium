@@ -120,7 +120,6 @@ export interface SetupData {
   };
   assignmentGroupings?: Record<string, string>; // "teacherId|classId|subjectId" -> grouping choice
   teacherGroupings?: Record<string, string>; // teacherId -> grouping choice
-  subjectGroupings?: Record<string, string>; // subjectId -> grouping choice
   generalGrouping?: string; // Global grouping choice
   fixedLessons?: FixedLesson[];
   pinnedLessons?: FixedLesson[];

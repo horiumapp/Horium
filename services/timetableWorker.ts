@@ -164,7 +164,6 @@ export function runGeneratorEngine(
     const getGroupingRuleFor = (teacherId: string, classId: string, subjectId: string): GroupingRule => {
         const raw = data.assignmentGroupings?.[`${teacherId}|${classId}|${subjectId}`] ||
             data.teacherGroupings?.[teacherId] ||
-            data.subjectGroupings?.[subjectId] ||
             data.generalGrouping ||
             'Agrupar no máximo 2 aulas por dia SEGUIDAS';
         return parseGroupingRule(raw);
@@ -355,7 +354,6 @@ export function runGeneratorEngine(
                                         lessons: classroom.lessonsPerSubject?.[subjectId] || 0,
                                         grouping: data.assignmentGroupings?.[`${teacher.id}|${classId}|${subjectId}`] ||
                                             data.teacherGroupings?.[teacher.id] ||
-                                            data.subjectGroupings?.[subjectId] ||
                                             data.generalGrouping ||
                                             'Não Especificado',
                                         rule
@@ -406,7 +404,6 @@ export function runGeneratorEngine(
                             lessons: lessonCount,
                             grouping: data.assignmentGroupings?.[`${chosenTeacher.id}|${classroom.id}|${subjectId}`] ||
                                 data.teacherGroupings?.[chosenTeacher.id] ||
-                                data.subjectGroupings?.[subjectId] ||
                                 data.generalGrouping ||
                                 'Não Especificado',
                             rule
