@@ -38,7 +38,11 @@ const PlansPage: React.FC<PlansPageProps> = ({
     return pricingService.calculatePrice(numClasses, duration);
   }, [numClasses, duration]);
 
-  const pixPayload = useMemo(() => generatePixPayload(import.meta.env.VITE_PIX_KEY || 'horium.app@gmail.com', totalPrice), [totalPrice]);
+  const pixKey = (import.meta.env.VITE_PIX_KEY || '').trim();
+  const pixPayload = useMemo(
+    () => (pixKey ? generatePixPayload(pixKey, totalPrice) : ''),
+    [pixKey, totalPrice]
+  );
 
   useEffect(() => {
     if (!showPixQR || paymentStatus === 'success' || paymentStatus === 'verifying' || paymentStatus === 'upload_receipt' || isExpired) return;
@@ -64,6 +68,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
   };
 
   const handleCopyPix = () => {
+    if (!pixPayload) return;
     navigator.clipboard.writeText(pixPayload);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -95,8 +100,14 @@ const PlansPage: React.FC<PlansPageProps> = ({
         return;
       }
 
-      const rawExt = receiptFile.name.split('.').pop() || 'png';
-      const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 5);
+      const rawExt = (receiptFile.name.split('.').pop() || '').toLowerCase();
+      const allowedExt = ['png', 'jpg', 'jpeg', 'webp', 'pdf'];
+      if (!allowedExt.includes(rawExt)) {
+        alert('Envie o comprovante em PNG, JPG, WEBP ou PDF.');
+        setPaymentStatus('upload_receipt');
+        return;
+      }
+      const fileExt = rawExt === 'jpeg' ? 'jpg' : rawExt;
       const filePath = `${userData.user.id}/${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
 
       // Upload para o bucket receipts
@@ -360,13 +371,20 @@ const PlansPage: React.FC<PlansPageProps> = ({
                 Expira em {formatTime(timeLeft)}
               </div>
 
+              {pixPayload ? (
               <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4">
                 <QRCodeSVG value={pixPayload} size={180} level="M" />
               </div>
+              ) : (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-xl p-4 mb-4 text-center">
+                <p className="font-black text-sm">Cobrança PIX indisponível</p>
+                <p className="text-xs font-medium mt-1">A chave de recebimento não foi configurada neste ambiente.</p>
+              </div>
+              )}
 
               <div className="text-center w-full">
-                <p className="font-black text-xl text-gray-900 dark:text-gray-100 tracking-tight">Escaneie o QR Code</p>
-                <p className="text-xs font-bold text-gray-500 max-w-[220px] mx-auto mt-1 mb-4">Abra o app do seu banco e escolha pagar via PIX QR Code.</p>
+                <p className="font-black text-xl text-gray-900 dark:text-gray-100 tracking-tight">{pixPayload ? 'Escaneie o QR Code' : 'Pagamento indisponível'}</p>
+                <p className="text-xs font-bold text-gray-500 max-w-[220px] mx-auto mt-1 mb-4">{pixPayload ? 'Abra o app do seu banco e escolha pagar via PIX QR Code.' : 'Defina VITE_PIX_KEY no build antes de gerar uma cobrança.'}</p>
 
                 <div className="w-full space-y-1.5 text-left mb-2">
                   <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Pix Copia e Cola:</label>
@@ -374,7 +392,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
                     <div className="flex-1 bg-gray-50 dark:bg-gray-950 text-gray-500 dark:text-gray-400 text-[10px] p-2.5 rounded-lg overflow-hidden text-ellipsis whitespace-nowrap font-mono border border-dashed border-gray-200 dark:border-gray-800">
                       {pixPayload}
                     </div>
-                    <Button variant={copied ? 'default' : 'outline'} onClick={handleCopyPix} className={`shrink-0 flex items-center justify-center p-0 w-10 h-10 ${copied ? 'bg-green-500 hover:bg-green-600 border-green-500 text-white' : ''}`}>
+                    <Button variant={copied ? 'default' : 'outline'} onClick={handleCopyPix} disabled={!pixPayload} className={`shrink-0 flex items-center justify-center p-0 w-10 h-10 ${copied ? 'bg-green-500 hover:bg-green-600 border-green-500 text-white' : ''}`}>
                       <span className="material-symbols-outlined text-sm">{copied ? 'check' : 'content_copy'}</span>
                     </Button>
                   </div>

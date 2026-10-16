@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { SAFE_STORAGE_PATH_REGEX, getSafeHttpsUrl } from './adminLicenseService';
 
 export interface TicketData {
     id?: string;
@@ -84,26 +85,38 @@ export const ticketService = {
      * Gera uma URL pré-assinada temporária (1 hora) para visualização segura do anexo
      */
     async getAttachmentSignedUrl(pathOrUrl: string): Promise<string> {
-        if (!pathOrUrl) return '';
-        if (pathOrUrl.startsWith('http') && pathOrUrl.includes('token=')) {
-            return pathOrUrl; // Mantém compatibilidade com URLs antigas já salvas
+        if (!pathOrUrl || typeof pathOrUrl !== 'string') return '';
+        const trimmed = pathOrUrl.trim();
+        const lower = trimmed.toLowerCase();
+
+        if (
+            lower.startsWith('javascript:') ||
+            lower.startsWith('data:') ||
+            lower.startsWith('vbscript:') ||
+            lower.startsWith('file:') ||
+            lower.startsWith('blob:')
+        ) {
+            return '';
         }
 
-        let path = pathOrUrl;
+        let path = trimmed;
         if (path.includes('/tickets-attachments/')) {
-            path = path.split('/tickets-attachments/').pop()?.split('?')[0] || path;
+            path = path.split('/tickets-attachments/').pop()?.split('?')[0] || '';
+        }
+        if (path.includes('://') || path.includes('..') || !SAFE_STORAGE_PATH_REGEX.test(path)) {
+            return '';
         }
 
         const { data, error } = await supabase.storage
             .from('tickets-attachments')
-            .createSignedUrl(path, 3600); // 1 hora de TTL
+            .createSignedUrl(path, 3600);
 
-        if (error) {
+        if (error || !data?.signedUrl) {
             console.error('Error generating signed URL for ticket:', error);
             return '';
         }
 
-        return data?.signedUrl || '';
+        return getSafeHttpsUrl(data.signedUrl) || '';
     },
 
     /**

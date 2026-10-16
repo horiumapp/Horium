@@ -161,10 +161,9 @@ export const adminLicenseService = {
      */
     async rejectLicense(licenseId: string): Promise<void> {
         try {
-            const { error } = await supabase
-                .from('licenses')
-                .update({ payment_status: 'Rejeitado', valid_until: null })
-                .eq('id', licenseId);
+            const { error } = await supabase.rpc('reject_license_rpc', {
+                p_license_id: licenseId
+            });
 
             if (error) {
                 console.error("Erro ao rejeitar licença:", error);
@@ -250,7 +249,7 @@ export const adminLicenseService = {
         const trimmed = receiptUrlOrPath.trim();
         const lower = trimmed.toLowerCase();
 
-        // 1. Bloqueia esquemas perigosos
+        // 1. Bloqueia esquemas perigosos. URL absoluta nunca é aberta: só vira caminho do bucket.
         if (
             lower.startsWith('javascript:') ||
             lower.startsWith('data:') ||
@@ -262,19 +261,16 @@ export const adminLicenseService = {
             return '';
         }
 
-        // 2. Se já for uma URL HTTPS completa e assinada (com token)
-        if (lower.startsWith('https://') && trimmed.includes('token=')) {
-            const safe = getSafeHttpsUrl(trimmed);
-            return safe || '';
-        }
-
-        // 3. Extrai o caminho relativo no bucket receipts
+        // 2. Extrai o caminho relativo no bucket receipts
         let path = trimmed;
         if (path.includes('/receipts/')) {
-            path = path.split('/receipts/').pop()?.split('?')[0] || path;
+            path = path.split('/receipts/').pop()?.split('?')[0] || '';
+        }
+        if (path.includes('://') || path.includes('..')) {
+            return '';
         }
 
-        // 4. Valida se o caminho segue a regex estrita de storage
+        // 3. Valida se o caminho segue a regex estrita de storage
         if (!SAFE_STORAGE_PATH_REGEX.test(path)) {
             console.warn("Caminho de comprovante não atende ao padrão seguro de armazenamento:", path);
             return '';

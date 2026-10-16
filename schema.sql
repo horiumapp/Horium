@@ -162,8 +162,10 @@ BEGIN
             updated_at = timezone('utc', now());
     END IF;
 
-    -- Remove fixedLessons de schedules.data para grades sem licença ativa (proteção contra vazamento via SELECT *)
-    IF NOT COALESCE(NEW.is_licensed, false) THEN
+    -- A solução nunca fica em schedules.data. O SELECT do dono não é o canal do paywall;
+    -- a entrega ocorre só em get_schedule_solution. Vale para admin e não admin, e não
+    -- depende de is_licensed (esse flag ainda pode estar true quando este trigger roda).
+    IF NEW.data IS NOT NULL AND jsonb_typeof(NEW.data) = 'object' AND (NEW.data ? 'fixedLessons') THEN
         NEW.data := NEW.data - 'fixedLessons';
     END IF;
 
@@ -200,10 +202,14 @@ ALTER TABLE public.licenses ADD CONSTRAINT chk_licenses_positive_values CHECK (
 );
 
 ALTER TABLE public.licenses DROP CONSTRAINT IF EXISTS chk_licenses_receipt_url_safe;
+-- URLs absolutas antigas deixam de ser aceitas. Só permanece caminho relativo do bucket.
+UPDATE public.licenses
+SET receipt_url = NULL
+WHERE receipt_url IS NOT NULL
+  AND receipt_url !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$';
 ALTER TABLE public.licenses ADD CONSTRAINT chk_licenses_receipt_url_safe CHECK (
-    receipt_url IS NULL OR 
-    receipt_url ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$' OR
-    receipt_url ~* '^https://[a-zA-Z0-9\.\-]+/storage/v1/object/(public|sign)/receipts/.+'
+    receipt_url IS NULL OR
+    receipt_url ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$'
 );
 
 -- Habilitar RLS para licenses
@@ -308,6 +314,42 @@ FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "Admins can update tickets" ON public.tickets;
 CREATE POLICY "Admins can update tickets" ON public.tickets
 FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+-- Anexo só pode ser caminho relativo na pasta do autor. URL absoluta é recusada.
+CREATE OR REPLACE FUNCTION public.protect_ticket_attachment_path()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.image_url IS NULL OR btrim(NEW.image_url) = '' THEN
+        NEW.image_url := NULL;
+        RETURN NEW;
+    END IF;
+
+    IF NEW.image_url !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$'
+       OR split_part(NEW.image_url, '/', 1) IS DISTINCT FROM NEW.user_id::text THEN
+        RAISE EXCEPTION 'Caminho de anexo inválido ou inseguro.';
+    END IF;
+
+    IF NOT public.is_admin() AND NEW.user_id IS DISTINCT FROM auth.uid() THEN
+        RAISE EXCEPTION 'Caminho de anexo inválido ou inseguro.';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_ticket_attachment ON public.tickets;
+CREATE TRIGGER trg_protect_ticket_attachment
+BEFORE INSERT OR UPDATE ON public.tickets
+FOR EACH ROW
+EXECUTE FUNCTION public.protect_ticket_attachment_path();
+
+UPDATE public.tickets
+SET image_url = NULL
+WHERE image_url IS NOT NULL
+  AND (
+    image_url !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$'
+    OR split_part(image_url, '/', 1) IS DISTINCT FROM user_id::text
+  );
 
 
 -- 6. TABELA AUDIT_LOGS (Logs de Auditoria de Operações)
@@ -494,6 +536,49 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
+-- RPC para rejeitar licença e revogar a solução já gravada (Admin)
+DROP FUNCTION IF EXISTS public.reject_license_rpc(UUID);
+CREATE OR REPLACE FUNCTION public.reject_license_rpc(
+    p_license_id UUID
+)
+RETURNS VOID AS $$
+DECLARE
+    v_user_id UUID;
+BEGIN
+    IF NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Acesso negado. Apenas administradores podem rejeitar licenças.';
+    END IF;
+
+    UPDATE public.licenses
+    SET payment_status = 'Rejeitado',
+        valid_until = NULL
+    WHERE id = p_license_id
+    RETURNING user_id INTO v_user_id;
+
+    IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    -- Grades que não tenham outra licença aprovada e vigente perdem a solução.
+    UPDATE public.schedules s
+    SET is_licensed = false,
+        data = CASE
+            WHEN s.data ? 'fixedLessons' THEN s.data - 'fixedLessons'
+            ELSE s.data
+        END,
+        updated_at = timezone('utc', now())
+    WHERE s.user_id = v_user_id
+      AND NOT EXISTS (
+            SELECT 1
+            FROM public.licenses l
+            WHERE l.user_id = v_user_id
+              AND l.payment_status = 'Aprovado'
+              AND (l.valid_until IS NULL OR l.valid_until >= CURRENT_DATE)
+              AND (l.schedule_id = s.id OR l.schedule_id IS NULL)
+      );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
 -- RPC para excluir licença permanentemente (Admin)
 DROP FUNCTION IF EXISTS public.delete_license_rpc(UUID);
 CREATE OR REPLACE FUNCTION public.delete_license_rpc(
@@ -642,13 +727,20 @@ BEGIN
 
     v_total_price := p_classes_amount * v_price_per_class;
 
-    -- Validação de segurança do caminho do comprovante (Prevenção de XSS / Injeção)
+    -- Só caminho relativo na pasta do usuário autenticado. URL absoluta é recusada.
     IF p_receipt_path IS NOT NULL AND p_receipt_path <> '' THEN
-        IF NOT (
-            p_receipt_path ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$'
-            OR p_receipt_path ~* '^https://[a-zA-Z0-9\.\-]+/storage/v1/object/(public|sign)/receipts/.+'
-        ) THEN
+        IF p_receipt_path !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-zA-Z0-9_\.\-]+\.(png|jpe?g|webp|pdf)$'
+           OR split_part(p_receipt_path, '/', 1) IS DISTINCT FROM auth.uid()::text THEN
             RAISE EXCEPTION 'Caminho de comprovante inválido ou inseguro.';
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM storage.objects o
+            WHERE o.bucket_id = 'receipts'
+              AND o.name = p_receipt_path
+        ) THEN
+            RAISE EXCEPTION 'Comprovante não encontrado no armazenamento do usuário.';
         END IF;
     END IF;
 
@@ -710,12 +802,19 @@ BEGIN
               AND payment_status = 'Aprovado'
               AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
         ) THEN
-            -- Se a licença expirou ou não existe, garante que is_licensed seja false na tabela schedules
-            IF v_is_licensed THEN
-                UPDATE public.schedules
-                SET is_licensed = false, updated_at = timezone('utc', now())
-                WHERE id = p_schedule_id;
-            END IF;
+            -- Revogação efetiva: a flag e qualquer cópia legada da solução saem no mesmo UPDATE.
+            UPDATE public.schedules
+            SET is_licensed = false,
+                data = CASE
+                    WHEN data ? 'fixedLessons' THEN data - 'fixedLessons'
+                    ELSE data
+                END,
+                updated_at = timezone('utc', now())
+            WHERE id = p_schedule_id
+              AND (
+                    is_licensed IS DISTINCT FROM false
+                    OR (data ? 'fixedLessons')
+              );
             RAISE EXCEPTION 'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.';
         END IF;
     END IF;
@@ -855,11 +954,11 @@ BEGIN
     SET fixed_lessons = EXCLUDED.fixed_lessons,
         updated_at = timezone('utc', now());
 
-    -- 2. Sanitizar a coluna data de schedules para horários sem licença ativa
+    -- 2. A coluna data não guarda a solução, com ou sem licença.
+    --    A cópia já foi para schedule_solutions no passo anterior.
     UPDATE public.schedules
     SET data = data - 'fixedLessons'
-    WHERE (is_licensed IS DISTINCT FROM true)
-      AND data ? 'fixedLessons';
+    WHERE data ? 'fixedLessons';
 END;
 $$;
 
