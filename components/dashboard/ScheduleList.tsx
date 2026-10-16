@@ -52,19 +52,19 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({
                         <div className={fillsRow ? 'p-6 sm:p-8' : 'p-4 sm:p-5'}>
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="flex min-w-0 items-start gap-4">
-                                    <div className={`flex shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/10 dark:text-blue-300 ${fillsRow ? 'size-16' : 'size-12'}`}>
-                                        <span className={`material-symbols-outlined ${fillsRow ? 'text-[32px]' : 'text-[24px]'}`}>school</span>
+                                    <div className={`flex shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/10 dark:text-blue-300 ${fillsRow ? 'size-20' : 'size-12'}`}>
+                                        <span className={`material-symbols-outlined ${fillsRow ? 'text-[40px]' : 'text-[24px]'}`}>school</span>
                                     </div>
                                     <div className="min-w-0 pt-0.5">
                                         <button
                                             type="button"
                                             onClick={() => onEdit(schedule)}
-                                            className={`block max-w-full truncate text-left font-bold text-slate-900 transition hover:text-primary focus-visible:rounded dark:text-white dark:hover:text-blue-300 ${fillsRow ? 'text-2xl sm:text-3xl' : 'text-base sm:text-lg'}`}
+                                            className={`block max-w-full truncate text-left font-extrabold! tracking-tight text-slate-900 transition hover:text-primary focus-visible:rounded dark:text-white dark:hover:text-blue-300 ${fillsRow ? 'text-4xl! sm:text-5xl!' : 'text-xl! sm:text-2xl!'}`}
                                             title={`Abrir ${schedule.institution.name || 'horário sem nome'}`}
                                         >
                                             {schedule.institution.name || 'Instituição sem nome'}
                                         </button>
-                                        <p className={`mt-1 text-slate-500 dark:text-slate-400 ${fillsRow ? 'text-base' : 'text-sm'}`}>
+                                        <p className="mt-1.5 text-xs font-medium text-slate-400 dark:text-slate-500">
                                             Ano letivo {schedule.institution.year} <span aria-hidden="true">·</span> Turno {schedule.institution.shift}
                                         </p>
                                     </div>
