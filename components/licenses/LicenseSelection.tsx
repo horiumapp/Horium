@@ -63,21 +63,34 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
     }, []);
 
     useEffect(() => {
-        const page = danfePreviewRef.current?.querySelector('.danfe-page');
-        if (!danfeLicense || !(page instanceof HTMLElement)) return;
+        if (!danfeLicense) return;
 
         let cancelled = false;
         setPdfBlob(null);
         setPdfError(null);
         setPreparingPdf(true);
 
-        createDanfePdf(page)
+        const waitForLaidOutPage = async () => {
+            for (let attempt = 0; attempt < 30; attempt += 1) {
+                const found = danfePreviewRef.current?.querySelector('.danfe-page');
+                if (found instanceof HTMLElement && found.offsetWidth > 0 && found.offsetHeight > 0) return found;
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            return null;
+        };
+
+        waitForLaidOutPage()
+            .then((laidOutPage) => {
+                if (cancelled) return null;
+                if (!laidOutPage) throw new Error('A nota ainda não está pronta para o PDF.');
+                return createDanfePdf(laidOutPage);
+            })
             .then((blob) => {
-                if (!cancelled) setPdfBlob(blob);
+                if (!cancelled && blob) setPdfBlob(blob);
             })
             .catch((previewError) => {
                 console.error('Erro ao montar a visualização da nota:', previewError);
-                if (!cancelled) setPdfError('Não foi possível montar o PDF da nota.');
+                if (!cancelled) setPdfError(previewError instanceof Error ? previewError.message : String(previewError));
             })
             .finally(() => {
                 if (!cancelled) setPreparingPdf(false);

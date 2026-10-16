@@ -62,11 +62,6 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
     table.prod-table { width: 100%; border-collapse: collapse; font-size: 7pt; }
     table.prod-table th, table.prod-table td { border: 1px solid #000; padding: 2px 3px; }
     table.prod-table th { font-size: 6pt; background: #f8f8f8; text-transform: uppercase; }
-    @media print {
-      .danfe-scope { background: #fff; padding: 0; }
-      .danfe-page { box-shadow: none; width: 100%; padding: 5mm; }
-      .no-print { display: none; }
-    }
   </style>
 </head>
 <body>
