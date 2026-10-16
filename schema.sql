@@ -343,6 +343,23 @@ BEFORE INSERT OR UPDATE ON public.tickets
 FOR EACH ROW
 EXECUTE FUNCTION public.protect_ticket_attachment_path();
 
+-- Remove o trigger legado do projeto, que lia public.profiles.is_admin
+-- (coluna inexistente) e quebrava qualquer UPDATE em tickets.
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN
+        SELECT p.oid::regprocedure AS signature
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname = 'protect_ticket_status'
+    LOOP
+        EXECUTE format('DROP FUNCTION IF EXISTS %s CASCADE', r.signature);
+    END LOOP;
+END $$;
+
 UPDATE public.tickets
 SET image_url = NULL
 WHERE image_url IS NOT NULL
