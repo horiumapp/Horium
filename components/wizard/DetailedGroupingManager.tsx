@@ -76,6 +76,7 @@ export const DetailedGroupingManager: React.FC<DetailedGroupingManagerProps> = (
 
     const filtersActive = filters.classId !== 'all' || filters.subjectId !== 'all' || filters.teacherId !== 'all' || filters.lessons !== 'all';
     const fieldClass = 'h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+    const rowGrid = 'grid min-w-[1080px] grid-cols-[4.25rem_8.25rem_7.5rem_2.75rem_minmax(40rem,1fr)] gap-3';
 
     const sortedClasses = [...data.classes].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true, sensitivity: 'base' }));
 
@@ -146,8 +147,8 @@ export const DetailedGroupingManager: React.FC<DetailedGroupingManagerProps> = (
                     </p>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-                    <div className="sticky top-0 z-10 grid grid-cols-[minmax(88px,0.7fr)_minmax(130px,1fr)_minmax(140px,1.1fr)_72px_minmax(220px,1.8fr)] gap-3 border-b border-gray-200 bg-white/95 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+                <div className="min-h-0 flex-1 overflow-auto custom-scrollbar">
+                    <div className={`sticky top-0 z-10 ${rowGrid} border-b border-gray-200 bg-white/95 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95`}>
                         <span>Turma</span>
                         <span>Disciplina</span>
                         <span>Professor</span>
@@ -168,12 +169,12 @@ export const DetailedGroupingManager: React.FC<DetailedGroupingManagerProps> = (
                         return (
                             <div
                                 key={a.key}
-                                className="grid grid-cols-[minmax(88px,0.7fr)_minmax(130px,1fr)_minmax(140px,1.1fr)_72px_minmax(220px,1.8fr)] gap-3 items-center border-b border-gray-100 px-5 py-2.5 hover:bg-primary/[0.04] dark:border-gray-800 dark:hover:bg-white/[0.03]"
+                                className={`${rowGrid} items-center border-b border-gray-100 px-5 py-2.5 hover:bg-primary/[0.04] dark:border-gray-800 dark:hover:bg-white/[0.03]`}
                             >
                                 <span className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{a.classroom.name}</span>
                                 <span className="flex items-center gap-2 min-w-0">
                                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: a.subject.color || '#94a3b8' }} />
-                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{a.subject.name}</span>
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate" title={a.subject.name}>{a.subject.name}</span>
                                 </span>
                                 <span className="text-sm text-gray-600 dark:text-gray-300 truncate">{a.teacher.name}</span>
                                 <span className="inline-flex h-7 w-fit items-center rounded-lg bg-gray-100 px-2 text-xs font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -184,6 +185,7 @@ export const DetailedGroupingManager: React.FC<DetailedGroupingManagerProps> = (
                                 ) : (
                                     <select
                                         value={grouping}
+                                        title={grouping}
                                         onChange={(e) => handleUpdateGrouping(a.key, e.target.value)}
                                         className={fieldClass}
                                     >
