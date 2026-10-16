@@ -244,7 +244,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
     };
 
     return (
-        <div className={`flex flex-col ${isStandalonePage ? 'h-full min-h-[calc(100vh-64px)]' : 'h-[750px]'} animate-in fade-in duration-500 overflow-hidden print:h-auto print:overflow-visible`}>
+        <div className={`flex flex-col ${isStandalonePage ? 'h-full min-h-[calc(100vh-64px)]' : 'h-[calc(100vh-8rem)] min-h-[640px]'} animate-in fade-in duration-500 overflow-hidden print:h-auto print:overflow-visible`}>
             <style>
                 {`
                     @media print {
@@ -301,7 +301,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
 
             {/* FAILURES BANNER */}
             {normalizedData.failures && normalizedData.failures.length > 0 && (
-                <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2 no-print shrink-0">
+                <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/60 px-4 sm:px-6 py-3 no-print shrink-0">
                     <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                         <span className="material-symbols-outlined text-amber-500 text-lg">warning</span>
@@ -351,18 +351,18 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                 </div>
             )}
 
-            <div className="timetable-shell flex-1 flex overflow-hidden">
-                <aside className="timetable-sidebar w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#101822] flex flex-col shrink-0 overflow-y-auto no-print">
-                    <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Visualização</span>
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                {/* SIDEBAR NAVIGATION */}
+                <aside aria-label="Controles da visualização da grade" className="w-full md:w-60 max-h-[210px] md:max-h-none border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#101822] flex flex-col shrink-0 overflow-hidden no-print">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Visualização</span>
                         {setData && !isLocked && (
                             <button
                                 onClick={() => {
                                     setIsEditMode(!isEditMode);
                                     setSelectedSlot(null);
                                 }}
-                                aria-pressed={isEditMode}
-                                className={`text-[10px] font-semibold px-2 py-1 rounded transition-colors flex items-center gap-1 ${isEditMode ? 'bg-amber-600 text-white shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200'}`}
+                                className={`text-[10px] font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 ${isEditMode ? 'bg-amber-500 text-white shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'}`}
                             >
                                 <span className="material-symbols-outlined text-xs">{isEditMode ? 'edit_off' : 'edit'}</span>
                                 {isEditMode ? 'MODO EDIÇÃO' : 'EDITAR'}
@@ -370,7 +370,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                         )}
                     </div>
 
-                    <div className="p-3 grid grid-cols-3 gap-1 bg-gray-50 dark:bg-gray-900/50 m-3 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <div className="px-3 py-2 grid grid-cols-3 gap-1.5 bg-gray-50 dark:bg-gray-900/50 mx-3 my-2 rounded-xl border border-gray-100 dark:border-gray-800">
                         {[
                             { id: 'CLASS' as ViewMode, icon: 'groups', label: 'Turma' },
                             { id: 'TEACHER' as ViewMode, icon: 'person', label: 'Prof' },
@@ -379,7 +379,8 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                             <button
                                 key={opt.id}
                                 onClick={() => handleModeChange(opt.id)}
-                                className={`flex flex-col items-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all ${viewMode === opt.id ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:bg-white dark:hover:bg-gray-800'}`}
+                                aria-pressed={viewMode === opt.id}
+                                className={`flex flex-col items-center gap-1 py-2 px-1 rounded-lg text-xs font-semibold transition-all ${viewMode === opt.id ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:bg-white dark:hover:bg-gray-800'}`}
                             >
                                 <span className="material-symbols-outlined text-[18px]">{opt.icon}</span>
                                 <span className="text-[9px] uppercase tracking-tighter">{opt.label}</span>
@@ -387,13 +388,13 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                         ))}
                     </div>
 
-                    <div className="flex-1 overflow-y-auto px-3 space-y-1 custom-scrollbar">
+                    <div className="flex-1 min-h-0 overflow-x-auto md:overflow-y-auto px-3 pb-2 md:pb-3 flex gap-1 md:block md:space-y-1 custom-scrollbar">
                         {viewMode === 'WEEKLY' ? (
                             activeDays.map((day, idx) => (
                                 <button
                                     key={day}
                                     onClick={() => setSelectedDayIndex(idx)}
-                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${selectedDayIndex === idx ? 'bg-primary/10 text-primary border border-primary/20 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                    className={`min-w-[128px] md:min-w-0 md:w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${selectedDayIndex === idx ? 'bg-primary/10 text-primary border border-primary/20 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                                 >
                                     <span>{day}</span>
                                     <span className="material-symbols-outlined text-xs">arrow_forward_ios</span>
@@ -404,7 +405,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                 <button
                                     key={entity.id}
                                     onClick={() => setSelectedId(entity.id)}
-                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${selectedId === entity.id ? 'bg-primary text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                    className={`min-w-[150px] md:min-w-0 md:w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${selectedId === entity.id ? 'bg-primary text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                                 >
                                     <span className="truncate pr-2">{entity.name}</span>
                                     <span className="text-[10px] opacity-70">
@@ -417,26 +418,24 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                 </aside>
 
                 {/* MAIN PRINT / VIEW AREA */}
-                <main className="flex-1 flex flex-col overflow-y-auto bg-gray-50/50 dark:bg-[#101822]/50 p-4 md:p-6 print:p-0 print:bg-white custom-scrollbar">
+                <main className="min-w-0 flex-1 flex flex-col overflow-y-auto bg-gray-50/50 dark:bg-[#101822]/50 p-3 sm:p-4 md:p-6 print:p-0 print:bg-white custom-scrollbar">
                     {/* TOP ACTION BAR */}
                     <div className="flex justify-between items-center mb-4 no-print flex-wrap gap-3">
                         <div className="flex items-center gap-2">
                             <button
-                                type="button"
+                                aria-label="Item anterior"
                                 onClick={() => handleNavigate('prev')}
-                                aria-label="Anterior"
-                                className="size-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:border-primary shadow-sm"
+                                className="size-9 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:border-primary shadow-sm focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15"
                             >
                                 <span className="material-symbols-outlined text-sm">chevron_left</span>
                             </button>
-                            <h2 className="text-base font-black text-gray-800 dark:text-white uppercase tracking-tight">
+                            <h2 className="text-sm sm:text-base font-bold text-gray-800 dark:text-white tracking-tight">
                                 {currentEntityName}
                             </h2>
                             <button
-                                type="button"
+                                aria-label="Próximo item"
                                 onClick={() => handleNavigate('next')}
-                                aria-label="Próximo"
-                                className="size-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:border-primary shadow-sm"
+                                className="size-9 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:border-primary shadow-sm focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15"
                             >
                                 <span className="material-symbols-outlined text-sm">chevron_right</span>
                             </button>
@@ -459,7 +458,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                         onReprocess();
                                     }}
                                     title="Reprocessar e gerar uma nova grade de horários com os critérios configurados"
-                                    className="px-3.5 py-2 bg-primary hover:bg-primary/90 active:scale-95 text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm shadow-primary/20"
+                                className="px-3.5 py-2.5 bg-primary hover:bg-primary/90 active:scale-95 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm shadow-primary/20"
                                 >
                                     <span className="material-symbols-outlined text-sm">refresh</span>
                                     Reprocessar
@@ -468,7 +467,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                             <button
                                 onClick={handlePrint}
                                 disabled={isLocked}
-                                className={`px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm ${isLocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50'}`}
+                                className={`px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${isLocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50'}`}
                             >
                                 <span className="material-symbols-outlined text-sm">print</span>
                                 Imprimir
@@ -485,7 +484,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                         excelService.exportEntityView(viewMode, selectedId, normalizedData);
                                     }
                                 }}
-                                className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm"
+                                className="px-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
                             >
                                 <span className="material-symbols-outlined text-sm">download</span>
                                 Exportar Excel
@@ -514,7 +513,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                             </div>
                         ) : (
                             /* TIMETABLE GRID */
-                            <div className="bg-white dark:bg-[#101822] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-x-auto print-area">
+                            <div className="bg-white dark:bg-[#101822] p-2 sm:p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-x-auto print-area custom-scrollbar">
                                 {/* PRINT HEADER */}
                                 <div className="hidden print:block text-center border-b pb-2 mb-2 print-header">
                                     <h1 className="font-black uppercase tracking-tight text-black">{normalizedData.institution?.name || 'Horário Escolar'}</h1>

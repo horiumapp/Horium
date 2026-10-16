@@ -18,11 +18,10 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
     };
 
     return (
-        <div className="w-full overflow-x-auto bg-white dark:bg-[#152233] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800">
-            <table className="w-full text-left border-collapse min-w-[760px]">
-                <caption className="sr-only">Horários cadastrados</caption>
+        <div className="w-full overflow-x-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 custom-scrollbar">
+            <table className="w-full min-w-[960px] text-left border-collapse">
                 <thead>
-                    <tr className="bg-primary text-white text-xs font-semibold">
+                    <tr className="bg-slate-800 dark:bg-slate-950 text-white text-[11px] font-semibold tracking-wide">
                         <th className="px-4 py-3 border-r border-white/20">Acesso</th>
                         <th className="px-4 py-3 border-r border-white/20">Instituição</th>
                         <th className="px-4 py-3 border-r border-white/20 text-center">Status / Pendências</th>
@@ -37,7 +36,7 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
                         const isPending = !isLicensed && (status === 'Aguardando' || status === 'under_review' || activeLicenseStatus === 'Aguardando' || activeLicenseStatus === 'under_review');
 
                         return (
-                            <tr key={schedule.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            <tr key={schedule.id} className="hover:bg-blue-50/40 dark:hover:bg-slate-800/60 transition-colors">
                                 <td className="px-4 py-4 align-top text-center">
                                     {isLicensed ? (
                                         <div className="flex flex-col items-center gap-1">
@@ -66,7 +65,7 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
                                 <div className="flex flex-col">
                                     <button
                                         onClick={() => onEdit(schedule)}
-                                        className="text-blue-700 dark:text-blue-400 font-bold hover:underline text-left"
+                                        className="text-primary dark:text-blue-400 font-semibold hover:underline text-left focus-visible:rounded"
                                     >
                                         {schedule.institution.name || 'Sem Nome'} - {schedule.institution.year} - {schedule.institution.shift}
                                     </button>
@@ -84,11 +83,11 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
                             </td>
                             <td className="px-4 py-4 align-top">
                                 <div className="flex flex-col gap-2">
-                                    <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700 text-[10px] text-gray-600 dark:text-gray-400 min-h-[60px] max-h-[100px] overflow-y-auto">
+                                            <div className="bg-slate-50 dark:bg-slate-800/70 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-gray-600 dark:text-gray-400 min-h-[60px] max-h-[100px] overflow-y-auto">
                                         <div className="font-bold mb-1">{formatDate(schedule.createdAt)} - Horário criado</div>
                                         {/* Aqui poderiam entrar logs de processamento futuramente */}
                                     </div>
-                                    <button className="flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-primary">
+                                    <button className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-primary focus-visible:rounded">
                                         <span className="material-symbols-outlined text-sm">mail</span> Suporte
                                     </button>
                                 </div>
@@ -97,37 +96,45 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
                                 <div className="flex justify-center gap-2">
                                     <button
                                         onClick={() => onEdit(schedule)}
-                                        className="flex flex-col items-center gap-1 group"
+                                        title="Editar horário"
+                                        aria-label={`Editar ${schedule.institution.name || 'horário sem nome'}`}
+                                        className="flex flex-col items-center gap-1.5 group"
                                     >
-                                        <div className="size-12 bg-white border border-gray-300 rounded flex items-center justify-center group-hover:bg-yellow-50 transition-colors">
+                                        <div className="size-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center group-hover:bg-amber-50 dark:group-hover:bg-amber-900/20 transition-colors">
                                             <span className="material-symbols-outlined text-2xl text-yellow-600">edit</span>
                                         </div>
                                         <span className="text-[9px] font-bold uppercase text-gray-600">Editar</span>
                                     </button>
                                     <button
                                         onClick={() => onDuplicate(schedule)}
-                                        className="flex flex-col items-center gap-1 group"
+                                        title="Duplicar horário"
+                                        aria-label={`Duplicar ${schedule.institution.name || 'horário sem nome'}`}
+                                        className="flex flex-col items-center gap-1.5 group"
                                     >
-                                        <div className="size-12 bg-white border border-gray-300 rounded flex items-center justify-center group-hover:bg-blue-50 transition-colors">
+                                        <div className="size-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors">
                                             <span className="material-symbols-outlined text-2xl text-blue-400">content_copy</span>
                                         </div>
                                         <span className="text-[9px] font-bold uppercase text-gray-600">Duplicar</span>
                                     </button>
                                     <button
                                         onClick={() => isLicensed && onViewSolutions(schedule)}
+                                        disabled={!isLicensed}
+                                        aria-label={`${isLicensed ? 'Ver soluções de' : 'Soluções bloqueadas para'} ${schedule.institution.name || 'horário sem nome'}`}
                                         className={`flex flex-col items-center gap-1 group ${!isLicensed ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         title={!isLicensed ? 'Liberação pendente para ver soluções' : ''}
                                     >
-                                        <div className={`size-12 bg-white border border-gray-300 rounded flex items-center justify-center ${isLicensed ? 'group-hover:bg-purple-50' : ''} transition-colors`}>
+                                        <div className={`size-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center ${isLicensed ? 'group-hover:bg-purple-50 dark:group-hover:bg-purple-900/20' : ''} transition-colors`}>
                                             <span className={`material-symbols-outlined text-2xl ${isLicensed ? 'text-purple-400' : 'text-gray-400'}`}>grid_view</span>
                                         </div>
                                         <span className="text-[9px] font-bold uppercase text-gray-600 text-center leading-none">Ver<br />Soluções</span>
                                     </button>
                                     <button
                                         onClick={() => schedule.id && onDelete(schedule.id)}
-                                        className="flex flex-col items-center gap-1 group"
+                                        title="Excluir horário"
+                                        aria-label={`Excluir ${schedule.institution.name || 'horário sem nome'}`}
+                                        className="flex flex-col items-center gap-1.5 group"
                                     >
-                                        <div className="size-12 bg-white border border-gray-300 rounded flex items-center justify-center group-hover:bg-red-50 transition-colors">
+                                        <div className="size-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center group-hover:bg-red-50 dark:group-hover:bg-red-900/20 transition-colors">
                                             <span className="material-symbols-outlined text-2xl text-red-500">cancel</span>
                                         </div>
                                         <span className="text-[9px] font-bold uppercase text-gray-600">Excluir</span>

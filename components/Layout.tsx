@@ -24,14 +24,11 @@ const NAV_ITEMS = [
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav = false, onLogout, isMuted, setIsMuted }) => {
   const [gender, setGender] = useState<'male' | 'female'>('female');
-  const [openMenu, setOpenMenu] = useState<'settings' | 'notifications' | 'account' | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('Usuário Horium');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window === 'undefined') return false;
-    const saved = localStorage.getItem('horium-theme');
-    if (saved) return saved === 'dark';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return localStorage.getItem('horium-theme') === 'dark';
   });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
@@ -126,45 +123,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
   }, [hideNav, currentView]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('horium-theme');
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-    const applyTheme = (dark: boolean) => {
-      setIsDarkMode(dark);
-      if (dark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    };
-
-    if (savedTheme) {
-      applyTheme(savedTheme === 'dark');
-    } else {
-      applyTheme(mediaQuery.matches);
-    }
-
-    const handleChange = (e: MediaQueryListEvent) => {
-      if (!localStorage.getItem('horium-theme')) {
-        applyTheme(e.matches);
-      }
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
-
-  useEffect(() => {
-    const close = () => setOpenMenu(null);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpenMenu(null);
-    };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('resize', close);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', close);
-    };
+    const dark = localStorage.getItem('horium-theme') === 'dark';
+    setIsDarkMode(dark);
+    document.documentElement.classList.toggle('dark', dark);
   }, []);
 
   const toggleTheme = () => {
@@ -179,29 +140,22 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
     }
   };
 
-  const menuPanel = "absolute right-0 top-full mt-2 bg-white dark:bg-[#152233] rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50";
-
   return (
-    <div className="min-h-screen flex flex-col font-sans text-[#111418] dark:text-gray-100 bg-[#f4f7fb] dark:bg-[#0e1622] transition-colors duration-300">
-      {openMenu && (
-        <button type="button" aria-label="Fechar menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpenMenu(null)} />
-      )}
-      <header className="no-print relative z-50 flex items-center justify-between gap-3 border-b border-solid border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-[#101822]/90 backdrop-blur-md px-4 lg:px-8 py-2.5 sticky top-0">
-        <button
-          type="button"
-          className={`flex items-center gap-3 rounded-lg ${hideNav || currentView === AppView.LOGIN ? 'cursor-default' : 'hover:opacity-80'}`}
+    <div className="min-h-screen flex flex-col font-sans text-slate-900 dark:text-gray-100 bg-background-light dark:bg-background-dark transition-colors duration-300">
+      <header className="no-print flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-[#101822]/90 backdrop-blur-xl px-4 sm:px-6 lg:px-10 py-3 sticky top-0 z-50 transition-all">
+        <div
+          className={`flex items-center gap-4 ${hideNav || currentView === AppView.LOGIN ? 'cursor-default' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
           onClick={hideNav || currentView === AppView.LOGIN ? undefined : () => setView(AppView.DASHBOARD)}
-          aria-label="Horium, ir para o início"
         >
-          <div className="size-8 text-primary">
+          <div className="size-9 text-primary">
             {LOGO_SVG}
           </div>
-          <span className="text-lg font-bold leading-tight tracking-tight hidden sm:block">Horium</span>
-        </button>
+          <h2 className="text-lg font-bold leading-tight tracking-tight hidden sm:block">Horium</h2>
+        </div>
 
         {!hideNav && (
           <div className="flex flex-1 justify-end gap-6 items-center">
-            <nav aria-label="Principal" className="hidden md:flex items-center gap-1 mr-4 bg-gray-100 dark:bg-gray-900/50 p-1 rounded-xl">
+            <nav aria-label="Navegação principal" className="hidden md:flex items-center gap-1 mr-4 bg-slate-100/80 dark:bg-slate-900/70 p-1 rounded-xl">
               {NAV_ITEMS.map((item) => {
                 const isActive = currentView === item.view;
                 return (
@@ -209,9 +163,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     key={item.label}
                     onClick={() => setView(item.view)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${isActive
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${isActive
                       ? 'bg-white dark:bg-gray-800 text-primary shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-800/50'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-800/50'
                       }`}
                   >
                     <span className={`material-symbols-outlined text-[18px] ${isActive ? 'filled' : ''}`}>{item.icon}</span>
@@ -224,27 +178,26 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                 <button
                   onClick={() => setView(AppView.ADMIN)}
                   aria-current={currentView === AppView.ADMIN ? 'page' : undefined}
-                  className={`ml-2 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors relative ${currentView === AppView.ADMIN
-                    ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 dark:text-emerald-300'
+                  className={`ml-2 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 relative ${currentView === AppView.ADMIN
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700 dark:bg-green-900/20 dark:hover:bg-green-900/40 dark:text-green-400'
                     }`}
                 >
                   <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
                   Área Admin
                   {pendingApprovalsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-600 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white dark:border-gray-900">
-                      <span className="sr-only">Pendências: </span>{pendingApprovalsCount}
+                    <span className="absolute -top-1 -right-1 size-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white dark:border-gray-900 animate-bounce">
+                      {pendingApprovalsCount}
                     </span>
                   )}
                 </button>
               )}
             </nav>
-            <div className="flex gap-2 items-center pl-4 border-l border-gray-200 dark:border-gray-700">
+            <div className="flex gap-1 sm:gap-2 items-center pl-2 sm:pl-4 border-l border-gray-200 dark:border-gray-700">
               <button
-                type="button"
-                className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors"
-                aria-pressed={!!isMuted}
-                title={isMuted ? "Ativar som" : "Silenciar"}
+                aria-label={isMuted ? "Ativar som" : "Silenciar som"}
+                className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all"
+                title={isMuted ? "Ativar Som" : "Mudar para Mudo"}
                 onClick={() => setIsMuted?.(!isMuted)}
               >
                 <span className="material-symbols-outlined text-[20px]">
@@ -252,20 +205,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                 </span>
               </button>
               {/* Settings Dropdown */}
-              <div className="relative">
+              <div className="relative group">
                 <button
-                  type="button"
-                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors"
+                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all cursor-pointer"
                   title="Configurações"
-                  aria-expanded={openMenu === 'settings'}
-                  aria-haspopup="true"
-                  onClick={() => setOpenMenu(openMenu === 'settings' ? null : 'settings')}
                 >
                   <span className="material-symbols-outlined text-[20px]">settings</span>
                 </button>
 
-                {openMenu === 'settings' && (
-                <div className={`${menuPanel} w-56 p-2`}>
+                {/* Dropdown Card */}
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 group-focus-within:scale-100 z-50">
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-2">
                     <p className="text-sm font-bold truncate">Opções do Sistema</p>
                   </div>
@@ -287,28 +236,22 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     </div>
                   </button>
                 </div>
-                )}
               </div>
-              <div className="relative">
+              {/* Notification Dropdown */}
+              <div className="relative group">
                 <button
-                  type="button"
-                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors relative"
+                  aria-label="Notificações"
+                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all relative"
                   title="Notificações"
-                  aria-expanded={openMenu === 'notifications'}
-                  aria-haspopup="true"
-                  onClick={() => setOpenMenu(openMenu === 'notifications' ? null : 'notifications')}
                 >
                   <span className="material-symbols-outlined text-[20px]">notifications</span>
                   {(unreadCount > 0 || (isAdmin && pendingApprovalsCount > 0)) && (
-                    <span className="absolute top-2 right-2 size-2.5 bg-red-600 rounded-full border-2 border-white dark:border-[#101822]">
-                      <span className="sr-only">Há notificações não lidas</span>
-                    </span>
+                    <span className="absolute top-2 right-2 size-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#101822]"></span>
                   )}
                 </button>
 
                 {/* Dropdown Card */}
-                {openMenu === 'notifications' && (
-                <div className={`${menuPanel} w-80 max-w-[calc(100vw-2rem)] p-0 overflow-hidden`}>
+                <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-0 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 group-focus-within:scale-100 z-50 overflow-hidden">
                   <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
                     <p className="text-sm font-bold">Notificações</p>
                     {unreadCount > 0 && (
@@ -357,28 +300,19 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     )}
                   </div>
                 </div>
-                )}
               </div>
-              <div className="relative ml-2">
-                <button
-                  type="button"
-                  className="size-10 bg-gradient-to-br from-primary to-primary/60 rounded-full p-[2px] shadow-sm"
-                  aria-label="Conta"
-                  aria-expanded={openMenu === 'account'}
-                  aria-haspopup="true"
-                  onClick={() => setOpenMenu(openMenu === 'account' ? null : 'account')}
-                >
+              <div className="relative group ml-2">
+                <div className="size-10 bg-gradient-to-br from-primary to-primary/60 rounded-full p-[2px] cursor-pointer shadow-md hover:shadow-primary/30 transition-shadow">
                   <img
                     src={gender === 'female'
                       ? "https://api.dicebear.com/7.x/notionists/svg?seed=Jasmine&backgroundColor=f8f9fa"
                       : "https://api.dicebear.com/7.x/notionists/svg?seed=Leo&backgroundColor=f8f9fa"}
-                    alt=""
+                    alt="User Avatar"
                     className="size-full rounded-full bg-white dark:bg-gray-900 object-cover"
                   />
-                </button>
+                </div>
 
-                {openMenu === 'account' && (
-                <div className={`${menuPanel} w-56 p-2`}>
+                <div className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 group-focus-within:scale-100 z-50">
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-2">
                     <p className="text-sm font-bold truncate" title={userEmail}>{userEmail}</p>
                     <p className="text-xs text-gray-500 truncate">Sessão Ativa</p>
@@ -392,7 +326,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     Sair da Conta
                   </button>
                 </div>
-                )}
               </div>
             </div>
           </div>
@@ -407,43 +340,29 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
           </div>
         )}
       </header>
-      <main className={`flex-1 flex flex-col relative pt-4 print:pt-0 ${hideNav ? '' : 'pb-20 md:pb-0'}`}>
+      <main className={`flex-1 flex flex-col relative ${hideNav ? '' : 'pb-24 md:pb-0'} print:pt-0 print:pb-0`}>
         {children}
       </main>
       {!hideNav && (
-        <nav aria-label="Principal" className="no-print md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-[#101822]/95 backdrop-blur px-2 py-1.5 flex justify-around">
-          {NAV_ITEMS.map((item) => {
+        <nav aria-label="Navegação móvel" className="no-print md:hidden fixed bottom-3 left-3 right-3 z-40 flex items-stretch gap-1 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95">
+          {[...NAV_ITEMS, ...(isAdmin ? [{ view: AppView.ADMIN, label: 'Admin', icon: 'admin_panel_settings' }] : [])].map((item) => {
             const isActive = currentView === item.view;
             return (
               <button
-                key={item.label}
+                key={item.view}
                 type="button"
-                onClick={() => setView(item.view)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`flex flex-col items-center gap-0.5 min-w-16 px-2 py-1 rounded-lg text-[11px] font-semibold ${isActive ? 'text-primary' : 'text-gray-500 dark:text-gray-400'}`}
+                onClick={() => setView(item.view)}
+                className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-[10px] font-semibold transition-colors ${isActive ? 'bg-primary/10 text-primary dark:bg-primary/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}
               >
-                <span className={`material-symbols-outlined text-[20px] ${isActive ? 'filled' : ''}`} aria-hidden="true">{item.icon}</span>
-                {item.label}
+                <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setView(AppView.ADMIN)}
-              aria-current={currentView === AppView.ADMIN ? 'page' : undefined}
-              className={`relative flex flex-col items-center gap-0.5 min-w-16 px-2 py-1 rounded-lg text-[11px] font-semibold ${currentView === AppView.ADMIN ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500 dark:text-gray-400'}`}
-            >
-              <span className="material-symbols-outlined text-[20px]" aria-hidden="true">admin_panel_settings</span>
-              Admin
-              {pendingApprovalsCount > 0 && (
-                <span className="absolute top-0 right-2 min-w-4 h-4 px-1 bg-red-600 text-white text-[9px] rounded-full">{pendingApprovalsCount}</span>
-              )}
-            </button>
-          )}
         </nav>
       )}
-      <footer className="no-print py-8 bg-white dark:bg-[#101822]/80 border-t border-gray-200 dark:border-gray-900 mt-auto">
+      <footer className="no-print py-6 md:py-8 bg-white dark:bg-[#101822]/80 border-t border-gray-200 dark:border-gray-900 mt-auto">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 opacity-60 hover:opacity-100 transition-opacity">
           <div className="flex items-center gap-2 grayscale hover:grayscale-0 transition-all">
             <div className="text-primary size-5">{LOGO_SVG}</div>

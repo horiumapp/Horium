@@ -53,7 +53,8 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onBackToLogin
 
     return (
         <div className="w-full animate-in fade-in slide-in-from-right-4 duration-300">
-            <h2 className="text-[#111418] dark:text-white text-2xl font-black mb-6">Criar nova conta</h2>
+            <h2 className="text-slate-900 dark:text-white text-2xl font-bold mb-2">Criar sua conta</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Preencha seus dados para começar a montar os horários.</p>
 
             {error && (
                 <div className="mb-6 p-4 rounded-lg bg-red-100 text-red-700 text-sm font-medium border border-red-200">
@@ -95,11 +96,12 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onBackToLogin
                     <p className="text-[#111418] dark:text-white text-sm font-semibold leading-normal">
                         Como prefere que seu perfil seja representado?
                     </p>
-                    <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-full relative z-0">
+                    <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 w-full relative z-0">
                         <button
                             type="button"
                             onClick={() => setGender('female')}
-                            className={`flex flex-1 items-center justify-center gap-2 text-sm py-2.5 px-3 rounded-md font-medium transition-all duration-300 relative ${gender === 'female' ? 'text-primary shadow-sm bg-white dark:bg-gray-700' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                            aria-pressed={gender === 'female'}
+                            className={`flex flex-1 items-center justify-center gap-2 text-sm py-2.5 px-3 rounded-lg font-medium transition-all duration-200 relative ${gender === 'female' ? 'text-primary shadow-sm bg-white dark:bg-gray-700' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                         >
                             <span className="material-symbols-outlined text-[20px]">woman</span>
                             Mulher
@@ -107,7 +109,8 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onBackToLogin
                         <button
                             type="button"
                             onClick={() => setGender('male')}
-                            className={`flex flex-1 items-center justify-center gap-2 text-sm py-2.5 px-3 rounded-md font-medium transition-all duration-300 relative ${gender === 'male' ? 'text-primary shadow-sm bg-white dark:bg-gray-700' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                            aria-pressed={gender === 'male'}
+                            className={`flex flex-1 items-center justify-center gap-2 text-sm py-2.5 px-3 rounded-lg font-medium transition-all duration-200 relative ${gender === 'male' ? 'text-primary shadow-sm bg-white dark:bg-gray-700' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                         >
                             <span className="material-symbols-outlined text-[20px]">man</span>
                             Homem
@@ -128,7 +131,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onBackToLogin
                                 check
                             </span>
                         </div>
-                        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors">
+                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200 transition-colors">
                             Declaro que li e estou de acordo com os{' '}
                             <button
                                 type="button"

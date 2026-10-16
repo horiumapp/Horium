@@ -18,7 +18,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,16 +76,66 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     setError('E-mail confirmado com sucesso! Agora você pode entrar.');
   };
 
+  const showBrandPanel = !showVerification && !showForgotPassword && !isRegistering;
+
   return (
-    <div className="flex-1 academic-gradient flex items-center justify-center px-4 py-12">
-      <div className={`w-full ${showVerification ? 'max-w-[800px]' : 'max-w-[480px]'} bg-white dark:bg-[#1a2634] rounded-2xl shadow-2xl p-8 md:p-10 border border-[#dbe0e6] dark:border-gray-700 transition-all duration-500 overflow-hidden`}>
+    <div className="relative isolate flex-1 academic-gradient flex items-center justify-center px-4 py-8 sm:py-12">
+      <div className={`relative z-10 mx-auto grid min-h-[min(760px,calc(100vh-140px))] w-full items-center gap-6 lg:gap-12 ${showBrandPanel ? 'max-w-6xl lg:grid-cols-[minmax(0,1fr)_minmax(390px,480px)]' : 'max-w-3xl grid-cols-1'}`}>
+        {showBrandPanel && (
+          <aside className="hidden lg:flex flex-col justify-center py-8 pr-6">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/15 bg-white/70 px-3 py-1.5 text-xs font-semibold text-primary shadow-sm dark:border-primary/25 dark:bg-slate-900/50">
+              <span className="size-2 rounded-full bg-teal-500"></span>
+              Planejamento escolar em um só lugar
+            </div>
+            <h2 className="mt-6 max-w-xl text-4xl xl:text-5xl font-bold leading-[1.12] tracking-tight text-slate-900 dark:text-white">
+              Uma semana bem planejada começa com uma grade clara.
+            </h2>
+            <p className="mt-4 max-w-lg text-base leading-7 text-slate-600 dark:text-slate-300">
+              Organize disciplinas, turmas e professores. Configure as regras da escola e acompanhe a criação dos horários em cada etapa.
+            </p>
+
+            <div aria-hidden="true" className="mt-8 max-w-xl rounded-3xl border border-white/80 bg-white/85 p-5 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/75">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-800 dark:text-white">Visão da semana</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Organização em cada aula</p>
+                </div>
+                <span className="material-symbols-outlined rounded-xl bg-primary/10 p-2 text-primary">calendar_view_week</span>
+              </div>
+              <div className="grid grid-cols-[54px_repeat(5,minmax(0,1fr))] gap-2 text-center text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <span></span><span>SEG</span><span>TER</span><span>QUA</span><span>QUI</span><span>SEX</span>
+                {['07:00', '07:45', '08:45'].map((time, row) => (
+                  <React.Fragment key={time}>
+                    <span className="flex items-center">{time}</span>
+                    {[0, 1, 2, 3, 4].map((day) => (
+                      <span key={`${time}-${day}`} className={`h-8 rounded-lg ${((row + day) % 4 === 0) ? 'bg-teal-100 dark:bg-teal-500/20' : ((row * 2 + day) % 3 === 0) ? 'bg-indigo-100 dark:bg-indigo-500/20' : 'bg-blue-100 dark:bg-blue-500/20'}`}></span>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-4 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-blue-400"></span>Disciplinas</span>
+                <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-teal-400"></span>Disponibilidade</span>
+                <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-indigo-400"></span>Turmas</span>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-3 gap-3 text-xs font-medium text-slate-600 dark:text-slate-300">
+              <div className="flex items-center gap-2"><span className="material-symbols-outlined text-base text-primary">check_circle</span>Configuração guiada</div>
+              <div className="flex items-center gap-2"><span className="material-symbols-outlined text-base text-primary">check_circle</span>Regras por turma</div>
+              <div className="flex items-center gap-2"><span className="material-symbols-outlined text-base text-primary">check_circle</span>Grade exportável</div>
+            </div>
+          </aside>
+        )}
+
+      <div className={`w-full ${showVerification ? 'max-w-[800px] mx-auto' : 'max-w-[480px] mx-auto'} bg-white/95 dark:bg-[#1a2634] rounded-3xl shadow-xl shadow-slate-900/10 p-6 sm:p-8 md:p-10 border border-slate-200/80 dark:border-gray-700 transition-all duration-300 overflow-hidden`}>
         {!showVerification && !showForgotPassword && (
           <div className="flex flex-col items-center mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="size-20 mb-4 animate-in zoom-in-50 duration-500">
+            <div className="size-16 mb-4 rounded-2xl bg-primary/5 p-2.5">
               {LOGO_SVG}
             </div>
-            <h1 className="text-[#111418] dark:text-white tracking-tight text-3xl font-bold leading-tight text-center">Horium</h1>
-            <h2 className="text-gray-500 dark:text-gray-400 text-base font-medium leading-normal text-center mt-1">Gestão de Horários Escolares</h2>
+            <h1 className="text-slate-900 dark:text-white tracking-tight text-2xl font-bold leading-tight text-center">Horium</h1>
+            <h2 className="text-slate-500 dark:text-gray-400 text-sm font-medium leading-normal text-center mt-1">Gestão de horários escolares</h2>
           </div>
         )}
 
@@ -112,20 +161,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </div>
 
             {error && (
-              <div role="alert" className="mb-6 bg-red-50 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900 p-4 rounded-xl text-sm font-medium border">
+              <div className="mb-6 bg-red-100 text-red-700 border-red-200 p-4 rounded-lg text-sm font-medium border">
                 {error}
               </div>
             )}
 
             <form className="space-y-6" onSubmit={handleForgotPassword}>
-              <label htmlFor="reset-email" className="flex flex-col w-full">
-                <span className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2">E-mail</span>
+              <label className="flex flex-col w-full">
+                <p className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2">E-mail</p>
                 <input
-                  id="reset-email"
-                  className="flex w-full rounded-xl text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-[#101822] focus:border-primary h-12 placeholder:text-[#617289] px-4 text-base font-normal"
+                  className="form-input flex w-full rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-primary/10 border border-slate-200 dark:border-gray-600 bg-white dark:bg-slate-900 focus:border-primary min-h-12 placeholder:text-slate-400 px-4 text-sm font-normal outline-none transition"
                   placeholder="Digite seu e-mail"
                   type="email"
-                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -134,7 +181,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
               <div className="flex flex-col gap-3">
                 <button
-                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg transition-all shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-primary hover:brightness-95 text-white font-semibold min-h-12 py-3 rounded-xl transition-all shadow-sm active:translate-y-px disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
                   type="submit"
                   disabled={loading}
                 >
@@ -175,63 +222,55 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             )}
 
             {error && (
-              <div role="status" className={`mb-6 p-4 rounded-xl text-sm font-medium border ${error.includes('sucesso') ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-900' : 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900'}`}>
+              <div className={`mb-6 p-4 rounded-lg text-sm font-medium border ${error.includes('sucesso') ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
                 {error}
               </div>
             )}
 
             <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="flex flex-col w-full">
-                <label htmlFor="login-email" className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2">E-mail</label>
-                <input
-                  id="login-email"
-                  className="flex w-full rounded-xl text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-[#101822] focus:border-primary h-12 placeholder:text-[#617289] px-4 text-base font-normal"
-                  placeholder="Digite seu e-mail"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="flex flex-col w-full">
-                <div className="flex justify-between items-center pb-2">
-                  <label htmlFor="login-password" className="text-[#111418] dark:text-white text-sm font-semibold leading-normal">Senha</label>
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotPassword(true)}
-                    className="text-primary text-xs font-semibold hover:underline"
-                  >
-                    Esqueci minha senha
-                  </button>
-                </div>
-                <div className="flex w-full items-stretch relative">
+                <label className="flex flex-col w-full">
+                  <p className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2">E-mail</p>
                   <input
-                    id="login-password"
-                    className="flex w-full rounded-xl text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-[#101822] focus:border-primary h-12 placeholder:text-[#617289] px-4 pr-12 text-base font-normal"
-                    placeholder="Digite sua senha"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    className="form-input flex w-full rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-primary/10 border border-slate-200 dark:border-gray-600 bg-white dark:bg-slate-900 focus:border-primary min-h-12 placeholder:text-slate-400 px-4 text-sm font-normal outline-none transition"
+                    placeholder="Digite seu e-mail"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                   />
-                  <button
-                    type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 size-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                    onClick={() => setShowPassword(value => !value)}
-                  >
-                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{showPassword ? 'visibility_off' : 'visibility'}</span>
-                  </button>
-                </div>
+                </label>
+              </div>
+              <div className="flex flex-col w-full">
+                <label className="flex flex-col w-full">
+                  <div className="flex justify-between items-center pb-2">
+                    <p className="text-[#111418] dark:text-white text-sm font-semibold leading-normal">Senha</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(true)}
+                      className="text-primary text-xs font-bold hover:underline"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+                  <div className="flex w-full items-stretch relative">
+                    <input
+                      className="form-input flex w-full rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-primary/10 border border-slate-200 dark:border-gray-600 bg-white dark:bg-slate-900 focus:border-primary min-h-12 placeholder:text-slate-400 px-4 text-sm font-normal pr-12 outline-none transition"
+                      placeholder="Digite sua senha"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                </label>
               </div>
               <div className="flex items-center gap-2 px-1">
                 <input className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" id="remember" type="checkbox" />
                 <label className="text-sm text-gray-600 dark:text-gray-400" htmlFor="remember">Mantenha-me conectado</label>
               </div>
               <button
-                className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg transition-all shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-primary hover:brightness-95 text-white font-semibold min-h-12 py-3 rounded-xl transition-all shadow-sm active:translate-y-px disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
                 type="submit"
                 disabled={loading}
               >
@@ -253,6 +292,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

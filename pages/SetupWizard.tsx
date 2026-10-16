@@ -311,62 +311,48 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
     { n: 8, title: 'GRADE', icon: 'calendar_view_week' }
   ];
 
-  const currentStepMeta = steps.find(item => item.n === step);
-
   return (
-    <div className="max-w-7xl mx-auto w-full px-3 sm:px-4 pt-4 pb-8 overflow-visible">
-      <nav aria-label="Etapas do assistente" className="mb-5 no-print">
-        <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 px-1">
-          Etapa <span className="font-semibold text-gray-900 dark:text-white">{step} de {steps.length}</span>
-          {currentStepMeta ? ` · ${currentStepMeta.title}` : ''}
-        </p>
-        <div className="overflow-x-auto custom-scrollbar pb-2">
-          <ol className="flex min-w-[760px]">
-            {steps.map((s) => {
-              const reached = s.n <= furthestStep;
-              const isCurrent = step === s.n;
-              const isDone = step > s.n;
-              return (
-                <li key={s.n} className="relative flex-1 flex justify-center min-w-0">
-                  {s.n > 1 && (
-                    <span
-                      aria-hidden="true"
-                      className={`absolute top-[19px] h-0.5 ${s.n <= step ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'}`}
-                      style={{ left: 'calc(-50% + 24px)', width: 'calc(100% - 48px)' }}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (reached) handleStepChange(s.n);
-                    }}
-                    disabled={!reached}
-                    aria-current={isCurrent ? 'step' : undefined}
-                    aria-label={`${s.title}${isDone ? ', concluída' : isCurrent ? ', atual' : ''}`}
-                    className={`relative z-10 flex flex-col items-center gap-1.5 w-full px-1 ${reached ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-                  >
-                    <span
-                      className={`size-10 rounded-full flex items-center justify-center text-sm font-semibold border-2 ${isCurrent
-                        ? 'bg-primary border-primary text-white shadow-sm shadow-primary/30'
-                        : isDone
-                          ? 'bg-white dark:bg-[#101822] border-primary text-primary'
-                          : 'bg-white dark:bg-[#101822] border-gray-200 dark:border-gray-700 text-gray-400'
-                        }`}
-                    >
-                      {isDone ? <span className="material-symbols-outlined text-[18px]" aria-hidden="true">check</span> : s.n}
-                    </span>
-                    <span className={`text-[11px] font-medium text-center leading-tight ${isCurrent || isDone ? 'text-primary' : 'text-gray-400'}`}>
-                      {s.title}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      </nav>
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 pt-5 sm:pt-8 pb-16 sm:pb-20 overflow-visible">
+      {/* STEPS INDICATOR */}
+      <div className="mb-7 sm:mb-9 overflow-x-auto custom-scrollbar no-print">
+      <div className="min-w-[760px] flex justify-between px-3 relative overflow-visible py-1">
+        <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 dark:bg-gray-800 -z-10 -translate-y-1/2 rounded-full"></div>
+        <div
+          className="absolute top-1/2 left-0 h-1 bg-primary -z-10 -translate-y-1/2 rounded-full transition-all duration-500"
+          style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}
+        ></div>
 
-      <div className="bg-white dark:bg-[#101822] rounded-2xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-800">
+        {steps.map((s) => (
+          <button
+            key={s.n}
+            onClick={() => {
+              if (s.n <= furthestStep) {
+                handleStepChange(s.n);
+              }
+            }}
+            disabled={s.n > furthestStep}
+            aria-current={step === s.n ? 'step' : undefined}
+            aria-label={`Etapa ${s.n}: ${s.title}${step === s.n ? ', atual' : ''}`}
+            className={`flex min-w-[72px] flex-col items-center gap-2 group rounded-xl px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${s.n <= furthestStep ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+          >
+            <div
+              className={`size-9 rounded-xl flex items-center justify-center font-bold text-sm transition-all border-2 relative z-10 ${step >= s.n
+                ? 'bg-primary border-primary text-white shadow-md shadow-primary/20'
+                : 'bg-white dark:bg-[#101822] border-gray-200 dark:border-gray-700 text-gray-400 hover:border-primary/50'
+                }`}
+            >
+              {step > s.n ? <span className="material-symbols-outlined text-[18px]">check</span> : (s.n === 8 ? 'G' : s.n)}
+            </div>
+            <span className={`text-[10px] font-semibold tracking-wide transition-all ${step >= s.n ? 'text-primary' : 'text-gray-400 dark:text-gray-500'
+              }`}>
+              {s.title}
+            </span>
+          </button>
+        ))}
+      </div>
+      </div>
+
+      <div className="bg-white dark:bg-[#101822] rounded-2xl shadow-lg shadow-slate-900/5 overflow-hidden border border-slate-200/80 dark:border-gray-800">
         {renderCurrentStep()}
       </div>
     </div>

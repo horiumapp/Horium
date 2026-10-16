@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface Step7ProcessProps {
     progress: number;
@@ -10,22 +10,22 @@ interface Step7ProcessProps {
 export const Step7Process: React.FC<Step7ProcessProps> = ({ progress, message, onBack }) => {
 
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gray-50 dark:bg-gray-900/50 min-h-[420px]" role="status" aria-live="polite">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gray-50 dark:bg-gray-900/50 min-h-[500px] animate-in fade-in duration-500">
             <div className="max-w-[640px] w-full flex flex-col items-center">
                 <div className="relative flex items-center justify-center mb-8">
-                    <div className="absolute w-40 h-40 rounded-full border-4 border-primary/10 border-dashed motion-safe:animate-[spin_3s_linear_infinite]"></div>
-                    <div className="w-32 h-32 rounded-full border-4 border-t-primary border-r-primary border-b-transparent border-l-transparent motion-safe:animate-spin"></div>
+                    <div className="absolute w-48 h-48 rounded-full border-4 border-primary/10 border-dashed animate-[spin_3s_linear_infinite]"></div>
+                    <div className="w-40 h-40 rounded-full border-4 border-t-primary border-r-primary border-b-transparent border-l-transparent animate-spin"></div>
                     <div className="absolute flex flex-col items-center justify-center">
                         <span className="material-symbols-outlined text-primary text-5xl">auto_fix_high</span>
                         <span className="text-primary font-bold text-lg mt-1">{progress}%</span>
                     </div>
                 </div>
                 <div className="w-full text-center space-y-2">
-                    <h1 className="text-[#111418] dark:text-white tracking-tight text-2xl md:text-3xl font-semibold leading-tight">
-                        Gerando o horário
+                    <h1 className="text-[#111418] dark:text-white tracking-tight text-[32px] md:text-[40px] font-black leading-tight uppercase">
+                        Otimizando horários...
                     </h1>
-                    <p className="text-[#617289] dark:text-gray-400 text-base font-medium max-w-md mx-auto">
-                        O processamento está distribuindo aulas conforme a carga, a disponibilidade e as restrições já configuradas.
+                    <p className="text-[#617289] dark:text-gray-400 text-lg font-medium max-w-md mx-auto italic">
+                        Nosso motor de IA está balanceando a carga horária e a disponibilidade de salas...
                     </p>
                 </div>
                 <div className="w-full max-w-[480px] flex flex-col gap-3 py-10">

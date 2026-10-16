@@ -43,27 +43,28 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const hasSchedules = schedules && schedules.length > 0;
 
   return (
-    <div className="flex-1 academic-gradient flex flex-col p-4 sm:p-6 relative overflow-hidden">
-      <div className="mb-6 max-w-3xl">
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">Horários</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Crie, acompanhe e retome as grades da instituição.</p>
-      </div>
-      <div className="mb-8">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 max-w-4xl">
+    <div className="flex-1 academic-gradient flex flex-col p-4 sm:p-6 lg:p-8 relative min-h-[calc(100vh-64px)] overflow-hidden">
+      <div className="relative z-10 w-full max-w-7xl mx-auto">
+      <div className="flex flex-col gap-6 w-full mb-8">
+        <div>
+          <p className="text-sm font-semibold text-primary mb-2">Painel de planejamento</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Organize os horários da sua escola</h1>
+          <p className="mt-2 text-sm sm:text-base text-slate-500 dark:text-slate-400">Acesse suas grades e continue de onde parou.</p>
+        </div>
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3">
           {actions.map((action) => (
             <button
               key={action.label}
-              type="button"
               onClick={action.onClick}
-              className={`flex flex-col items-start justify-between gap-3 min-h-24 p-3 rounded-2xl text-left transition-colors ${action.primary
-                ? 'bg-primary text-white shadow-sm shadow-primary/25'
-                : 'bg-white dark:bg-[#152233] text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 hover:border-primary/40'
+              className={`flex min-h-[88px] sm:min-h-[104px] sm:w-[132px] flex-col items-start justify-center gap-3 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 group ${action.primary
+                ? 'bg-primary text-white shadow-lg shadow-primary/20 hover:brightness-95'
+                : 'bg-white/90 dark:bg-slate-900/90 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-primary/40 hover:shadow-md'
                 }`}
             >
-              <span className="material-symbols-outlined text-[26px]" aria-hidden="true">
+              <span className={`material-symbols-outlined text-2xl ${action.primary ? 'text-white' : 'text-primary'}`}>
                 {action.icon}
               </span>
-              <span className="text-sm font-semibold leading-tight">
+              <span className="text-xs sm:text-sm font-semibold leading-tight">
                 {action.label}
               </span>
             </button>
@@ -73,32 +74,31 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
       <div className="flex-1 overflow-visible">
         {!hasSchedules ? (
-          <div className="flex-1 flex flex-col items-center justify-center mt-20">
-            <div className="bg-white/90 dark:bg-[#152233]/90 border border-gray-200 dark:border-gray-800 p-8 sm:p-10 rounded-3xl shadow-sm text-center max-w-lg">
+          <div className="flex-1 flex flex-col items-center justify-center py-8 sm:py-14">
+            <div className="w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-7 sm:p-10 rounded-3xl shadow-sm text-center max-w-2xl animate-in fade-in zoom-in duration-500">
               <div className="bg-primary/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                <span className="material-symbols-outlined text-primary text-3xl" aria-hidden="true">calendar_today</span>
+                <span className="material-symbols-outlined text-primary text-3xl">calendar_today</span>
               </div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Nenhum horário cadastrado</h2>
-              <p className="text-gray-600 dark:text-gray-300 text-sm mb-8">
-                Comece um horário novo para configurar disciplinas, turmas e professores.
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Seu próximo horário começa aqui</h2>
+              <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-2 mb-7">
+                Ainda não há horários cadastrados. Crie uma grade para começar a organizar a semana da sua escola.
               </p>
               <button
                 onClick={onNewSchedule}
-                className="group flex flex-col items-center gap-4 mx-auto"
+                className="group inline-flex min-h-12 items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-primary/20 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
               >
-                <div className="w-24 h-24 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/40 group-hover:scale-110 transition-transform">
-                  <span className="material-symbols-outlined text-5xl">add</span>
-                </div>
-                <span className="text-sm font-bold text-primary uppercase tracking-widest group-hover:underline">
-                  Novo Horário
-                </span>
+                <span className="material-symbols-outlined text-xl">add</span>
+                Criar primeiro horário
               </button>
             </div>
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center gap-2 mb-4">
-              <h2 className="text-gray-500 font-bold uppercase tracking-widest text-sm">Meus Horários</h2>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Meus horários</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{schedules.length} {schedules.length === 1 ? 'grade cadastrada' : 'grades cadastradas'}</p>
+              </div>
               <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800"></div>
             </div>
             <ScheduleList
@@ -111,6 +111,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             />
           </div>
         )}
+      </div>
       </div>
 
       <Modal
@@ -161,7 +162,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       />
 
       <div className="absolute bottom-[-100px] left-[-100px] w-[400px] h-[400px] bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute top-[20%] right-[-100px] w-[300px] h-[300px] bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute top-[20%] right-[-100px] w-[300px] h-[300px] bg-teal-500/5 rounded-full blur-3xl pointer-events-none"></div>
     </div>
   );
 };
