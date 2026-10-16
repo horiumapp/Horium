@@ -167,20 +167,24 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-900 dark:text-gray-100 bg-background-light dark:bg-background-dark transition-colors duration-300">
-      <header className="no-print flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-[#101822]/90 backdrop-blur-xl px-4 sm:px-6 lg:px-10 py-3 sticky top-0 z-50 transition-all">
+      <header className="no-print sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl transition-colors dark:border-slate-800 dark:bg-[#101822]/90">
+        <div className="mx-auto flex min-h-[72px] w-full max-w-[1600px] items-center gap-5 px-4 sm:px-6 xl:px-8">
         <div
-          className={`flex items-center gap-4 ${hideNav || currentView === AppView.LOGIN ? 'cursor-default' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
+          className={`flex shrink-0 items-center gap-3 ${hideNav || currentView === AppView.LOGIN ? 'cursor-default' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
           onClick={hideNav || currentView === AppView.LOGIN ? undefined : () => setView(AppView.DASHBOARD)}
         >
-          <div className="size-9 text-primary">
+          <div className="size-10 rounded-xl border border-blue-100 bg-white p-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
             {LOGO_SVG}
           </div>
-          <h2 className="text-lg font-bold leading-tight tracking-tight hidden sm:block">Horium</h2>
+          <div className="hidden leading-tight sm:block">
+            <h2 className="text-[17px] font-extrabold tracking-tight text-slate-900 dark:text-white">Horium</h2>
+            <p className="mt-0.5 text-[10px] font-medium tracking-wide text-slate-500 dark:text-slate-400">GESTÃO DE HORÁRIOS</p>
+          </div>
         </div>
 
         {!hideNav && (
-          <div className="flex flex-1 justify-end gap-6 items-center">
-            <nav aria-label="Navegação principal" className="hidden md:flex items-center gap-1 mr-4 bg-slate-100/80 dark:bg-slate-900/70 p-1 rounded-xl">
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-3 lg:justify-between">
+            <nav aria-label="Navegação principal" className="hidden lg:flex items-center gap-1">
               {NAV_ITEMS.map((item) => {
                 const isActive = currentView === item.view;
                 return (
@@ -188,9 +192,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     key={item.label}
                     onClick={() => setView(item.view)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${isActive
-                      ? 'bg-white dark:bg-gray-800 text-primary shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-800/50'
+                    className={`relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-all duration-200 ${isActive
+                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
                       }`}
                   >
                     <span className={`material-symbols-outlined text-[18px] ${isActive ? 'filled' : ''}`}>{item.icon}</span>
@@ -203,25 +207,25 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                 <button
                   onClick={() => setView(AppView.ADMIN)}
                   aria-current={currentView === AppView.ADMIN ? 'page' : undefined}
-                  className={`ml-2 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 relative ${currentView === AppView.ADMIN
+                  className={`ml-2 flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-all duration-200 relative ${currentView === AppView.ADMIN
                     ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700 dark:bg-green-900/20 dark:hover:bg-green-900/40 dark:text-green-400'
+                    : 'border border-emerald-200 bg-emerald-50/70 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40'
                     }`}
                 >
                   <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
                   Área Admin
                   {pendingApprovalsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 size-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white dark:border-gray-900 animate-bounce">
+                    <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border-2 border-white bg-rose-500 text-[10px] text-white dark:border-slate-900">
                       {pendingApprovalsCount}
                     </span>
                   )}
                 </button>
               )}
             </nav>
-            <div className="flex gap-1 sm:gap-2 items-center pl-2 sm:pl-4 border-l border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-0.5 rounded-2xl border border-slate-200/80 bg-slate-50/90 p-1 dark:border-slate-700 dark:bg-slate-900/80 sm:gap-1">
               <button
                 aria-label={isMuted ? "Ativar som" : "Silenciar som"}
-                className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all"
+                className="hidden size-10 items-center justify-center rounded-xl bg-transparent text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white sm:flex"
                 title={isMuted ? "Ativar Som" : "Mudar para Mudo"}
                 onClick={() => setIsMuted?.(!isMuted)}
               >
@@ -232,7 +236,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
               {/* Settings Dropdown */}
               <div className="relative group">
                 <button
-                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all cursor-pointer"
+                  aria-label="Configurações"
+                  className="flex size-10 items-center justify-center rounded-xl bg-transparent text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                   title="Configurações"
                 >
                   <span className="material-symbols-outlined text-[20px]">settings</span>
@@ -266,7 +271,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
               <div className="relative group">
                 <button
                   aria-label="Notificações"
-                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all relative"
+                  className="relative flex size-10 items-center justify-center rounded-xl bg-transparent text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                   title="Notificações"
                 >
                   <span className="material-symbols-outlined text-[20px]">notifications</span>
@@ -326,18 +331,18 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                   </div>
                 </div>
               </div>
-              <div className="relative group ml-2">
-                <div className="size-10 bg-gradient-to-br from-primary to-primary/60 rounded-full p-[2px] cursor-pointer shadow-md hover:shadow-primary/30 transition-shadow">
+              <div className="group relative ml-1 border-l border-slate-200 pl-2 dark:border-slate-700">
+                <button type="button" aria-label={`Conta de ${userEmail}`} className="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-cyan-500 p-[2px] shadow-sm transition-shadow hover:shadow-md hover:shadow-primary/25">
                   <img
                     src={gender === 'female'
                       ? "https://api.dicebear.com/7.x/notionists/svg?seed=Jasmine&backgroundColor=f8f9fa"
                       : "https://api.dicebear.com/7.x/notionists/svg?seed=Leo&backgroundColor=f8f9fa"}
-                    alt="User Avatar"
+                    alt=""
                     className="size-full rounded-full bg-white dark:bg-gray-900 object-cover"
                   />
-                </div>
+                </button>
 
-                <div className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 group-focus-within:scale-100 z-50">
+                <div className="invisible absolute right-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-1.5rem)] origin-top-right scale-95 rounded-2xl border border-slate-200 bg-white p-2 opacity-0 shadow-xl shadow-slate-900/10 transition-all group-hover:visible group-hover:scale-100 group-hover:opacity-100 group-focus-within:visible group-focus-within:scale-100 group-focus-within:opacity-100 dark:border-slate-700 dark:bg-slate-900">
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-2">
                     <p className="text-sm font-bold truncate" title={userEmail}>{userEmail}</p>
                     <p className="text-xs text-gray-500 truncate">Sessão Ativa</p>
@@ -364,12 +369,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
             </button>
           </div>
         )}
+        </div>
       </header>
-      <main className={`flex-1 flex flex-col relative ${hideNav ? '' : 'pb-24 md:pb-0'} print:pt-0 print:pb-0`}>
+      <main className={`flex-1 flex flex-col relative ${hideNav ? '' : 'pb-24 lg:pb-0'} print:pt-0 print:pb-0`}>
         {children}
       </main>
       {!hideNav && (
-        <nav aria-label="Navegação móvel" className="no-print md:hidden fixed bottom-3 left-3 right-3 z-40 flex items-stretch gap-1 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95">
+        <nav aria-label="Navegação móvel" className="no-print lg:hidden fixed bottom-3 left-3 right-3 z-40 flex items-stretch gap-1 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95">
           {[...NAV_ITEMS, ...(isAdmin ? [{ view: AppView.ADMIN, label: 'Admin', icon: 'admin_panel_settings' }] : [])].map((item) => {
             const isActive = currentView === item.view;
             return (
