@@ -152,6 +152,10 @@ export const scheduleService = {
             name: rest.institution?.name || 'Nova Grade',
             data: {
                 ...rest,
+                institution: {
+                    ...rest.institution,
+                    logo: rest.institution?.logo || null
+                },
                 fixedLessons: fixedLessonsToSave || []
             },
             updated_at: new Date().toISOString()
