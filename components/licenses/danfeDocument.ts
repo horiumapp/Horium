@@ -252,32 +252,14 @@ export const getDanfeMarkup = (license: DanfeLicense, recipientName: string) => 
 };
 
 export const createDanfePdf = async (page: HTMLElement) => {
-    const { default: html2canvas } = await import('html2canvas');
+    const { domToCanvas } = await import('modern-screenshot');
     const { jsPDF } = await import('jspdf');
-    const host = document.createElement('div');
-    host.className = 'danfe-scope';
-    host.style.position = 'absolute';
-    host.style.left = '0';
-    host.style.top = '0';
-    host.style.width = '210mm';
-    host.style.background = '#ffffff';
-    host.style.zIndex = '0';
-    host.appendChild(page.cloneNode(true));
-    document.body.appendChild(host);
-
-    let canvas: HTMLCanvasElement;
-    try {
-        const clone = host.firstElementChild;
-        if (!(clone instanceof HTMLElement)) {
-            throw new Error('A nota não pôde ser copiada para o PDF.');
-        }
-        canvas = await html2canvas(clone, {
-            scale: 2,
-            backgroundColor: '#ffffff'
-        });
-    } finally {
-        host.remove();
-    }
+    const canvas = await domToCanvas(page, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        width: page.scrollWidth,
+        height: page.scrollHeight
+    });
 
     if (!canvas.width || !canvas.height) {
         throw new Error('A nota foi capturada sem tamanho.');
@@ -285,7 +267,7 @@ export const createDanfePdf = async (page: HTMLElement) => {
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const image = canvas.toDataURL('image/jpeg', 0.95);
+    const image = canvas.toDataURL('image/png');
     const imageHeight = (canvas.height * pageWidth) / canvas.width;
     let remaining = imageHeight;
     let offset = 0;
@@ -296,7 +278,7 @@ export const createDanfePdf = async (page: HTMLElement) => {
     while (remaining > 1) {
         offset = remaining - imageHeight;
         pdf.addPage();
-        pdf.addImage(image, 'JPEG', 0, offset, pageWidth, imageHeight);
+        pdf.addImage(image, 'PNG', 0, offset, pageWidth, imageHeight);
         remaining -= pageHeight;
     }
 
