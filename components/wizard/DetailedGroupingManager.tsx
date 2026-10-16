@@ -76,7 +76,7 @@ export const DetailedGroupingManager: React.FC<DetailedGroupingManagerProps> = (
 
     const filtersActive = filters.classId !== 'all' || filters.subjectId !== 'all' || filters.teacherId !== 'all' || filters.lessons !== 'all';
     const fieldClass = 'h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
-    const rowGrid = 'grid min-w-[1080px] grid-cols-[4.25rem_8.25rem_7.5rem_2.75rem_minmax(40rem,1fr)] gap-3';
+    const rowGrid = 'grid grid-cols-[4.25rem_12.5rem_8rem_2.75rem_minmax(28rem,45.5rem)] gap-3';
 
     const sortedClasses = [...data.classes].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true, sensitivity: 'base' }));
 
