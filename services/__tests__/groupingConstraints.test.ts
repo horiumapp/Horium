@@ -227,6 +227,91 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             });
         });
 
+        it('gives a 2-day teacher the first 5 periods each day for 10 lessons', () => {
+            const availability: Record<string, 'D' | 'ND'> = {};
+            const juridicoAvailability: Record<string, 'D' | 'ND'> = {};
+            for (let d = 0; d < 5; d++) {
+                for (let s = 0; s < 7; s++) {
+                    availability[`${d}-${s}`] = (d === 1 || d === 2) && s < 5 ? 'D' : 'ND';
+                    juridicoAvailability[`${d}-${s}`] = (d === 3 || d === 4) && s < 5 ? 'D' : 'ND';
+                }
+            }
+
+            const classes = Array.from({ length: 10 }, (_, index) => ({
+                id: `c_${index}`,
+                name: `Turma ${index + 1}`,
+                lessonsPerSubject: {
+                    s_info: 1,
+                    s_jur: 1,
+                    s_mat: 2
+                }
+            }));
+
+            const setupData: any = {
+                classes,
+                teachers: [
+                    {
+                        id: 't_info',
+                        name: 'Informática',
+                        subjects: ['s_info'],
+                        availability,
+                        classAssignments: {
+                            s_info: Object.fromEntries(classes.map(classroom => [classroom.id, 'OBRIGATORIAMENTE']))
+                        }
+                    },
+                    {
+                        id: 't_jur',
+                        name: 'Jurídico',
+                        subjects: ['s_jur'],
+                        availability: juridicoAvailability,
+                        classAssignments: {
+                            s_jur: Object.fromEntries(classes.map(classroom => [classroom.id, 'OBRIGATORIAMENTE']))
+                        }
+                    },
+                    {
+                        id: 't_mat',
+                        name: 'Matemática',
+                        subjects: ['s_mat'],
+                        classAssignments: {
+                            s_mat: Object.fromEntries(classes.map(classroom => [classroom.id, 'OBRIGATORIAMENTE']))
+                        }
+                    }
+                ],
+                subjects: [
+                    { id: 's_info', name: 'Informática' },
+                    { id: 's_jur', name: 'Jurídico' },
+                    { id: 's_mat', name: 'Matemática' }
+                ],
+                generalGrouping: 'Agrupar no máximo 2 aulas por dia SEGUIDAS',
+                weekConfig: {
+                    activeDays: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
+                    lessonsPerDayGlobal: 7
+                }
+            };
+
+            const result = runGeneratorEngine(setupData);
+            expect(result.failures).toHaveLength(0);
+            expect(result.fixedLessons).toHaveLength(40);
+            for (const classroom of classes) {
+                const placed = result.fixedLessons.filter(lesson => lesson.classId === classroom.id);
+                expect(placed).toHaveLength(4);
+            }
+            const assertPacked = (teacherId: string, days: string[]) => {
+                const lessons = result.fixedLessons.filter(lesson => lesson.teacherId === teacherId);
+                expect(lessons).toHaveLength(10);
+                const byDay: Record<string, number[]> = {};
+                lessons.forEach(lesson => {
+                    if (!byDay[lesson.day]) byDay[lesson.day] = [];
+                    byDay[lesson.day].push(lesson.slotIndex);
+                    expect(lesson.slotIndex).toBeLessThan(5);
+                });
+                expect(Object.keys(byDay).sort()).toEqual([...days].sort());
+                Object.values(byDay).forEach(slots => expect(slots).toHaveLength(5));
+            };
+            assertPacked('t_info', ['Terça', 'Quarta']);
+            assertPacked('t_jur', ['Quinta', 'Sexta']);
+        });
+
         it('correctly allocates 10 lessons for a teacher available on 2 days (e.g. CETAM-INFO)', () => {
             // Days: Segunda (0), Terça (1), Quarta (2), Quinta (3), Sexta (4)
             // Teacher CETAM-INFO is available only on Terça (1) and Quarta (2)

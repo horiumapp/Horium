@@ -414,6 +414,149 @@ export function runGeneratorEngine(
             });
         });
 
+        // Professores sem folga (Informática e Jurídico: 2 dias, 5+5 primeiros tempos)
+        // entram antes do restante, senão a grade fecha os únicos horários deles.
+        const openSlotsByTeacher = new Map<string, { di: number; slot: number }[]>();
+        const teacherLoad = new Map<string, number>();
+        for (const asg of assignments) {
+            teacherLoad.set(asg.teacherId, (teacherLoad.get(asg.teacherId) || 0) + asg.lessons);
+        }
+        const tightOrder: { teacherId: string; slack: number; days: number }[] = [];
+        for (const teacher of data.teachers) {
+            const ti = teacherIdx.get(teacher.id);
+            if (ti === undefined) continue;
+            const open: { di: number; slot: number }[] = [];
+            const daysWithRoom = new Set<number>();
+            for (let di = 0; di < nDays; di++) {
+                const limit = teacherLimit[ti * nDays + di];
+                const nd = teacherNd[ti * nDays + di];
+                let count = 0;
+                for (let slot = 0; slot < slotsPerDay && count < limit; slot++) {
+                    if (nd & (1 << slot)) continue;
+                    open.push({ di, slot });
+                    count++;
+                }
+                if (count > 0) daysWithRoom.add(di);
+            }
+            openSlotsByTeacher.set(teacher.id, open);
+            const remaining = (teacherLoad.get(teacher.id) || 0) - currentFixed.filter(lesson => lesson.teacherId === teacher.id).length;
+            const slack = open.length - remaining;
+            const packsTwoDays = daysWithRoom.size > 0 && daysWithRoom.size <= 2 && remaining >= daysWithRoom.size * 4;
+            if (remaining > 0 && open.length >= remaining && (slack <= 2 || packsTwoDays)) {
+                tightOrder.push({ teacherId: teacher.id, slack, days: daysWithRoom.size });
+            }
+        }
+        tightOrder.sort((a, b) => a.days - b.days || a.slack - b.slack);
+
+        const classSlotKey = (classId: string, di: number, slot: number) => `${classId}|${di}|${slot}`;
+        const takenClassSlots = new Set(currentFixed.map(lesson => {
+            const di = dayIndex.get(lesson.day);
+            return di === undefined ? '' : classSlotKey(lesson.classId, di, lesson.slotIndex);
+        }));
+        const takenTeacherSlots = new Set(currentFixed.map(lesson => {
+            const di = dayIndex.get(lesson.day);
+            return di === undefined ? '' : `${lesson.teacherId}|${di}|${lesson.slotIndex}`;
+        }));
+
+        for (const tight of tightOrder) {
+            const open = openSlotsByTeacher.get(tight.teacherId) || [];
+            const units: Assignment[] = [];
+            for (const asg of assignments) {
+                if (asg.teacherId !== tight.teacherId || asg.lessons <= 0) continue;
+                const placed = currentFixed.filter(lesson =>
+                    lesson.teacherId === asg.teacherId &&
+                    lesson.classId === asg.classId &&
+                    lesson.subjectId === asg.subjectId
+                ).length;
+                for (let n = placed; n < asg.lessons; n++) units.push(asg);
+            }
+            if (units.length === 0 || open.length === 0) continue;
+            for (let i = units.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                const swap = units[i];
+                units[i] = units[j];
+                units[j] = swap;
+            }
+
+            const edges: number[][] = units.map(unit => {
+                const ci = classIdx.get(unit.classId);
+                const list: number[] = [];
+                for (let s = 0; s < open.length; s++) {
+                    const spot = open[s];
+                    if (takenTeacherSlots.has(`${tight.teacherId}|${spot.di}|${spot.slot}`)) continue;
+                    if (takenClassSlots.has(classSlotKey(unit.classId, spot.di, spot.slot))) continue;
+                    if (ci !== undefined && (classNd[ci * nDays + spot.di] & (1 << spot.slot))) continue;
+                    list.push(s);
+                }
+                return list;
+            });
+
+            const matchUnitToSlot = (useRules: boolean): number[] => {
+                const matchSlot = new Array<number>(open.length).fill(-1);
+                const respects = (unit: Assignment, spotIndex: number): boolean => {
+                    if (!useRules) return true;
+                    const spot = open[spotIndex];
+                    let mask = 1 << spot.slot;
+                    for (let s = 0; s < open.length; s++) {
+                        const matched = matchSlot[s];
+                        if (matched < 0 || open[s].di !== spot.di) continue;
+                        const other = units[matched];
+                        if (other.classId === unit.classId && other.subjectId === unit.subjectId) {
+                            mask |= 1 << open[s].slot;
+                        }
+                    }
+                    if (popcount(mask) > unit.rule.maxDaily) return false;
+                    const streak = maxStreakFromMask(mask, slotsPerDay);
+                    if (streak > unit.rule.maxConsecutive) return false;
+                    if (!unit.rule.allowConsecutive && streak > 1) return false;
+                    return true;
+                };
+                const seen = new Array<boolean>(open.length);
+                const unitMatched = new Array<boolean>(units.length).fill(false);
+                const dfs = (unitIndex: number): boolean => {
+                    for (const spotIndex of edges[unitIndex]) {
+                        if (seen[spotIndex] || !respects(units[unitIndex], spotIndex)) continue;
+                        seen[spotIndex] = true;
+                        const previous = matchSlot[spotIndex];
+                        if (previous < 0 || dfs(previous)) {
+                            matchSlot[spotIndex] = unitIndex;
+                            unitMatched[unitIndex] = true;
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                for (let unitIndex = 0; unitIndex < units.length; unitIndex++) {
+                    if (unitMatched[unitIndex]) continue;
+                    seen.fill(false);
+                    dfs(unitIndex);
+                }
+                return matchSlot;
+            };
+
+            let matchSlot = matchUnitToSlot(true);
+            if (matchSlot.filter(unitIndex => unitIndex >= 0).length < units.length) {
+                matchSlot = matchUnitToSlot(false);
+            }
+            const usedUnits = new Set<number>();
+            for (let s = 0; s < open.length; s++) {
+                const unitIndex = matchSlot[s];
+                if (unitIndex < 0 || usedUnits.has(unitIndex)) continue;
+                usedUnits.add(unitIndex);
+                const unit = units[unitIndex];
+                const spot = open[s];
+                currentFixed.push({
+                    day: originalDays[spot.di],
+                    slotIndex: spot.slot,
+                    classId: unit.classId,
+                    teacherId: unit.teacherId,
+                    subjectId: unit.subjectId
+                });
+                takenClassSlots.add(classSlotKey(unit.classId, spot.di, spot.slot));
+                takenTeacherSlots.add(`${unit.teacherId}|${spot.di}|${spot.slot}`);
+            }
+        }
+
         // 2. Calcular Flexibilidade
         const teacherFlexibility: Record<string, number> = {};
         data.teachers.forEach(t => {
@@ -841,8 +984,7 @@ export function runGeneratorEngine(
 
         // 4. RESCUE PASS (Fase de Resgate de Aulas com Cadeia de Ejeção Augmenting Path)
         // Garante que NENHUM professor fique sem carga horária se houver slots válidos na grade escolar
-        if (unplacedBlocks.length > 0) {
-            // Helper para verificar se um professor pode assumir um slot em uma turma
+        // Helper para verificar se um professor pode assumir um slot em uma turma
             const canTeacherTakeSlotInClass = (
                 lesson: FixedLesson,
                 targetDay: string,
@@ -906,6 +1048,9 @@ export function runGeneratorEngine(
                 maxDepth: number = 5,
                 relaxSoftRules: boolean = false
             ): boolean => {
+                // O horário de origem não conta como sucesso: devolver a aula para lá
+                // deixa o professor preso e a turma de destino continua com o buraco.
+                const forbidSlot = lessonToPlace.slotIndex >= 0 ? `${lessonToPlace.day}|${lessonToPlace.slotIndex}` : '';
                 const classId = lessonToPlace.classId;
                 const ci = classIdx.get(classId);
                 if (ci === undefined) return false;
@@ -920,6 +1065,7 @@ export function runGeneratorEngine(
                             const di = dayIndex.get(day)!;
                             const occ = classOcc[cPos(ci, di, slot)];
                             if (!occ) {
+                                if (`${day}|${slot}` === forbidSlot) continue;
                                 const placed: FixedLesson = { ...lessonToPlace, day, slotIndex: slot };
                                 currentFixed.push(placed);
                                 placeLesson(placed);
@@ -1061,11 +1207,13 @@ export function runGeneratorEngine(
                 return false;
             };
 
-            // Troca Direta entre duas turmas (Kempe Cross-Class Swap) com Transação Snapshot
+            // Troca Direta entre duas turmas (Kempe Cross-Class Swap) com Transação Snapshot.
+            // O número de pares cresce com turmas × horários²; o teto deixa tempo para novas tentativas.
             const tryCrossClassSwap = (lessonToPlace: FixedLesson): boolean => {
                 const classId = lessonToPlace.classId;
                 const originCi = classIdx.get(classId);
-                if (originCi === undefined) return false;
+                if (originCi === undefined || nClasses > 12) return false;
+                let checks = 0;
 
                 for (let d1 = 0; d1 < nDays; d1++) {
                     const day1 = originalDays[d1];
@@ -1080,6 +1228,7 @@ export function runGeneratorEngine(
 
                                 for (let otherCi = 0; otherCi < nClasses; otherCi++) {
                                     if (otherCi === originCi) continue;
+                                    if (++checks > 400) return false;
                                     const l2 = classOcc[cPos(otherCi, d2, s2)];
                                     const otherClassId = data.classes[otherCi].id;
                                     if (!l2 || pinnedSlots.has(`${otherClassId}|${day2}|${s2}`)) continue;
@@ -1116,7 +1265,7 @@ export function runGeneratorEngine(
                 return false;
             };
 
-            for (const failedBlock of unplacedBlocks) {
+            if (unplacedBlocks.length > 0) for (const failedBlock of unplacedBlocks) {
                 const remainingLessons = failedBlock.size;
 
                 for (let l = 0; l < remainingLessons; l++) {
@@ -1161,7 +1310,6 @@ export function runGeneratorEngine(
                     }
                 }
             }
-        }
 
         // Compactação Automática com respeito estrito aos limites de aulas seguidas
         const compact = () => {
@@ -1371,6 +1519,48 @@ export function runGeneratorEngine(
             }
         }
         currentFixed = uniqueFixed;
+        rebuildBoard();
+
+        // O que a compactação ou a deduplicação deixou de fora volta para a fila e é contado de verdade.
+        const missing: Block[] = [];
+        for (const asg of assignments) {
+            if (asg.lessons <= 0) continue;
+            const placed = currentFixed.filter(lesson =>
+                lesson.teacherId === asg.teacherId &&
+                lesson.classId === asg.classId &&
+                lesson.subjectId === asg.subjectId
+            ).length;
+            for (let n = placed; n < asg.lessons; n++) {
+                missing.push({ assignment: asg, size: 1, consecutive: false });
+            }
+        }
+        if (missing.length > 0) {
+            failures.length = 0;
+            for (const failedBlock of missing) {
+                const singleLesson: FixedLesson = {
+                    day: '',
+                    slotIndex: -1,
+                    classId: failedBlock.assignment.classId,
+                    teacherId: failedBlock.assignment.teacherId,
+                    subjectId: failedBlock.assignment.subjectId
+                };
+                const placed = tryIntraClassEjectionChain(singleLesson, 8, true)
+                    || tryInterClassRelocation(singleLesson);
+                if (!placed) {
+                    const key = `${failedBlock.assignment.teacherId}|${failedBlock.assignment.classId}|${failedBlock.assignment.subjectId}`;
+                    failedAssignmentWeights[key] = (failedAssignmentWeights[key] || 0) + 20;
+                    failures.push({
+                        teacherId: failedBlock.assignment.teacherId,
+                        classId: failedBlock.assignment.classId,
+                        subjectId: failedBlock.assignment.subjectId,
+                        reason: 'NO_AVAILABILITY',
+                        details: `Não foi possível encontrar slot para 1 aula de ${subjectById.get(failedBlock.assignment.subjectId)?.name}.`
+                    });
+                }
+            }
+        } else {
+            failures.length = 0;
+        }
 
         return { fixedLessons: currentFixed, failures, score: calculateScore(currentFixed, failures) };
     };
