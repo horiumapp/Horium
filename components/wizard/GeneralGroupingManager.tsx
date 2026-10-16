@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Modal } from '../ui/Modal';
 import { SetupData } from '../../types';
@@ -12,8 +11,7 @@ interface GeneralGroupingManagerProps {
 }
 
 export const GeneralGroupingManager: React.FC<GeneralGroupingManagerProps> = ({ isOpen, onClose, data, setData }) => {
-
-    const grouping = data.generalGrouping || "Agrupar no máximo 2 aulas por dia SEGUIDAS";
+    const grouping = data.generalGrouping || 'Agrupar no máximo 2 aulas por dia SEGUIDAS';
 
     const handleUpdateGrouping = (value: string) => {
         setData(prev => ({
@@ -22,37 +20,44 @@ export const GeneralGroupingManager: React.FC<GeneralGroupingManagerProps> = ({ 
         }));
     };
 
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} size="md" className="p-0 overflow-hidden bg-[#a6cc72]">
-            {/* Header Area */}
-            <div className="bg-[#a6cc72] p-8 flex flex-col items-center gap-6">
-                <div className="bg-[#7a9565] p-3 px-6 border border-black/20 w-full">
-                    <h2 className="text-xl font-bold text-gray-800 uppercase tracking-tight text-center">
-                        Informe a configuração de AGRUPAMENTO GERAL:
-                    </h2>
-                </div>
+    const fieldClass = 'h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
-                <div className="w-full px-4">
-                    <select
-                        value={grouping}
-                        onChange={(e) => handleUpdateGrouping(e.target.value)}
-                        className="w-full border border-gray-400 rounded px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-green-600 shadow-sm h-10 bg-white appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E')] bg-[length:16px] bg-[right_12px_center] bg-no-repeat uppercase"
-                    >
-                        {GENERAL_GROUPING_OPTIONS.map(o => (
-                            <option key={o} value={o}>{o}</option>
-                        ))}
-                    </select>
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} size="lg">
+            <div className="bg-gradient-to-r from-[#1259bd] to-primary px-5 py-4 text-white flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3 min-w-0">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-sm font-bold text-primary">3</span>
+                    <div className="min-w-0">
+                        <h2 className="text-base font-bold tracking-tight">Agrupamento geral</h2>
+                        <p className="text-sm text-white/80 mt-0.5 leading-snug">
+                            Regra padrão de toda a escola, usada quando as outras ficam em branco.
+                        </p>
+                    </div>
                 </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Fechar"
+                    className="size-10 shrink-0 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                >
+                    <span className="material-symbols-outlined">close</span>
+                </button>
             </div>
 
-            {/* Close Bar */}
-            <div className="bg-[#a6cc72] p-2 flex justify-end border-t border-black/5">
-                <button
-                    onClick={onClose}
-                    className="p-1 hover:bg-black/10 rounded-full transition-colors"
-                >
-                    <span className="material-symbols-outlined text-gray-700">close</span>
-                </button>
+            <div className="bg-white dark:bg-gray-900 px-5 py-5">
+                <label className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Agrupamento</span>
+                    <select
+                        value={grouping}
+                        title={grouping}
+                        onChange={(e) => handleUpdateGrouping(e.target.value)}
+                        className={fieldClass}
+                    >
+                        {GENERAL_GROUPING_OPTIONS.map(option => (
+                            <option key={option} value={option}>{option}</option>
+                        ))}
+                    </select>
+                </label>
             </div>
         </Modal>
     );
