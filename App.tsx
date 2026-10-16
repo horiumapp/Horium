@@ -196,6 +196,11 @@ const App: React.FC = () => {
                     licenseStatus: lastSchedule?.licenseStatus || 'Sem Licença',
                     fixedLessons: []
                   };
+                } else if (finalSchedule.id && (!finalSchedule.fixedLessons || finalSchedule.fixedLessons.length === 0)) {
+                  const solution = await scheduleService.getScheduleSolution(finalSchedule.id);
+                  if (solution.length > 0) {
+                    finalSchedule = { ...finalSchedule, fixedLessons: solution };
+                  }
                 }
                 setSetupData(finalSchedule);
                 setView(savedView);
@@ -404,8 +409,16 @@ const App: React.FC = () => {
     }
   };
 
-  const handleEditSchedule = (schedule: SetupData) => {
-    setSetupData(schedule);
+  const handleEditSchedule = async (schedule: SetupData) => {
+    let next = schedule;
+    const licensed = !!schedule.isLicensed || activeLicenseStatus === 'Aprovado';
+    if (licensed && schedule.id && (!schedule.fixedLessons || schedule.fixedLessons.length === 0)) {
+      const solution = await scheduleService.getScheduleSolution(schedule.id);
+      if (solution.length > 0) {
+        next = { ...schedule, fixedLessons: solution };
+      }
+    }
+    setSetupData(next);
     setView(AppView.SETUP);
   };
 
