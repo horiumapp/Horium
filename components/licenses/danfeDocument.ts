@@ -1,3 +1,6 @@
+import { domToCanvas } from 'modern-screenshot';
+import { jsPDF } from 'jspdf';
+
 export interface DanfeLicense {
     id: string;
     payment_date?: string | null;
@@ -246,13 +249,39 @@ export const getDanfeMarkup = (license: DanfeLicense, recipientName: string) => 
     return { css, body: `<div class="danfe-scope">${body}</div>` };
 };
 
+let pdfCaptureQueue: Promise<unknown> = Promise.resolve();
+
 export const createDanfePdf = async (page: HTMLElement) => {
-    const { domToCanvas } = await import('modern-screenshot');
-    const { jsPDF } = await import('jspdf');
-    const canvas = await domToCanvas(page, {
-        scale: 2,
-        backgroundColor: '#ffffff'
-    });
+    const capture = pdfCaptureQueue.then(() => renderDanfePdf(page));
+    pdfCaptureQueue = capture.then(() => undefined, () => undefined);
+    return capture;
+};
+
+const renderDanfePdf = async (page: HTMLElement) => {
+    const host = document.createElement('div');
+    host.className = 'danfe-scope';
+    host.style.position = 'fixed';
+    host.style.left = '0';
+    host.style.top = '0';
+    host.style.width = `${page.offsetWidth}px`;
+    host.style.background = '#ffffff';
+    host.style.zIndex = '-1';
+    host.appendChild(page.cloneNode(true));
+    document.body.appendChild(host);
+
+    let canvas: HTMLCanvasElement;
+    try {
+        const clone = host.firstElementChild;
+        if (!(clone instanceof HTMLElement)) {
+            throw new Error('A nota não pôde ser copiada para o PDF.');
+        }
+        canvas = await domToCanvas(clone, {
+            scale: 2,
+            backgroundColor: '#ffffff'
+        });
+    } finally {
+        host.remove();
+    }
 
     if (!canvas.width || !canvas.height) {
         throw new Error('A nota foi capturada sem tamanho.');

@@ -90,7 +90,7 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
             })
             .catch((previewError) => {
                 console.error('Erro ao montar a visualização da nota:', previewError);
-                if (!cancelled) setPdfError(previewError instanceof Error ? previewError.message : String(previewError));
+                if (!cancelled) setPdfError('Não foi possível montar o PDF da nota.');
             })
             .finally(() => {
                 if (!cancelled) setPreparingPdf(false);
