@@ -312,6 +312,62 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             assertPacked('t_jur', ['Quinta', 'Sexta']);
         });
 
+        it('fills every class period when the weekly load matches the grid', () => {
+            const classCount = 5;
+            const classes = Array.from({ length: classCount }, (_, index) => ({
+                id: `c_${index}`,
+                name: `${index + 1}º 01`,
+                lessonsPerSubject: { s_info: 2, s1: 5, s2: 5, s3: 5, s4: 5, s5: 3 }
+            }));
+            const availability: Record<string, 'D' | 'ND'> = {};
+            for (let d = 0; d < 5; d++) {
+                for (let s = 0; s < 5; s++) availability[`${d}-${s}`] = (d === 1 || d === 2) ? 'D' : 'ND';
+            }
+            const teachers = [
+                {
+                    id: 't_info',
+                    name: 'Informática',
+                    subjects: ['s_info'],
+                    availability,
+                    classAssignments: { s_info: Object.fromEntries(classes.map(classroom => [classroom.id, 'OBRIGATORIAMENTE'])) }
+                },
+                ...['s1', 's2', 's3', 's4', 's5'].map((subjectId, index) => ({
+                    id: `t_${index}`,
+                    name: `Prof ${index}`,
+                    subjects: [subjectId],
+                    classAssignments: { [subjectId]: Object.fromEntries(classes.map(classroom => [classroom.id, 'OBRIGATORIAMENTE'])) }
+                }))
+            ];
+            const result = runGeneratorEngine({
+                classes,
+                teachers,
+                subjects: [
+                    { id: 's_info', name: 'Informática' },
+                    { id: 's1', name: 'Português' },
+                    { id: 's2', name: 'Matemática' },
+                    { id: 's3', name: 'História' },
+                    { id: 's4', name: 'Geografia' },
+                    { id: 's5', name: 'Ciências' }
+                ],
+                generalGrouping: 'Agrupar no máximo 2 aulas por dia SEGUIDAS',
+                weekConfig: { activeDays: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'], lessonsPerDayGlobal: 5 }
+            } as any);
+
+            expect(result.failures).toHaveLength(0);
+            expect(result.fixedLessons).toHaveLength(classCount * 25);
+            for (const classroom of classes) {
+                const slots = new Set(result.fixedLessons.filter(lesson => lesson.classId === classroom.id).map(lesson => `${lesson.day}|${lesson.slotIndex}`));
+                expect(slots.size).toBe(25);
+            }
+            const infoByDay: Record<string, number> = {};
+            result.fixedLessons.filter(lesson => lesson.teacherId === 't_info').forEach(lesson => {
+                infoByDay[lesson.day] = (infoByDay[lesson.day] || 0) + 1;
+                expect(lesson.slotIndex).toBeLessThan(5);
+            });
+            expect(infoByDay['Terça']).toBe(5);
+            expect(infoByDay['Quarta']).toBe(5);
+        }, 20000);
+
         it('correctly allocates 10 lessons for a teacher available on 2 days (e.g. CETAM-INFO)', () => {
             // Days: Segunda (0), Terça (1), Quarta (2), Quinta (3), Sexta (4)
             // Teacher CETAM-INFO is available only on Terça (1) and Quarta (2)
