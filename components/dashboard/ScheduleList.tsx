@@ -52,8 +52,19 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({
                         <div className={fillsRow ? 'p-6 sm:p-8' : 'p-4 sm:p-5'}>
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="flex min-w-0 items-start gap-4">
-                                    <div className={`flex shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/10 dark:text-blue-300 ${fillsRow ? 'size-20' : 'size-12'}`}>
-                                        <span className={`material-symbols-outlined ${fillsRow ? 'text-[40px]' : 'text-[24px]'}`}>school</span>
+                                    <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/10 dark:text-blue-300 ${schedule.institution.logo ? 'border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950' : ''} ${fillsRow ? 'size-20' : 'size-12'}`}>
+                                        {schedule.institution.logo ? (
+                                            <img
+                                                src={schedule.institution.logo}
+                                                alt=""
+                                                className="size-full object-contain p-1.5"
+                                                onError={(event) => {
+                                                    event.currentTarget.style.display = 'none';
+                                                }}
+                                            />
+                                        ) : (
+                                            <span className={`material-symbols-outlined ${fillsRow ? 'text-[40px]' : 'text-[24px]'}`}>school</span>
+                                        )}
                                     </div>
                                     <div className="min-w-0 pt-0.5">
                                         <button
