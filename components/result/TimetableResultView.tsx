@@ -3,6 +3,7 @@ import { SetupData, FixedLesson } from '../../types';
 import { DAYS_OF_WEEK } from '../../constants';
 import { excelService } from '../../services/excelService';
 import { ensureScheduleSlots, scheduleService } from '../../services/scheduleService';
+import { teacherColorMap } from '../../utils/teacherColors';
 
 interface TimetableResultViewProps {
     data: SetupData;
@@ -35,6 +36,11 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
             ? normalizedData.weekConfig.activeDays
             : DAYS_OF_WEEK;
     }, [normalizedData.weekConfig]);
+
+    const teacherColors = useMemo(
+        () => teacherColorMap(normalizedData.teachers),
+        [normalizedData.teachers]
+    );
 
     // Carrega a solução protegida sob demanda se a grade estiver licenciada e a solução ainda não estiver em memória
     useEffect(() => {
@@ -547,25 +553,23 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                                     const lessonItem = normalizedData.fixedLessons?.find(fl => fl.day === activeDay && fl.slotIndex === slotIdx && fl.classId === c.id);
                                                     const subject = normalizedData.subjects.find(s => s.id === lessonItem?.subjectId);
                                                     const teacher = normalizedData.teachers.find(t => t.id === lessonItem?.teacherId);
+                                                    const teacherColor = lessonItem ? teacherColors.get(lessonItem.teacherId) : undefined;
 
                                                     return (
                                                         <td
                                                             key={c.id}
                                                             className="border border-gray-300 dark:border-gray-700 p-1 font-bold transition-all relative"
-                                                            style={{
-                                                                backgroundColor: subject?.color ? `${subject.color}25` : undefined,
-                                                                borderColor: subject?.color || undefined
-                                                            }}
+                                                            style={{ backgroundColor: teacherColor }}
                                                         >
                                                             {lessonItem ? (
                                                                 <div className="flex flex-col items-center justify-center leading-tight">
                                                                     <div className="flex items-center gap-0.5">
-                                                                        <span className="font-black text-xs text-gray-900 dark:text-gray-100">{subject?.shortName || subject?.name}</span>
+                                                                        <span className="font-black text-xs text-slate-900">{subject?.shortName || subject?.name}</span>
                                                                         {lessonItem.isManual && (
                                                                             <span className="material-symbols-outlined text-[11px] text-amber-600 dark:text-amber-400" title="Aula fixada manualmente">push_pin</span>
                                                                         )}
                                                                     </div>
-                                                                    <span className="text-[10px] text-gray-500 font-medium">{teacher?.name}</span>
+                                                                    <span className="text-[10px] text-slate-700 font-medium">{teacher?.name}</span>
                                                                 </div>
                                                             ) : (
                                                                 <span className="text-gray-300 dark:text-gray-600">-</span>
@@ -605,25 +609,24 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                                         : normalizedData.classes.find(c => c.id === lessonItem?.classId)?.name;
 
                                                     const isSelected = selectedSlot?.day === day && selectedSlot?.slotIndex === slotIdx;
+                                                    const teacherColor = lessonItem ? teacherColors.get(lessonItem.teacherId) : undefined;
 
                                                     return (
                                                         <td
                                                             key={day}
                                                             onClick={() => handleCellClick(dayIdx, slotIdx)}
                                                             className={`border border-gray-300 dark:border-gray-700 p-1 font-bold transition-all relative ${isEditMode ? 'cursor-pointer hover:ring-2 hover:ring-primary/50' : ''} ${isSelected ? 'ring-4 ring-amber-500 bg-amber-100 dark:bg-amber-900/40 z-10 scale-[1.02]' : ''}`}
-                                                            style={{
-                                                                backgroundColor: !isSelected && subject?.color ? `${subject.color}25` : undefined
-                                                            }}
+                                                            style={{ backgroundColor: !isSelected ? teacherColor : undefined }}
                                                         >
                                                             {lessonItem ? (
                                                                 <div className="flex flex-col items-center justify-center leading-tight">
                                                                     <div className="flex items-center gap-0.5">
-                                                                        <span className="font-black text-xs text-gray-900 dark:text-gray-100">{subject?.shortName || subject?.name}</span>
+                                                                        <span className="font-black text-xs text-slate-900">{subject?.shortName || subject?.name}</span>
                                                                         {lessonItem.isManual && (
                                                                             <span className="material-symbols-outlined text-[11px] text-amber-600 dark:text-amber-400" title="Aula fixada manualmente">push_pin</span>
                                                                         )}
                                                                     </div>
-                                                                    {otherEntity && <span className="text-[10px] text-gray-500 font-medium">({otherEntity})</span>}
+                                                                    {otherEntity && <span className="text-[10px] text-slate-700 font-medium">({otherEntity})</span>}
                                                                 </div>
                                                             ) : (
                                                                 <span className="text-gray-300 dark:text-gray-600">-</span>

@@ -3,6 +3,7 @@ import { saveAs } from 'file-saver';
 import { SetupData } from '../types';
 import { DAYS_OF_WEEK } from '../constants';
 import { ensureScheduleSlots } from './scheduleService';
+import { teacherColorMap } from '../utils/teacherColors';
 
 /**
  * Formats a color string to valid 6-digit hex (#RRGGBB)
@@ -113,6 +114,7 @@ export const excelService = {
         ];
 
         const lessons = data.schedule?.[0]?.slots?.filter(s => s.type === 'AULA') || [];
+        const teacherColors = teacherColorMap(normalizedData.teachers);
 
         const lessonRows: Row[] = lessons.map((lesson, idx) => {
             const timeCell: Cell = {
@@ -142,9 +144,8 @@ export const excelService = {
 
                     const subjectName = subject?.shortName || subject?.name || '';
                     const entityLabel = otherEntity ? `\n(${otherEntity})` : '';
-                    const hasColor = Boolean(subject?.color);
-                    const bgColor = hasColor ? formatHexColor(subject!.color) : '#FFFFFF';
-                    const textColor = hasColor ? getContrastTextColor(bgColor) : '#000000';
+                    const bgColor = formatHexColor(teacherColors.get(lessonData.teacherId), '#FFFFFF');
+                    const textColor = getContrastTextColor(bgColor);
 
                     return {
                         value: `${subjectName}${entityLabel}`,
@@ -251,6 +252,7 @@ export const excelService = {
         ];
 
         const lessons = data.schedule?.[0]?.slots?.filter(s => s.type === 'AULA') || [];
+        const teacherColors = teacherColorMap(normalizedData.teachers);
 
         const lessonRows: Row[] = lessons.map((lesson, idx) => {
             const timeCell: Cell = {
@@ -278,9 +280,8 @@ export const excelService = {
 
                     const subjectName = subject?.shortName || subject?.name || '';
                     const teacherName = teacher?.name ? `\n(${teacher.name})` : '';
-                    const hasColor = Boolean(subject?.color);
-                    const bgColor = hasColor ? formatHexColor(subject!.color) : '#FFFFFF';
-                    const textColor = hasColor ? getContrastTextColor(bgColor) : '#000000';
+                    const bgColor = formatHexColor(teacherColors.get(lessonData.teacherId), '#FFFFFF');
+                    const textColor = getContrastTextColor(bgColor);
 
                     return {
                         value: `${subjectName}${teacherName}`,
