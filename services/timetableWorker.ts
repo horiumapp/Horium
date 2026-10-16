@@ -204,7 +204,9 @@ export function runGeneratorEngine(
         // Se o professor/turma só tem X dias disponíveis, a matéria PRECISA de pelo menos ceil(total / X) aulas por dia
         const minDailyNeeded = Math.ceil(totalSubjectLessons / availableDaysCount);
         const effectiveMaxDaily = Math.max(baseRule.maxDaily, minDailyNeeded);
-        const effectiveMaxConsecutive = Math.max(baseRule.maxConsecutive, minDailyNeeded > baseRule.maxDaily ? minDailyNeeded : baseRule.maxConsecutive);
+        // Só quem cabe em no máximo 2 dias (Informática, Jurídico) pode passar de 2 tempos seguidos.
+        const packedWindow = availableDaysCount <= 2 && minDailyNeeded > baseRule.maxConsecutive;
+        const effectiveMaxConsecutive = packedWindow ? minDailyNeeded : baseRule.maxConsecutive;
 
         const rule = {
             maxDaily: effectiveMaxDaily,
@@ -442,7 +444,7 @@ export function runGeneratorEngine(
             const remaining = (teacherLoad.get(teacher.id) || 0) - currentFixed.filter(lesson => lesson.teacherId === teacher.id).length;
             const slack = open.length - remaining;
             const packsTwoDays = daysWithRoom.size > 0 && daysWithRoom.size <= 2 && remaining >= daysWithRoom.size * 4;
-            if (remaining > 0 && open.length >= remaining && (slack <= 2 || packsTwoDays)) {
+            if (remaining > 0 && open.length >= remaining && packsTwoDays) {
                 tightOrder.push({ teacherId: teacher.id, slack, days: daysWithRoom.size });
             }
         }
@@ -684,11 +686,41 @@ export function runGeneratorEngine(
         for (const asg of assignments) {
             const days = getAvailableDaysCount(asg.teacherId, asg.classId);
             const minDaily = Math.ceil((teacherClassTotals.get(`${asg.teacherId}|${asg.classId}`) || 0) / days);
+            const packedClass = days <= 2 && minDaily > asg.rule.maxConsecutive;
             tcLimits.set(`${asg.teacherId}|${asg.classId}|${asg.subjectId}`, {
                 maxDaily: Math.max(asg.rule.maxDaily, minDaily),
-                maxStreak: Math.max(asg.rule.maxConsecutive, minDaily > asg.rule.maxDaily ? minDaily : asg.rule.maxConsecutive)
+                maxStreak: packedClass ? minDaily : asg.rule.maxConsecutive
             });
         }
+
+        const respectsGrouping = (
+            teacherId: string,
+            classId: string,
+            subjectId: string,
+            day: string,
+            slot: number,
+            ignore: FixedLesson[]
+        ): boolean => {
+            const rule = getEffectiveGroupingRule(teacherId, classId, subjectId);
+            const tc = tcLimits.get(`${teacherId}|${classId}|${subjectId}`);
+            const subjectSlots = [slot];
+            const teacherSlots = [slot];
+            for (const lesson of currentFixed) {
+                if (ignore.includes(lesson) || lesson.day !== day || lesson.classId !== classId || lesson.slotIndex < 0) continue;
+                if (lesson.subjectId === subjectId) subjectSlots.push(lesson.slotIndex);
+                if (lesson.teacherId === teacherId) teacherSlots.push(lesson.slotIndex);
+            }
+            const subjectStreak = getMaxConsecutiveStreak(subjectSlots);
+            const teacherStreak = getMaxConsecutiveStreak(teacherSlots);
+            if (subjectSlots.length > rule.maxDaily || subjectStreak > rule.maxConsecutive) return false;
+            if (!rule.allowConsecutive && subjectStreak > 1) return false;
+            if (tc) {
+                if (teacherSlots.length > tc.maxDaily || teacherStreak > tc.maxStreak) return false;
+            } else if (teacherStreak > rule.maxConsecutive) {
+                return false;
+            }
+            return true;
+        };
 
         const clearBoard = () => {
             classMask.fill(0);
@@ -1028,6 +1060,9 @@ export function runGeneratorEngine(
                         size: 1,
                         consecutive: false
                     }, di, targetSlot);
+                }
+                if (ok && !respectsGrouping(lesson.teacherId, lesson.classId, lesson.subjectId, targetDay, targetSlot, releases.concat(lesson))) {
+                    ok = false;
                 }
 
                 for (const released of releases) placeLesson(released);
@@ -1587,6 +1622,7 @@ export function runGeneratorEngine(
             for (const hole of holes) {
                 if (`${hole.day}|${hole.slot}` === `${originDay}|${originSlot}`) continue;
                 if (!teacherCanUseIgnoring(lesson.teacherId, hole.day, hole.slot, [lesson])) continue;
+                if (!respectsGrouping(lesson.teacherId, lesson.classId, lesson.subjectId, hole.day, hole.slot, [lesson])) continue;
                 lesson.day = hole.day;
                 lesson.slotIndex = hole.slot;
                 rebuildBoard();
@@ -1596,6 +1632,8 @@ export function runGeneratorEngine(
                 if (pinnedSlots.has(`${other.classId}|${other.day}|${other.slotIndex}`)) continue;
                 if (!teacherCanUseIgnoring(lesson.teacherId, other.day, other.slotIndex, [lesson, other])) continue;
                 if (!teacherCanUseIgnoring(other.teacherId, originDay, originSlot, [other, lesson])) continue;
+                if (!respectsGrouping(lesson.teacherId, lesson.classId, lesson.subjectId, other.day, other.slotIndex, [lesson, other])) continue;
+                if (!respectsGrouping(other.teacherId, other.classId, other.subjectId, originDay, originSlot, [lesson, other])) continue;
                 const otherDay = other.day;
                 const otherSlot = other.slotIndex;
                 other.day = originDay;
@@ -1613,6 +1651,9 @@ export function runGeneratorEngine(
                     if (pinnedSlots.has(`${third.classId}|${third.day}|${third.slotIndex}`)) continue;
                     if (!teacherCanUseIgnoring(other.teacherId, third.day, third.slotIndex, [other, third, lesson])) continue;
                     if (!teacherCanUseIgnoring(third.teacherId, originDay, originSlot, [third, lesson, other])) continue;
+                    if (!respectsGrouping(lesson.teacherId, lesson.classId, lesson.subjectId, other.day, other.slotIndex, [lesson, other, third])) continue;
+                    if (!respectsGrouping(other.teacherId, other.classId, other.subjectId, third.day, third.slotIndex, [lesson, other, third])) continue;
+                    if (!respectsGrouping(third.teacherId, third.classId, third.subjectId, originDay, originSlot, [lesson, other, third])) continue;
                     const otherDay = other.day;
                     const otherSlot = other.slotIndex;
                     const thirdDay = third.day;
@@ -1632,6 +1673,8 @@ export function runGeneratorEngine(
                     if (pinnedSlots.has(`${other.classId}|${other.day}|${other.slotIndex}`)) continue;
                     if (!teacherCanUseIgnoring(other.teacherId, hole.day, hole.slot, [other, lesson])) continue;
                     if (!teacherCanUseIgnoring(lesson.teacherId, other.day, other.slotIndex, [lesson, other])) continue;
+                    if (!respectsGrouping(other.teacherId, other.classId, other.subjectId, hole.day, hole.slot, [other, lesson])) continue;
+                    if (!respectsGrouping(lesson.teacherId, lesson.classId, lesson.subjectId, other.day, other.slotIndex, [other, lesson])) continue;
                     const otherDay = other.day;
                     const otherSlot = other.slotIndex;
                     other.day = hole.day;
@@ -1674,6 +1717,7 @@ export function runGeneratorEngine(
             };
             for (const hole of holes) {
                 if (!teacherCanUse(lessonToPlace.teacherId, hole.day, hole.slot)) continue;
+                if (!respectsGrouping(lessonToPlace.teacherId, lessonToPlace.classId, lessonToPlace.subjectId, hole.day, hole.slot, [])) continue;
                 placeAt(hole.day, hole.slot);
                 return true;
             }
@@ -1681,7 +1725,8 @@ export function runGeneratorEngine(
                 const busy = teacherOcc[tPos(ti, hole.di, hole.slot)];
                 if (!busy || busy.classId === lessonToPlace.classId) continue;
                 const snap = copyState();
-                if (moveLessonAway(busy) && !classOcc[cPos(ci, hole.di, hole.slot)] && teacherCanUse(lessonToPlace.teacherId, hole.day, hole.slot)) {
+                if (moveLessonAway(busy) && !classOcc[cPos(ci, hole.di, hole.slot)] && teacherCanUse(lessonToPlace.teacherId, hole.day, hole.slot)
+                    && respectsGrouping(lessonToPlace.teacherId, lessonToPlace.classId, lessonToPlace.subjectId, hole.day, hole.slot, [])) {
                     placeAt(hole.day, hole.slot);
                     return true;
                 }
@@ -1692,8 +1737,10 @@ export function runGeneratorEngine(
                     const occ = classOcc[cPos(ci, di, slot)];
                     if (!occ || pinnedSlots.has(`${occ.classId}|${occ.day}|${occ.slotIndex}`)) continue;
                     if (!teacherCanUse(lessonToPlace.teacherId, originalDays[di], slot)) continue;
+                    if (!respectsGrouping(lessonToPlace.teacherId, lessonToPlace.classId, lessonToPlace.subjectId, originalDays[di], slot, [occ])) continue;
                     const snap = copyState();
-                    if (moveLessonAway(occ) && !classOcc[cPos(ci, di, slot)] && teacherCanUse(lessonToPlace.teacherId, originalDays[di], slot)) {
+                    if (moveLessonAway(occ) && !classOcc[cPos(ci, di, slot)] && teacherCanUse(lessonToPlace.teacherId, originalDays[di], slot)
+                        && respectsGrouping(lessonToPlace.teacherId, lessonToPlace.classId, lessonToPlace.subjectId, originalDays[di], slot, [])) {
                         placeAt(originalDays[di], slot);
                         return true;
                     }
@@ -1704,7 +1751,8 @@ export function runGeneratorEngine(
                         const blocker = occTeacher === undefined ? undefined : teacherOcc[tPos(occTeacher, hole.di, hole.slot)];
                         const freed = !blocker || blocker === occ || moveLessonAway(blocker);
                         const occNow = classOcc[cPos(ci, di, slot)];
-                        if (freed && occNow && moveLessonAway(occNow) && !classOcc[cPos(ci, di, slot)] && teacherCanUse(lessonToPlace.teacherId, originalDays[di], slot)) {
+                        if (freed && occNow && moveLessonAway(occNow) && !classOcc[cPos(ci, di, slot)] && teacherCanUse(lessonToPlace.teacherId, originalDays[di], slot)
+                            && respectsGrouping(lessonToPlace.teacherId, lessonToPlace.classId, lessonToPlace.subjectId, originalDays[di], slot, [])) {
                             placeAt(originalDays[di], slot);
                             return true;
                         }
@@ -1756,7 +1804,20 @@ export function runGeneratorEngine(
                     if (matched < 0 || spots[s].di !== spot.di) continue;
                     if (needed[matched].teacherId === unit.teacherId) count++;
                 }
-                return count <= teacherLimit[tOff(ti, spot.di)];
+                if (count > teacherLimit[tOff(ti, spot.di)]) return false;
+                const subjectSlots = [spot.slot];
+                const teacherSlots = [spot.slot];
+                for (let s = 0; s < spots.length; s++) {
+                    const matched = matchSlot[s];
+                    if (matched < 0 || spots[s].di !== spot.di) continue;
+                    if (needed[matched].teacherId === unit.teacherId) teacherSlots.push(spots[s].slot);
+                    if (needed[matched].subjectId === unit.subjectId) subjectSlots.push(spots[s].slot);
+                }
+                const rule = getEffectiveGroupingRule(unit.teacherId, classId, unit.subjectId);
+                const tc = tcLimits.get(`${unit.teacherId}|${classId}|${unit.subjectId}`);
+                if (subjectSlots.length > rule.maxDaily || getMaxConsecutiveStreak(subjectSlots) > rule.maxConsecutive) return false;
+                if (tc && (teacherSlots.length > tc.maxDaily || getMaxConsecutiveStreak(teacherSlots) > tc.maxStreak)) return false;
+                return true;
             };
             const solve = (): number[] | null => {
                 const matchSlot = new Array<number>(spots.length).fill(-1);
