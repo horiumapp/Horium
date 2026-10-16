@@ -202,6 +202,71 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         expect(result.institution.logo).toBe('data:image/webp;base64,logo-da-escola');
     });
 
+    it('saveSchedule: mantém a logo já gravada quando o cliente não reenvia o campo', async () => {
+        const inputData: SetupData = {
+            id: '22222222-2222-2222-2222-222222222222',
+            institution: {
+                name: 'CETI',
+                shift: 'Integral',
+                year: '2026',
+                additionalInfo: ''
+            },
+            classes: [],
+            subjects: [],
+            teachers: [],
+            schedule: [{ day: 'Segunda', slots: [{ id: '1', type: 'AULA', start: '07:00', end: '07:50' }] }],
+            groupingOptions: {
+                minimizeMovement: false,
+                clusterLessons: true,
+                distributionType: 'consecutive',
+                doubleLessons: 'allowed',
+                maxWindows: 0,
+                syncLunch: true
+            },
+            fixedLessons: []
+        };
+
+        const update = vi.fn().mockReturnThis();
+        const eq = vi.fn().mockReturnThis();
+        const select = vi.fn().mockReturnThis();
+        const single = vi.fn()
+            .mockResolvedValueOnce({
+                data: {
+                    data: {
+                        institution: { logo: 'data:image/webp;base64,logo-salva' }
+                    }
+                },
+                error: null
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    id: inputData.id,
+                    created_at: new Date().toISOString(),
+                    data: {
+                        institution: { name: 'CETI', logo: 'data:image/webp;base64,logo-salva' }
+                    }
+                },
+                error: null
+            });
+
+        mockFrom.mockImplementation((table: string) => {
+            if (table === 'schedules') {
+                return { update, eq, select, single };
+            }
+            return {};
+        });
+
+        await scheduleService.saveSchedule(inputData);
+
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                institution: expect.objectContaining({
+                    logo: 'data:image/webp;base64,logo-salva'
+                })
+            })
+        }));
+    });
+
     it('getScheduleSolution: deve invocar RPC get_schedule_solution para resgate seguro da grade', async () => {
         const mockSolution: FixedLesson[] = [
             { classId: 'c1', subjectId: 's1', teacherId: 't1', day: 'Segunda', slotIndex: 0 },

@@ -61,6 +61,9 @@ const App: React.FC = () => {
   }, []);
 
   const latestSaveSeq = React.useRef(0);
+  const setupDataRef = React.useRef(setupData);
+  const saveChainRef = React.useRef(Promise.resolve());
+  setupDataRef.current = setupData;
 
   // Debounced Auto-save com proteção contra race conditions e backup local
   useEffect(() => {
@@ -76,36 +79,51 @@ const App: React.FC = () => {
       localStorage.setItem(`horium_draft_${setupData.id}`, JSON.stringify(draftToSave));
     } catch (e) {
       console.warn('Erro ao salvar rascunho local:', e);
+      try {
+        localStorage.removeItem(`horium_draft_${setupData.id}`);
+      } catch {
+        // O rascunho antigo não pode sobrescrever a logo gravada no banco.
+      }
     }
 
     const currentSeq = ++latestSaveSeq.current;
-    const timer = setTimeout(async () => {
-      try {
-        setIsSaving(true);
-        setSaveError(null);
-        const saved = await scheduleService.saveSchedule(setupData);
+    const timer = setTimeout(() => {
+      saveChainRef.current = saveChainRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (currentSeq !== latestSaveSeq.current) return;
+          const snapshot = setupDataRef.current;
+          try {
+            setIsSaving(true);
+            setSaveError(null);
+            const saved = await scheduleService.saveSchedule(snapshot);
 
-        // Update the schedules list in background se ainda for a requisição mais recente
-        if (currentSeq === latestSaveSeq.current) {
-          setSchedules(prev => prev.map(s => s.id === saved.id ? saved : s));
-          console.log('Auto-save successful');
-        }
-      } catch (err: any) {
-        if (currentSeq === latestSaveSeq.current) {
-          console.error('Auto-save failed:', err);
-          if (session && currentView !== AppView.LOGIN) {
-            setSaveError(
-              err?.message?.includes('audit_logs')
-                ? 'Erro no Supabase (tabela audit_logs ausente). Seus dados estão preservados localmente.'
-                : 'Erro ao salvar automaticamente. Verifique sua conexão.'
-            );
+            if (currentSeq !== latestSaveSeq.current) return;
+            setSchedules(prev => prev.map(s => s.id === saved.id ? {
+              ...saved,
+              institution: {
+                ...saved.institution,
+                logo: saved.institution?.logo ?? snapshot.institution?.logo ?? null
+              }
+            } : s));
+            console.log('Auto-save successful');
+          } catch (err: any) {
+            if (currentSeq === latestSaveSeq.current) {
+              console.error('Auto-save failed:', err);
+              if (session && currentView !== AppView.LOGIN) {
+                setSaveError(
+                  err?.message?.includes('audit_logs')
+                    ? 'Erro no Supabase (tabela audit_logs ausente). Seus dados estão preservados localmente.'
+                    : 'Erro ao salvar automaticamente. Verifique sua conexão.'
+                );
+              }
+            }
+          } finally {
+            if (currentSeq === latestSaveSeq.current) {
+              setIsSaving(false);
+            }
           }
-        }
-      } finally {
-        if (currentSeq === latestSaveSeq.current) {
-          setIsSaving(false);
-        }
-      }
+        });
     }, 1500);
 
     return () => clearTimeout(timer);
@@ -184,6 +202,17 @@ const App: React.FC = () => {
               }
 
               let finalSchedule = draftData || lastSchedule;
+              if (draftData && lastSchedule) {
+                const draftHasLogo = Object.prototype.hasOwnProperty.call(draftData.institution || {}, 'logo');
+                finalSchedule = {
+                  ...draftData,
+                  institution: {
+                    ...lastSchedule.institution,
+                    ...draftData.institution,
+                    logo: draftHasLogo ? draftData.institution.logo : lastSchedule.institution?.logo
+                  }
+                };
+              }
               if (finalSchedule) {
                 // Se o servidor indicar que a grade NÃO é licenciada e o usuário não é admin, impede que um rascunho local
                 // reidrate fixedLessons ou force isLicensed como true

@@ -77,7 +77,7 @@ export const Step1Identification: React.FC<Step1IdentificationProps> = ({ data, 
         }
         try {
             const logo = await readInstitutionLogo(file);
-            setData({ ...data, institution: { ...data.institution, logo } });
+            setData(current => ({ ...current, institution: { ...current.institution, logo } }));
             setErrors(prev => ({ ...prev, logo: '' }));
         } catch {
             setErrors(prev => ({ ...prev, logo: 'Não foi possível usar essa imagem.' }));
@@ -116,7 +116,7 @@ export const Step1Identification: React.FC<Step1IdentificationProps> = ({ data, 
                                 {data.institution.logo && (
                                     <button
                                         type="button"
-                                        onClick={() => setData({ ...data, institution: { ...data.institution, logo: undefined } })}
+                                        onClick={() => setData(current => ({ ...current, institution: { ...current.institution, logo: null } }))}
                                         className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:text-red-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                                     >
                                         Remover

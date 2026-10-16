@@ -130,22 +130,32 @@ export const scheduleService = {
         const { id, ...rest } = normalized;
 
         let fixedLessonsToSave = rest.fixedLessons;
+        let storedLogo: string | null = null;
         if (id && id.length > 30) { // UUID check
-            if (!fixedLessonsToSave || fixedLessonsToSave.length === 0) {
-                try {
-                    const { data: existing } = await supabase
-                        .from('schedules')
-                        .select('data')
-                        .eq('id', id)
-                        .single();
-                    if (existing?.data?.fixedLessons && Array.isArray(existing.data.fixedLessons) && existing.data.fixedLessons.length > 0) {
-                        fixedLessonsToSave = existing.data.fixedLessons;
-                    }
-                } catch (e) {
-                    console.warn('Erro ao verificar fixedLessons existentes no salvamento:', e);
+            try {
+                const { data: existing } = await supabase
+                    .from('schedules')
+                    .select('data')
+                    .eq('id', id)
+                    .eq('user_id', user.id)
+                    .single();
+                const existingLogo = existing?.data?.institution?.logo;
+                if (typeof existingLogo === 'string' && existingLogo.length > 0) {
+                    storedLogo = existingLogo;
                 }
+                if ((!fixedLessonsToSave || fixedLessonsToSave.length === 0)
+                    && existing?.data?.fixedLessons
+                    && Array.isArray(existing.data.fixedLessons)
+                    && existing.data.fixedLessons.length > 0) {
+                    fixedLessonsToSave = existing.data.fixedLessons;
+                }
+            } catch (e) {
+                console.warn('Erro ao ler a grade existente no salvamento:', e);
             }
         }
+
+        const incomingLogo = rest.institution?.logo;
+        const logoToSave = incomingLogo === undefined ? storedLogo : (incomingLogo || null);
 
         const payload = {
             user_id: user.id,
@@ -154,7 +164,7 @@ export const scheduleService = {
                 ...rest,
                 institution: {
                     ...rest.institution,
-                    logo: rest.institution?.logo || null
+                    logo: logoToSave
                 },
                 fixedLessons: fixedLessonsToSave || []
             },

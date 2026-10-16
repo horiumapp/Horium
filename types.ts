@@ -16,7 +16,7 @@ export interface Institution {
   year: string;
   shift: string;
   additionalInfo: string;
-  logo?: string;
+  logo?: string | null;
 }
 
 export interface IntervalConfig {
