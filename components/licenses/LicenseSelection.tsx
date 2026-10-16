@@ -82,43 +82,55 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
     };
 
     return (
-        <div className="flex-1 flex flex-col p-6 min-h-[500px] animate-in fade-in duration-500">
-            <div className="w-full max-w-7xl mx-auto flex flex-col gap-6">
+        <div className="min-h-[500px] flex-1 animate-in fade-in duration-500">
+            <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
 
                 {/* Header title */}
-                <div className="bg-white dark:bg-[#1a2634] border border-[#dbe0e6] dark:border-gray-700 py-4 px-6 text-center shadow-sm">
-                    <h2 className="text-[#111418] dark:text-white text-xl font-medium tracking-wide">
-                        Licenças Adquiridas
-                    </h2>
+                <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <div className="flex items-center gap-3.5">
+                        <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/15 dark:text-blue-300">
+                            <span className="material-symbols-outlined text-2xl">workspace_premium</span>
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-primary dark:text-blue-300">Conta e pagamentos</p>
+                            <h2 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900 dark:text-white">Licenças adquiridas</h2>
+                            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Consulte validade, pagamento e comprovantes da sua instituição.</p>
+                        </div>
+                    </div>
+                    <span className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        {loading ? 'Atualizando licenças' : `${licenses.length} ${licenses.length === 1 ? 'licença' : 'licenças'}`}
+                    </span>
                 </div>
 
                 {/* Table container */}
-                <div className="bg-white dark:bg-[#1a2634] border border-[#dbe0e6] dark:border-gray-700 overflow-x-auto shadow-sm min-h-[200px] relative">
-                    <table className="w-full text-sm text-left border-collapse min-w-[800px]">
-                        <thead className="text-xs text-[#111418] dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-800/50">
+                <div className="relative min-h-[200px] overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                    <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+                        <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-800/70 dark:text-slate-300">
                             <tr>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Data do<br />Pagamento</th>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Número de<br />turmas</th>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Valor</th>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Forma de<br />pagamento</th>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Status / Confirmação do<br />Pagamento</th>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Válido até</th>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Nota<br />Fiscal</th>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Opções</th>
-                                <th scope="col" className="px-4 py-3 border border-[#dbe0e6] dark:border-gray-700 text-center font-semibold">Filtros da<br />Licença</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Data do<br />pagamento</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Número de<br />turmas</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Valor</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Forma de<br />pagamento</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Status / confirmação do<br />pagamento</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Válido até</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Nota<br />fiscal</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Opções</th>
+                                <th scope="col" className="border-b border-slate-200 px-4 py-4 text-center font-bold dark:border-slate-700">Filtros da<br />licença</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!loading && !error && licenses.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400 font-medium border border-[#dbe0e6] dark:border-gray-700">
+                                    <td colSpan={9} className="px-4 py-16 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
+                                        <span className="material-symbols-outlined mb-2 block text-3xl text-slate-300 dark:text-slate-600">workspace_premium</span>
                                         Nenhuma licença foi habilitada para a sua conta ainda.
                                     </td>
                                 </tr>
                             )}
 
                             {!loading && !error && licenses.map((license, idx) => (
-                                <tr key={license.id} className={`${idx % 2 === 0 ? 'bg-white dark:bg-[#1a2634]' : 'bg-[#f4f7fa] dark:bg-gray-800/20'} hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors`}>
+                                <tr key={license.id} className={`${idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/70 dark:bg-slate-800/30'} transition-colors hover:bg-blue-50/70 dark:hover:bg-blue-900/10`}>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center font-medium">{formatDate(license.payment_date)}</td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center">{license.classes_amount}</td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center">
@@ -127,31 +139,30 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                                         </div>
                                     </td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center text-gray-600 dark:text-gray-400">{license.payment_method}</td>
-                                    <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center">
-                                        <div className="flex flex-col justify-center items-center">
-                                            {license.payment_status === 'Aprovado' ? (
-                                                <span className="material-symbols-outlined text-green-500 text-3xl font-black drop-shadow-sm">check</span>
-                                            ) : license.payment_status === 'Aguardando' ? (
-                                                <span className="material-symbols-outlined text-yellow-500 text-2xl font-black drop-shadow-sm">pending</span>
-                                            ) : (
-                                                <span className="material-symbols-outlined text-red-500 text-2xl font-black drop-shadow-sm">close</span>
-                                            )}
-                                            <span className="text-xs text-gray-500 font-bold mt-1 uppercase">{license.payment_status}</span>
-                                        </div>
+                                    <td className="border border-[#dbe0e6] px-4 py-4 text-center dark:border-gray-700">
+                                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${license.payment_status === 'Aprovado'
+                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300'
+                                            : license.payment_status === 'Aguardando'
+                                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/25 dark:text-amber-300'
+                                                : 'bg-rose-50 text-rose-700 dark:bg-rose-900/25 dark:text-rose-300'
+                                            }`}>
+                                            <span className="material-symbols-outlined text-base">
+                                                {license.payment_status === 'Aprovado' ? 'check_circle' : license.payment_status === 'Aguardando' ? 'schedule' : 'cancel'}
+                                            </span>
+                                            {license.payment_status}
+                                        </span>
                                     </td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center font-medium">{formatDate(license.valid_until)}</td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center">
                                         {license.receipt_url && (
-                                            <div className="flex justify-center cursor-pointer hover:scale-110 transition-transform" onClick={() => handleOpenReceipt(license.receipt_url)}>
-                                                <div className="relative">
-                                                    <span className="material-symbols-outlined text-gray-500 text-2xl">receipt_long</span>
-                                                    <span className="absolute -bottom-1 -right-1 text-[10px] font-black text-white bg-blue-500 rounded-full w-4 h-4 flex items-center justify-center border border-white">e</span>
-                                                </div>
-                                            </div>
+                                            <button type="button" aria-label="Abrir comprovante de pagamento" className="mx-auto flex size-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-50 hover:text-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 dark:text-slate-300 dark:hover:bg-blue-900/20" onClick={() => handleOpenReceipt(license.receipt_url)}>
+                                                <span className="material-symbols-outlined text-xl">receipt_long</span>
+                                            </button>
                                         )}
+                                        {!license.receipt_url && <span className="text-slate-300 dark:text-slate-600">—</span>}
                                     </td>
-                                    <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center"></td>
-                                    <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center"></td>
+                                    <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center"><span className="text-slate-300 dark:text-slate-600">—</span></td>
+                                    <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center"><span className="text-slate-300 dark:text-slate-600">—</span></td>
                                 </tr>
                             ))}
                         </tbody>
@@ -160,15 +171,15 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                     {loading && (
                         <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 backdrop-blur-[2px]">
                             <div className="flex flex-col items-center gap-2">
-                                <span className="material-symbols-outlined animate-spin text-primary text-4xl">sync</span>
-                                <span className="text-sm font-bold text-gray-600 dark:text-gray-300">Carregando licenças...</span>
+                                <span className="material-symbols-outlined animate-spin text-primary text-3xl">sync</span>
+                                <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Carregando licenças...</span>
                             </div>
                         </div>
                     )}
 
                     {error && (
                         <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 backdrop-blur-[2px]">
-                            <div className="bg-red-50 text-red-600 px-6 py-4 rounded-lg flex items-center gap-3 border border-red-200 shadow-lg">
+                            <div role="alert" className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 text-rose-700 shadow-lg dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
                                 <span className="material-symbols-outlined">error</span>
                                 <span className="font-medium">{error}</span>
                             </div>
@@ -177,41 +188,45 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                 </div>
 
                 {/* Primary Action Buttons */}
-                <div className="flex flex-col gap-3 max-w-lg mt-4 w-full">
+                <div className="grid w-full max-w-4xl grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
                     <button
                         onClick={onSelectPurchase}
-                        className="group flex items-center justify-between bg-primary text-white border border-blue-600 px-6 py-3 rounded-lg font-bold text-base shadow-md hover:bg-blue-600 transition-all active:scale-[0.98]"
+                        className="group flex min-h-14 items-center gap-3 rounded-2xl border border-blue-600 bg-primary px-5 py-3 text-left text-sm font-bold text-white shadow-md shadow-primary/15 transition hover:bg-blue-600 active:scale-[0.99]"
                     >
-                        <span className="flex-1 text-center">Adquirir Nova Licença</span>
-                        <div className="bg-white/20 rounded-full w-8 h-8 flex items-center justify-center group-hover:bg-white/30 transition-colors">
-                            <span className="material-symbols-outlined text-sm">play_arrow</span>
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><span className="material-symbols-outlined text-lg">add_card</span></span>
+                        <span className="min-w-0 flex-1">Adquirir nova licença</span>
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/15 transition-colors group-hover:bg-white/25">
+                            <span className="material-symbols-outlined text-base">arrow_forward</span>
                         </div>
                     </button>
                     <button
                         onClick={onSelectBudget}
-                        className="group flex items-center justify-between bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-600 px-6 py-3 rounded-lg font-bold text-base shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all active:scale-[0.98]"
+                        className="group flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-left text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-900 dark:hover:bg-blue-900/10 active:scale-[0.99]"
                     >
-                        <span className="flex-1 text-center">Gerar Orçamento / Proposta Comercial</span>
-                        <div className="bg-primary/10 rounded-full w-8 h-8 flex items-center justify-center">
-                            <span className="material-symbols-outlined text-sm text-primary">request_quote</span>
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-primary dark:bg-blue-500/15 dark:text-blue-300"><span className="material-symbols-outlined text-lg">request_quote</span></span>
+                        <span className="min-w-0 flex-1">Gerar orçamento / proposta</span>
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition group-hover:bg-white dark:bg-slate-800 dark:text-slate-300">
+                            <span className="material-symbols-outlined text-base">arrow_forward</span>
                         </div>
                     </button>
                     <button
                         onClick={onStartTestMode}
-                        className="group flex items-center justify-between bg-primary text-white border border-blue-600 px-6 py-3 rounded-lg font-bold text-base shadow-md hover:bg-blue-600 transition-all active:scale-[0.98]"
+                        className="group flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-left text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-900 dark:hover:bg-blue-900/10 active:scale-[0.99]"
                     >
-                        <span className="flex-1 text-center">Fazer um novo horário em modo teste</span>
-                        <div className="bg-white/20 rounded-full w-8 h-8 flex items-center justify-center group-hover:bg-white/30 transition-colors">
-                            <span className="material-symbols-outlined text-sm">play_arrow</span>
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-primary dark:bg-blue-500/15 dark:text-blue-300"><span className="material-symbols-outlined text-lg">science</span></span>
+                        <span className="min-w-0 flex-1">Fazer um novo horário em modo teste</span>
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition group-hover:bg-white dark:bg-slate-800 dark:text-slate-300">
+                            <span className="material-symbols-outlined text-base">arrow_forward</span>
                         </div>
                     </button>
                     <button
                         onClick={onBack}
-                        className="group flex items-center justify-between bg-primary text-white border border-blue-600 px-6 py-3 rounded-lg font-bold text-base shadow-md hover:bg-blue-600 transition-all active:scale-[0.98]"
+                        className="group flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-left text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 active:scale-[0.99]"
                     >
-                        <span className="flex-1 text-center">Voltar para tela principal</span>
-                        <div className="bg-white/20 rounded-full w-8 h-8 flex items-center justify-center group-hover:bg-white/30 transition-colors">
-                            <span className="material-symbols-outlined text-sm">play_arrow</span>
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"><span className="material-symbols-outlined text-lg">arrow_back</span></span>
+                        <span className="min-w-0 flex-1">Voltar para a tela principal</span>
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition group-hover:bg-white dark:bg-slate-800 dark:text-slate-300">
+                            <span className="material-symbols-outlined text-base">arrow_forward</span>
                         </div>
                     </button>
                 </div>

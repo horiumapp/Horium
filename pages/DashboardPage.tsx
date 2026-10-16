@@ -179,22 +179,26 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       </div>
 
       <Modal isOpen={isWhatsAppModalOpen} onClose={() => setIsWhatsAppModalOpen(false)} size="md">
-        <div className="p-6">
-          <div className="flex justify-between items-start mb-2">
-            <h3 className="text-primary dark:text-blue-400 text-xl font-semibold">Horium · Suporte</h3>
-          </div>
-          <div className="flex flex-col items-center gap-5 py-5 sm:flex-row">
-            <div className="relative shrink-0">
-              <div className="size-16 rounded-2xl bg-teal-500 flex items-center justify-center shadow-sm">
-                <span className="material-symbols-outlined text-white text-3xl">chat</span>
-              </div>
+        <div className="p-6 sm:p-7">
+          <div className="flex items-center gap-3.5">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/15 dark:text-blue-300">
+              <span className="material-symbols-outlined text-2xl">support_agent</span>
             </div>
-            <div className="text-center text-sm leading-relaxed text-slate-600 dark:text-slate-300 sm:text-left">
-              Fale com a equipe pelo WhatsApp no número<br />
-              <span className="font-bold text-slate-900 dark:text-white">(97) 99957-2377</span>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-primary dark:text-blue-300">Central de ajuda</p>
+              <h3 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900 dark:text-white">Horium · Suporte</h3>
             </div>
           </div>
-          <div className="flex justify-end mt-2">
+          <div className="my-6 flex flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center dark:border-slate-700 dark:bg-slate-800/60 sm:flex-row sm:text-left">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-sm shadow-emerald-500/20">
+              <span className="material-symbols-outlined text-2xl">chat</span>
+            </div>
+            <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+              Fale com a equipe pelo WhatsApp no número
+              <span className="mt-1 block text-lg font-bold tracking-tight text-slate-900 dark:text-white">(97) 99957-2377</span>
+            </div>
+          </div>
+          <div className="flex justify-end">
             <Button variant="secondary" onClick={() => setIsWhatsAppModalOpen(false)}>Fechar</Button>
           </div>
         </div>
