@@ -637,8 +637,8 @@ const App: React.FC = () => {
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              if (newPasswordInput.length < 6) {
-                setResetPasswordFeedback('A nova senha deve ter pelo menos 6 caracteres.');
+              if (newPasswordInput.length < 8) {
+                setResetPasswordFeedback('A nova senha deve ter pelo menos 8 caracteres.');
                 return;
               }
               setIsResettingPassword(true);
@@ -668,7 +668,7 @@ const App: React.FC = () => {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={8}
                 value={newPasswordInput}
                 onChange={(e) => setNewPasswordInput(e.target.value)}
                 placeholder="Mínimo de 6 caracteres"

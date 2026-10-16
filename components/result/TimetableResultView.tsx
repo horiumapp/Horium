@@ -26,6 +26,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
     const normalizedData = useMemo(() => ensureScheduleSlots(data), [data]);
     const isLocked = !normalizedData.isLicensed && activeLicenseStatus !== 'Aprovado';
     const [viewMode, setViewMode] = useState<ViewMode>('CLASS');
+    const [showFailureDetails, setShowFailureDetails] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<{ day: string; slotIndex: number; classId: string; teacherId: string } | null>(null);
 
@@ -300,12 +301,20 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
 
             {/* FAILURES BANNER */}
             {normalizedData.failures && normalizedData.failures.length > 0 && (
-                <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2 flex items-center justify-between no-print shrink-0">
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2 no-print shrink-0">
+                    <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                         <span className="material-symbols-outlined text-amber-500 text-lg">warning</span>
                         <p className="text-xs text-amber-800 dark:text-amber-300 font-medium">
-                            Atenção: <strong>{normalizedData.failures.length}</strong> aula(s) não puderam ser alocadas devido a restrições rígidas.
+                            Atenção: <strong>{normalizedData.failures.length}</strong> aula(s) não puderam ser alocadas.
                         </p>
+                        <button
+                            type="button"
+                            onClick={() => setShowFailureDetails(open => !open)}
+                            className="text-[11px] font-bold text-amber-800 dark:text-amber-200 underline"
+                        >
+                            {showFailureDetails ? 'Ocultar motivos' : 'Ver motivos'}
+                        </button>
                     </div>
                     {onReprocess && (
                         <button
@@ -315,6 +324,29 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                             <span className="material-symbols-outlined text-sm">refresh</span>
                             Tentar Otimizar Novamente
                         </button>
+                    )}
+                    </div>
+                    {showFailureDetails && (
+                        <ul className="mt-2 ml-8 space-y-1 max-h-36 overflow-y-auto">
+                            {normalizedData.failures.map((failure, index) => {
+                                const className = normalizedData.classes.find(item => item.id === failure.classId)?.name || 'Turma';
+                                const teacherName = normalizedData.teachers.find(item => item.id === failure.teacherId)?.name || 'Professor';
+                                const subjectName = normalizedData.subjects.find(item => item.id === failure.subjectId)?.name || 'Disciplina';
+                                const reasonLabel = failure.reason === 'TEACHER_LIMIT'
+                                    ? 'limite de aulas do professor'
+                                    : failure.reason === 'CLASS_LIMIT'
+                                        ? 'limite de aulas da turma'
+                                        : failure.reason === 'CONFLICT'
+                                            ? 'choque de horário'
+                                            : 'sem horário disponível';
+                                return (
+                                    <li key={`${failure.classId}-${failure.subjectId}-${index}`} className="text-[11px] text-amber-900 dark:text-amber-100">
+                                        <strong>{className}</strong> · {subjectName} · {teacherName}: {reasonLabel}
+                                        {failure.details ? `. ${failure.details}` : ''}
+                                    </li>
+                                );
+                            })}
+                        </ul>
                     )}
                 </div>
             )}
@@ -484,6 +516,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                     <h1 className="font-black uppercase tracking-tight text-black">{normalizedData.institution?.name || 'Horário Escolar'}</h1>
                                     <h2 className="text-xs text-gray-600 font-bold uppercase">
                                         {currentEntityName} • {normalizedData.institution?.shift || 'Turno Geral'} • {normalizedData.institution?.year || '2026'}
+                                        {normalizedData.createdAt ? ` • Gerada em ${new Date(normalizedData.createdAt).toLocaleDateString('pt-BR')}` : ''}
                                     </h2>
                                 </div>
 

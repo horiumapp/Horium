@@ -154,6 +154,16 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
     };
 
     const pendingLicensesCount = licenses.filter(l => l.payment_status === 'Aguardando' || l.payment_status === 'under_review').length;
+
+    const waitingLabel = (createdAt?: string) => {
+        if (!createdAt) return null;
+        const created = new Date(createdAt);
+        if (Number.isNaN(created.getTime())) return null;
+        const days = Math.floor((Date.now() - created.getTime()) / 86400000);
+        if (days <= 0) return 'Chegou hoje';
+        if (days === 1) return 'Há 1 dia';
+        return `Há ${days} dias`;
+    };
     const openTicketsCount = tickets.filter(t => t.status === 'aberto' || t.status === 'em_andamento').length;
 
     return (
@@ -307,6 +317,15 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
                                                             </span>
                                                             {lic.payment_status}
                                                         </span>
+                                                        {isPending && waitingLabel(lic.created_at) && (
+                                                            <p className={`mt-1 text-[10px] font-bold ${
+                                                                Math.floor((Date.now() - new Date(lic.created_at).getTime()) / 86400000) >= 2
+                                                                    ? 'text-red-600'
+                                                                    : 'text-gray-500'
+                                                            }`}>
+                                                                {waitingLabel(lic.created_at)} · prazo de 2 dias úteis
+                                                            </p>
+                                                        )}
                                                     </td>
                                                     <td className="px-5 py-4 text-center font-medium text-gray-600 dark:text-gray-400">
                                                         {formatDate(lic.valid_until)}

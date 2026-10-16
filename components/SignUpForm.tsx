@@ -24,6 +24,11 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onBackToLogin
         e.preventDefault();
         setError(null);
 
+        if (password.length < 8) {
+            setError('A senha deve ter pelo menos 8 caracteres.');
+            return;
+        }
+
         if (password !== confirmPassword) {
             setError('As senhas não coincidem.');
             return;
@@ -69,8 +74,9 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onBackToLogin
 
                 <Input
                     label="Senha"
-                    placeholder="Sua senha secreta"
+                    placeholder="Mínimo de 8 caracteres"
                     type="password"
+                    minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required

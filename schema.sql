@@ -1,4 +1,9 @@
 -- ==============================================================================
+-- HORIUM - FOTOGRAFIA DO BANCO (SUPABASE POSTGRESQL)
+-- Em produção, aplique só o arquivo novo em db/migrations/.
+-- Não rode este arquivo inteiro de novo: ele recria o schema e pode esbarrar
+-- em trigger antigo que já não está aqui.
+-- ==============================================================================
 -- HORIUM - SCHEMA COMPLETO DO BANCO DE DADOS (SUPABASE POSTGRESQL)
 -- Versão com Hardening de Segurança, Prevenção de BOLA, Paywall Server-Side e Idempotência
 -- ==============================================================================
@@ -25,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public profiles read" ON public.profiles;
-CREATE POLICY "Public profiles read" ON public.profiles FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Users read own profile" ON public.profiles;
 
 -- 2. FUNÇÃO AUXILIAR DE SEGURANÇA (ADMIN) DINÂMICA E PROTEGIDA
 CREATE OR REPLACE FUNCTION public.is_admin()
@@ -46,6 +51,11 @@ BEGIN
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+DROP POLICY IF EXISTS "Users read own profile" ON public.profiles;
+CREATE POLICY "Users read own profile" ON public.profiles
+FOR SELECT TO authenticated
+USING (id = auth.uid() OR public.is_admin());
 
 -- Gerenciamento de Administradores:
 -- O papel de administrador é dinâmico e determinado unicamente por registros na tabela admin_users.
@@ -593,6 +603,13 @@ BEGIN
               AND (l.valid_until IS NULL OR l.valid_until >= CURRENT_DATE)
               AND (l.schedule_id = s.id OR l.schedule_id IS NULL)
       );
+
+    INSERT INTO public.notifications (user_id, title, message)
+    VALUES (
+        v_user_id,
+        'Licença não aprovada',
+        'Não confirmamos este pagamento. Você pode enviar outro comprovante ou falar com o suporte.'
+    );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
@@ -808,6 +825,13 @@ BEGIN
         'Aguardando',
         p_receipt_path
     ) RETURNING id INTO v_license_id;
+
+    INSERT INTO public.notifications (user_id, title, message)
+    VALUES (
+        auth.uid(),
+        'Pedido de licença recebido',
+        'Recebemos seu comprovante. A análise leva até 2 dias úteis. Avisaremos quando a licença for aprovada ou recusada.'
+    );
 
     RETURN v_license_id;
 END;
