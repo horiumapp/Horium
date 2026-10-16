@@ -2,7 +2,7 @@ import { describe, it } from 'vitest';
 import { runGeneratorEngine, getMaxConsecutiveStreak } from '../timetableWorker';
 
 describe('scale', () => {
-    it('20 classes', () => {
+    it('20 classes, 30 teachers', () => {
         const subjects = ['s1', 's2', 's3', 's4', 's5', 's6'];
         const loads = [5, 4, 4, 3, 2, 2];
         const classes = Array.from({ length: 20 }, (_, i) => ({
@@ -10,16 +10,24 @@ describe('scale', () => {
             name: `T${i}`,
             lessonsPerSubject: Object.fromEntries(subjects.map((s, k) => [s, loads[k]]))
         }));
-        const teachers = subjects.map((s, k) => ({
-            id: `t${k}`,
-            name: `P${k}`,
-            subjects: [s],
-            classAssignments: { [s]: Object.fromEntries(classes.map(c => [c.id, 'OBRIGATORIAMENTE'])) }
-        }));
+        const teachers: any[] = [];
+        subjects.forEach((subject, sk) => {
+            for (let t = 0; t < 5; t++) {
+                const owned = classes.filter((_, ci) => ci % 5 === t);
+                teachers.push({
+                    id: `t${sk}_${t}`,
+                    name: `P${sk}_${t}`,
+                    subjects: [subject],
+                    classAssignments: {
+                        [subject]: Object.fromEntries(owned.map(c => [c.id, 'OBRIGATORIAMENTE']))
+                    }
+                });
+            }
+        });
         const data: any = {
             classes,
             teachers,
-            subjects: subjects.map((s, k) => ({ id: s, name: s })),
+            subjects: subjects.map(s => ({ id: s, name: s })),
             generalGrouping: 'Agrupar no máximo 2 aulas por dia SEGUIDAS',
             weekConfig: { activeDays: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'], lessonsPerDayGlobal: 6 }
         };
@@ -41,20 +49,18 @@ describe('scale', () => {
                 if (gap > worst) worst = gap;
             }
         }
-        const streaks: number[] = [];
+        let maxStreak = 0;
+        let overDaily = 0;
         const bySub: Record<string, number[]> = {};
         for (const lesson of res.fixedLessons) {
             const key = `${lesson.classId}|${lesson.day}|${lesson.subjectId}`;
             (bySub[key] ||= []).push(lesson.slotIndex);
         }
-        for (const slots of Object.values(bySub)) streaks.push(getMaxConsecutiveStreak(slots));
-        console.log(JSON.stringify({
-            elapsed,
-            fixed: res.fixedLessons.length,
-            failures: res.failures.length,
-            gaps,
-            worst,
-            maxStreak: Math.max(...streaks)
-        }));
+        for (const slots of Object.values(bySub)) {
+            maxStreak = Math.max(maxStreak, getMaxConsecutiveStreak(slots));
+            if (slots.length > 2) overDaily++;
+        }
+        const requested = 20 * loads.reduce((a, b) => a + b, 0);
+        console.log(JSON.stringify({ elapsed, requested, fixed: res.fixedLessons.length, failures: res.failures.length, gaps, worst, maxStreak, overDaily }));
     });
 });
