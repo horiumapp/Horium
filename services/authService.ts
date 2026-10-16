@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { setRememberSession, supabase } from './supabaseClient';
 
 export const authService = {
     async signUp(email: string, password: string, gender: string) {
@@ -15,17 +15,22 @@ export const authService = {
         return data;
     },
 
-    async signIn(email: string, password: string) {
+    async signIn(email: string, password: string, remember = false) {
+        setRememberSession(remember);
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
-        if (error) throw error;
+        if (error) {
+            setRememberSession(false);
+            throw error;
+        }
         return data;
     },
 
     async signOut() {
         const { error } = await supabase.auth.signOut();
+        setRememberSession(false);
         if (error) throw error;
     },
 

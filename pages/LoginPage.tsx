@@ -17,6 +17,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberSession, setRememberSession] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +30,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     setLoading(true);
     setError(null);
     try {
-      await authService.signIn(email, password);
+      await authService.signIn(email, password, rememberSession);
       onLogin();
 
     } catch (err: any) {
@@ -275,7 +276,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 </div>
               </div>
               <div className="flex items-center gap-2 px-1">
-                <input className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" id="remember" type="checkbox" />
+                <input
+                  className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  id="remember"
+                  type="checkbox"
+                  checked={rememberSession}
+                  onChange={(event) => setRememberSession(event.target.checked)}
+                />
                 <label className="text-sm text-gray-600 dark:text-gray-400" htmlFor="remember">Mantenha-me conectado</label>
               </div>
               <button
