@@ -18,10 +18,11 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, o
     };
 
     return (
-        <div className="w-full overflow-x-auto bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800">
-            <table className="w-full text-left border-collapse">
+        <div className="w-full overflow-x-auto bg-white dark:bg-[#152233] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800">
+            <table className="w-full text-left border-collapse min-w-[760px]">
+                <caption className="sr-only">Horários cadastrados</caption>
                 <thead>
-                    <tr className="bg-[#5c92b1] text-white uppercase text-[10px] font-bold tracking-wider">
+                    <tr className="bg-primary text-white text-xs font-semibold">
                         <th className="px-4 py-3 border-r border-white/20">Acesso</th>
                         <th className="px-4 py-3 border-r border-white/20">Instituição</th>
                         <th className="px-4 py-3 border-r border-white/20 text-center">Status / Pendências</th>

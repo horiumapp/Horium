@@ -18,6 +18,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,18 +112,20 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </div>
 
             {error && (
-              <div className="mb-6 bg-red-100 text-red-700 border-red-200 p-4 rounded-lg text-sm font-medium border">
+              <div role="alert" className="mb-6 bg-red-50 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900 p-4 rounded-xl text-sm font-medium border">
                 {error}
               </div>
             )}
 
             <form className="space-y-6" onSubmit={handleForgotPassword}>
-              <label className="flex flex-col w-full">
-                <p className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2">E-mail</p>
+              <label htmlFor="reset-email" className="flex flex-col w-full">
+                <span className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2">E-mail</span>
                 <input
-                  className="form-input flex w-full rounded-lg text-[#111418] dark:text-white focus:ring-2 focus:ring-primary/20 border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-background-dark focus:border-primary h-14 placeholder:text-[#617289] px-4 text-base font-normal"
+                  id="reset-email"
+                  className="flex w-full rounded-xl text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-[#101822] focus:border-primary h-12 placeholder:text-[#617289] px-4 text-base font-normal"
                   placeholder="Digite seu e-mail"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -172,48 +175,56 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             )}
 
             {error && (
-              <div className={`mb-6 p-4 rounded-lg text-sm font-medium border ${error.includes('sucesso') ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
+              <div role="status" className={`mb-6 p-4 rounded-xl text-sm font-medium border ${error.includes('sucesso') ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-900' : 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-900'}`}>
                 {error}
               </div>
             )}
 
             <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="flex flex-col w-full">
-                <label className="flex flex-col w-full">
-                  <p className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2">E-mail</p>
-                  <input
-                    className="form-input flex w-full rounded-lg text-[#111418] dark:text-white focus:ring-2 focus:ring-primary/20 border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-background-dark focus:border-primary h-14 placeholder:text-[#617289] px-4 text-base font-normal"
-                    placeholder="Digite seu e-mail"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </label>
+                <label htmlFor="login-email" className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2">E-mail</label>
+                <input
+                  id="login-email"
+                  className="flex w-full rounded-xl text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-[#101822] focus:border-primary h-12 placeholder:text-[#617289] px-4 text-base font-normal"
+                  placeholder="Digite seu e-mail"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
               <div className="flex flex-col w-full">
-                <label className="flex flex-col w-full">
-                  <div className="flex justify-between items-center pb-2">
-                    <p className="text-[#111418] dark:text-white text-sm font-semibold leading-normal">Senha</p>
-                    <button
-                      type="button"
-                      onClick={() => setShowForgotPassword(true)}
-                      className="text-primary text-xs font-bold hover:underline"
-                    >
-                      Esqueci minha senha
-                    </button>
-                  </div>
-                  <div className="flex w-full items-stretch relative">
-                    <input
-                      className="form-input flex w-full rounded-lg text-[#111418] dark:text-white focus:ring-2 focus:ring-primary/20 border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-background-dark focus:border-primary h-14 placeholder:text-[#617289] px-4 text-base font-normal pr-12"
-                      placeholder="Digite sua senha"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                </label>
+                <div className="flex justify-between items-center pb-2">
+                  <label htmlFor="login-password" className="text-[#111418] dark:text-white text-sm font-semibold leading-normal">Senha</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-primary text-xs font-semibold hover:underline"
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
+                <div className="flex w-full items-stretch relative">
+                  <input
+                    id="login-password"
+                    className="flex w-full rounded-xl text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-600 bg-white dark:bg-[#101822] focus:border-primary h-12 placeholder:text-[#617289] px-4 pr-12 text-base font-normal"
+                    placeholder="Digite sua senha"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 size-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    onClick={() => setShowPassword(value => !value)}
+                  >
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{showPassword ? 'visibility_off' : 'visibility'}</span>
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-2 px-1">
                 <input className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" id="remember" type="checkbox" />

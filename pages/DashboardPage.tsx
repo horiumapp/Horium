@@ -43,22 +43,27 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const hasSchedules = schedules && schedules.length > 0;
 
   return (
-    <div className="flex-1 academic-gradient flex flex-col p-6 relative min-h-[calc(100vh-64px)] overflow-hidden">
-      <div className="flex justify-between items-start w-full mb-8">
-        <div className="flex flex-wrap gap-4">
-          {actions.map((action, i) => (
+    <div className="flex-1 academic-gradient flex flex-col p-4 sm:p-6 relative overflow-hidden">
+      <div className="mb-6 max-w-3xl">
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">Horários</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Crie, acompanhe e retome as grades da instituição.</p>
+      </div>
+      <div className="mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 max-w-4xl">
+          {actions.map((action) => (
             <button
-              key={i}
+              key={action.label}
+              type="button"
               onClick={action.onClick}
-              className={`flex flex-col items-center justify-center gap-1 w-24 h-24 rounded-xl transition-all hover:scale-105 active:scale-95 group ${action.primary
-                ? 'bg-primary text-white shadow-lg shadow-primary/30'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-primary/50'
+              className={`flex flex-col items-start justify-between gap-3 min-h-24 p-3 rounded-2xl text-left transition-colors ${action.primary
+                ? 'bg-primary text-white shadow-sm shadow-primary/25'
+                : 'bg-white dark:bg-[#152233] text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 hover:border-primary/40'
                 }`}
             >
-              <span className="material-symbols-outlined text-3xl group-hover:animate-pulse">
+              <span className="material-symbols-outlined text-[26px]" aria-hidden="true">
                 {action.icon}
               </span>
-              <span className="text-[10px] font-bold text-center leading-tight px-2 uppercase tracking-tight">
+              <span className="text-sm font-semibold leading-tight">
                 {action.label}
               </span>
             </button>
@@ -69,12 +74,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       <div className="flex-1 overflow-visible">
         {!hasSchedules ? (
           <div className="flex-1 flex flex-col items-center justify-center mt-20">
-            <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border border-gray-200 dark:border-gray-800 p-10 rounded-3xl shadow-2xl text-center max-w-lg animate-in fade-in zoom-in duration-500">
-              <div className="bg-primary/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                <span className="material-symbols-outlined text-primary text-4xl">calendar_today</span>
+            <div className="bg-white/90 dark:bg-[#152233]/90 border border-gray-200 dark:border-gray-800 p-8 sm:p-10 rounded-3xl shadow-sm text-center max-w-lg">
+              <div className="bg-primary/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <span className="material-symbols-outlined text-primary text-3xl" aria-hidden="true">calendar_today</span>
               </div>
-              <p className="text-gray-600 dark:text-gray-300 text-lg font-medium mb-8">
-                Não há horários cadastrados. <br />Clique abaixo para iniciar um novo horário.
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Nenhum horário cadastrado</h2>
+              <p className="text-gray-600 dark:text-gray-300 text-sm mb-8">
+                Comece um horário novo para configurar disciplinas, turmas e professores.
               </p>
               <button
                 onClick={onNewSchedule}

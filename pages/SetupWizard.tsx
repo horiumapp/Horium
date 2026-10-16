@@ -311,44 +311,61 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
     { n: 8, title: 'GRADE', icon: 'calendar_view_week' }
   ];
 
+  const currentStepMeta = steps.find(item => item.n === step);
+
   return (
-    <div className="max-w-7xl mx-auto pt-8 pb-20 overflow-visible">
-      {/* STEPS INDICATOR */}
-      <div className="flex justify-between mb-12 px-4 relative overflow-visible no-print">
-        <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 dark:bg-gray-800 -z-10 -translate-y-1/2 rounded-full"></div>
-        <div
-          className="absolute top-1/2 left-0 h-1 bg-primary -z-10 -translate-y-1/2 rounded-full transition-all duration-500"
-          style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}
-        ></div>
-
-        {steps.map((s) => (
-          <button
-            key={s.n}
-            onClick={() => {
-              if (s.n <= furthestStep) {
-                handleStepChange(s.n);
-              }
-            }}
-            disabled={s.n > furthestStep}
-            className={`flex flex-col items-center gap-2 group focus:outline-none ${s.n <= furthestStep ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
-          >
+    <div className="max-w-7xl mx-auto w-full px-3 sm:px-4 pt-4 pb-8 overflow-visible">
+      <nav aria-label="Etapas do assistente" className="mb-5 no-print">
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 px-1">
+          Etapa <span className="font-semibold text-gray-900 dark:text-white">{step} de {steps.length}</span>
+          {currentStepMeta ? ` · ${currentStepMeta.title}` : ''}
+        </p>
+        <div className="overflow-x-auto custom-scrollbar pb-2">
+          <ol className="flex min-w-[760px] justify-between px-2 relative">
+            <div className="absolute top-5 left-6 right-6 h-0.5 bg-gray-200 dark:bg-gray-700" aria-hidden="true"></div>
             <div
-              className={`size-10 rounded-2xl flex items-center justify-center font-black text-sm transition-all border-4 relative z-10 ${step >= s.n
-                ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-110'
-                : 'bg-white dark:bg-[#101822] border-gray-200 dark:border-gray-700 text-gray-300 hover:border-primary/50'
-                }`}
-            >
-              {step > s.n ? <span className="material-symbols-outlined text-[18px]">check</span> : (s.n === 8 ? 'G' : s.n)}
-            </div>
-            <span className={`text-[8px] font-black uppercase tracking-widest transition-all ${step >= s.n ? 'text-primary' : 'text-gray-300'
-              }`}>
-              {s.title}
-            </span>
-          </button>
-        ))}
-      </div>
+              className="absolute top-5 left-6 h-0.5 bg-primary transition-all"
+              style={{ width: `calc((100% - 3rem) * ${(step - 1) / (steps.length - 1)})` }}
+              aria-hidden="true"
+            ></div>
+            {steps.map((s) => {
+              const reached = s.n <= furthestStep;
+              const isCurrent = step === s.n;
+              const isDone = step > s.n;
+              return (
+                <li key={s.n} className="relative z-10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (reached) handleStepChange(s.n);
+                    }}
+                    disabled={!reached}
+                    aria-current={isCurrent ? 'step' : undefined}
+                    aria-label={`${s.title}${isDone ? ', concluída' : isCurrent ? ', atual' : ''}`}
+                    className={`flex flex-col items-center gap-1.5 w-16 ${reached ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                  >
+                    <span
+                      className={`size-10 rounded-full flex items-center justify-center text-sm font-semibold border-2 ${isCurrent
+                        ? 'bg-primary border-primary text-white shadow-sm shadow-primary/30'
+                        : isDone
+                          ? 'bg-primary/10 border-primary text-primary'
+                          : 'bg-white dark:bg-[#101822] border-gray-200 dark:border-gray-700 text-gray-400'
+                        }`}
+                    >
+                      {isDone ? <span className="material-symbols-outlined text-[18px]" aria-hidden="true">check</span> : s.n}
+                    </span>
+                    <span className={`text-[11px] font-medium text-center leading-tight ${isCurrent || isDone ? 'text-primary' : 'text-gray-400'}`}>
+                      {s.title}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </nav>
 
-      <div className="bg-white dark:bg-[#101822] rounded-3xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-800">
+      <div className="bg-white dark:bg-[#101822] rounded-2xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-800">
         {renderCurrentStep()}
       </div>
     </div>

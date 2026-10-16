@@ -351,9 +351,8 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                 </div>
             )}
 
-            <div className="flex-1 flex overflow-hidden">
-                {/* SIDEBAR NAVIGATION */}
-                <aside className="w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#101822] flex flex-col shrink-0 overflow-y-auto no-print">
+            <div className="timetable-shell flex-1 flex overflow-hidden">
+                <aside className="timetable-sidebar w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#101822] flex flex-col shrink-0 overflow-y-auto no-print">
                     <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Visualização</span>
                         {setData && !isLocked && (
@@ -362,7 +361,8 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                     setIsEditMode(!isEditMode);
                                     setSelectedSlot(null);
                                 }}
-                                className={`text-[10px] font-black px-2 py-1 rounded transition-colors flex items-center gap-1 ${isEditMode ? 'bg-amber-500 text-white shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'}`}
+                                aria-pressed={isEditMode}
+                                className={`text-[10px] font-semibold px-2 py-1 rounded transition-colors flex items-center gap-1 ${isEditMode ? 'bg-amber-600 text-white shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200'}`}
                             >
                                 <span className="material-symbols-outlined text-xs">{isEditMode ? 'edit_off' : 'edit'}</span>
                                 {isEditMode ? 'MODO EDIÇÃO' : 'EDITAR'}
@@ -422,7 +422,9 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                     <div className="flex justify-between items-center mb-4 no-print flex-wrap gap-3">
                         <div className="flex items-center gap-2">
                             <button
+                                type="button"
                                 onClick={() => handleNavigate('prev')}
+                                aria-label="Anterior"
                                 className="size-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:border-primary shadow-sm"
                             >
                                 <span className="material-symbols-outlined text-sm">chevron_left</span>
@@ -431,7 +433,9 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                 {currentEntityName}
                             </h2>
                             <button
+                                type="button"
                                 onClick={() => handleNavigate('next')}
+                                aria-label="Próximo"
                                 className="size-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:border-primary shadow-sm"
                             >
                                 <span className="material-symbols-outlined text-sm">chevron_right</span>

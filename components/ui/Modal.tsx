@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useId } from 'react';
 
 interface ModalProps {
     isOpen: boolean;
@@ -7,7 +7,7 @@ interface ModalProps {
     title?: string;
     children: React.ReactNode;
     size?: 'sm' | 'md' | 'lg' | 'xl';
-    headerColor?: string; // Optional custom header color
+    headerColor?: string;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -18,6 +18,17 @@ export const Modal: React.FC<ModalProps> = ({
     size = 'md',
     headerColor = 'bg-primary'
 }) => {
+    const titleId = useId();
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     const maxWidths = {
@@ -29,29 +40,32 @@ export const Modal: React.FC<ModalProps> = ({
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/55 p-0 sm:p-4"
             onClick={onClose}
         >
             <div
-                className={`w-full ${maxWidths[size]} bg-white dark:bg-gray-900 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200 dark:border-gray-800`}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={title ? titleId : undefined}
+                className={`w-full ${maxWidths[size]} bg-white dark:bg-[#152233] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800 max-h-[92vh] flex flex-col`}
                 onClick={(e) => e.stopPropagation()}
             >
                 {title && (
-                    <div className={`${headerColor} p-6 text-white flex justify-between items-center`}>
-                        <div className="flex items-center gap-2">
-                            <h3 className="text-xl font-bold uppercase tracking-wide">
-                                {title}
-                            </h3>
-                        </div>
+                    <div className={`${headerColor} px-5 py-4 text-white flex justify-between items-center gap-3 shrink-0`}>
+                        <h3 id={titleId} className="text-lg font-semibold tracking-tight">
+                            {title}
+                        </h3>
                         <button
+                            type="button"
                             onClick={onClose}
-                            className="size-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all shrink-0"
+                            aria-label="Fechar"
+                            className="size-9 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25 transition-colors shrink-0"
                         >
-                            <span className="material-symbols-outlined">close</span>
+                            <span className="material-symbols-outlined" aria-hidden="true">close</span>
                         </button>
                     </div>
                 )}
-                <div className="max-h-[80vh] overflow-y-auto custom-scrollbar">
+                <div className="overflow-y-auto custom-scrollbar">
                     {children}
                 </div>
             </div>

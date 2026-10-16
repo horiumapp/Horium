@@ -24,6 +24,7 @@ const NAV_ITEMS = [
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav = false, onLogout, isMuted, setIsMuted }) => {
   const [gender, setGender] = useState<'male' | 'female'>('female');
+  const [openMenu, setOpenMenu] = useState<'settings' | 'notifications' | 'account' | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('Usuário Horium');
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -153,6 +154,19 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
+  useEffect(() => {
+    const close = () => setOpenMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenu(null);
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', close);
+    };
+  }, []);
+
   const toggleTheme = () => {
     const nextTheme = !isDarkMode;
     setIsDarkMode(nextTheme);
@@ -165,31 +179,39 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
     }
   };
 
+  const menuPanel = "absolute right-0 top-full mt-2 bg-white dark:bg-[#152233] rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50";
+
   return (
-    <div className="min-h-screen flex flex-col font-sans text-[#111418] dark:text-gray-100 bg-[#f8f9fa] dark:bg-[#1a2634] transition-colors duration-300">
-      <header className="no-print flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-[#101822]/80 backdrop-blur-md px-6 lg:px-10 py-3 sticky top-0 z-50 transition-all">
-        <div
-          className={`flex items-center gap-4 ${hideNav || currentView === AppView.LOGIN ? 'cursor-default' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
+    <div className="min-h-screen flex flex-col font-sans text-[#111418] dark:text-gray-100 bg-[#f4f7fb] dark:bg-[#0e1622] transition-colors duration-300">
+      {openMenu && (
+        <button type="button" aria-label="Fechar menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpenMenu(null)} />
+      )}
+      <header className="no-print relative z-50 flex items-center justify-between gap-3 border-b border-solid border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-[#101822]/90 backdrop-blur-md px-4 lg:px-8 py-2.5 sticky top-0">
+        <button
+          type="button"
+          className={`flex items-center gap-3 rounded-lg ${hideNav || currentView === AppView.LOGIN ? 'cursor-default' : 'hover:opacity-80'}`}
           onClick={hideNav || currentView === AppView.LOGIN ? undefined : () => setView(AppView.DASHBOARD)}
+          aria-label="Horium, ir para o início"
         >
-          <div className="size-8 text-primary animate-in spin-in-180 duration-700">
+          <div className="size-8 text-primary">
             {LOGO_SVG}
           </div>
-          <h2 className="text-xl font-black leading-tight tracking-tight hidden sm:block">Horium</h2>
-        </div>
+          <span className="text-lg font-bold leading-tight tracking-tight hidden sm:block">Horium</span>
+        </button>
 
         {!hideNav && (
           <div className="flex flex-1 justify-end gap-6 items-center">
-            <nav className="hidden md:flex items-center gap-1 mr-4 bg-gray-100 dark:bg-gray-900/50 p-1 rounded-xl">
+            <nav aria-label="Principal" className="hidden md:flex items-center gap-1 mr-4 bg-gray-100 dark:bg-gray-900/50 p-1 rounded-xl">
               {NAV_ITEMS.map((item) => {
                 const isActive = currentView === item.view;
                 return (
                   <button
                     key={item.label}
                     onClick={() => setView(item.view)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 ${isActive
-                      ? 'bg-white dark:bg-gray-800 text-primary shadow-sm scale-105'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-800/50'
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${isActive
+                      ? 'bg-white dark:bg-gray-800 text-primary shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-800/50'
                       }`}
                   >
                     <span className={`material-symbols-outlined text-[18px] ${isActive ? 'filled' : ''}`}>{item.icon}</span>
@@ -201,16 +223,17 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
               {isAdmin && (
                 <button
                   onClick={() => setView(AppView.ADMIN)}
-                  className={`ml-2 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 relative ${currentView === AppView.ADMIN
-                    ? 'bg-green-600 text-white shadow-md scale-105'
-                    : 'text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700 dark:bg-green-900/20 dark:hover:bg-green-900/40 dark:text-green-400'
+                  aria-current={currentView === AppView.ADMIN ? 'page' : undefined}
+                  className={`ml-2 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors relative ${currentView === AppView.ADMIN
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 dark:text-emerald-300'
                     }`}
                 >
                   <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
                   Área Admin
                   {pendingApprovalsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 size-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white dark:border-gray-900 animate-bounce">
-                      {pendingApprovalsCount}
+                    <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-600 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white dark:border-gray-900">
+                      <span className="sr-only">Pendências: </span>{pendingApprovalsCount}
                     </span>
                   )}
                 </button>
@@ -218,8 +241,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
             </nav>
             <div className="flex gap-2 items-center pl-4 border-l border-gray-200 dark:border-gray-700">
               <button
-                className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all"
-                title={isMuted ? "Ativar Som" : "Mudar para Mudo"}
+                type="button"
+                className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors"
+                aria-pressed={!!isMuted}
+                title={isMuted ? "Ativar som" : "Silenciar"}
                 onClick={() => setIsMuted?.(!isMuted)}
               >
                 <span className="material-symbols-outlined text-[20px]">
@@ -227,16 +252,20 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                 </span>
               </button>
               {/* Settings Dropdown */}
-              <div className="relative group">
+              <div className="relative">
                 <button
-                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all cursor-pointer"
+                  type="button"
+                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors"
                   title="Configurações"
+                  aria-expanded={openMenu === 'settings'}
+                  aria-haspopup="true"
+                  onClick={() => setOpenMenu(openMenu === 'settings' ? null : 'settings')}
                 >
                   <span className="material-symbols-outlined text-[20px]">settings</span>
                 </button>
 
-                {/* Dropdown Card */}
-                <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 z-50">
+                {openMenu === 'settings' && (
+                <div className={`${menuPanel} w-56 p-2`}>
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-2">
                     <p className="text-sm font-bold truncate">Opções do Sistema</p>
                   </div>
@@ -258,21 +287,28 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     </div>
                   </button>
                 </div>
+                )}
               </div>
-              {/* Notification Dropdown */}
-              <div className="relative group">
+              <div className="relative">
                 <button
-                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-all relative"
+                  type="button"
+                  className="size-10 flex items-center justify-center rounded-full bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors relative"
                   title="Notificações"
+                  aria-expanded={openMenu === 'notifications'}
+                  aria-haspopup="true"
+                  onClick={() => setOpenMenu(openMenu === 'notifications' ? null : 'notifications')}
                 >
                   <span className="material-symbols-outlined text-[20px]">notifications</span>
                   {(unreadCount > 0 || (isAdmin && pendingApprovalsCount > 0)) && (
-                    <span className="absolute top-2 right-2 size-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#101822]"></span>
+                    <span className="absolute top-2 right-2 size-2.5 bg-red-600 rounded-full border-2 border-white dark:border-[#101822]">
+                      <span className="sr-only">Há notificações não lidas</span>
+                    </span>
                   )}
                 </button>
 
                 {/* Dropdown Card */}
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-0 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 z-50 overflow-hidden">
+                {openMenu === 'notifications' && (
+                <div className={`${menuPanel} w-80 max-w-[calc(100vw-2rem)] p-0 overflow-hidden`}>
                   <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
                     <p className="text-sm font-bold">Notificações</p>
                     {unreadCount > 0 && (
@@ -321,19 +357,28 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     )}
                   </div>
                 </div>
+                )}
               </div>
-              <div className="relative group ml-2">
-                <div className="size-10 bg-gradient-to-br from-primary to-primary/60 rounded-full p-[2px] cursor-pointer shadow-md hover:shadow-primary/30 transition-shadow">
+              <div className="relative ml-2">
+                <button
+                  type="button"
+                  className="size-10 bg-gradient-to-br from-primary to-primary/60 rounded-full p-[2px] shadow-sm"
+                  aria-label="Conta"
+                  aria-expanded={openMenu === 'account'}
+                  aria-haspopup="true"
+                  onClick={() => setOpenMenu(openMenu === 'account' ? null : 'account')}
+                >
                   <img
                     src={gender === 'female'
                       ? "https://api.dicebear.com/7.x/notionists/svg?seed=Jasmine&backgroundColor=f8f9fa"
                       : "https://api.dicebear.com/7.x/notionists/svg?seed=Leo&backgroundColor=f8f9fa"}
-                    alt="User Avatar"
+                    alt=""
                     className="size-full rounded-full bg-white dark:bg-gray-900 object-cover"
                   />
-                </div>
+                </button>
 
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 z-50">
+                {openMenu === 'account' && (
+                <div className={`${menuPanel} w-56 p-2`}>
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-2">
                     <p className="text-sm font-bold truncate" title={userEmail}>{userEmail}</p>
                     <p className="text-xs text-gray-500 truncate">Sessão Ativa</p>
@@ -347,6 +392,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     Sair da Conta
                   </button>
                 </div>
+                )}
               </div>
             </div>
           </div>
@@ -361,9 +407,42 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
           </div>
         )}
       </header>
-      <main className="flex-1 flex flex-col relative pt-16 print:pt-0">
+      <main className={`flex-1 flex flex-col relative pt-4 print:pt-0 ${hideNav ? '' : 'pb-20 md:pb-0'}`}>
         {children}
       </main>
+      {!hideNav && (
+        <nav aria-label="Principal" className="no-print md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-[#101822]/95 backdrop-blur px-2 py-1.5 flex justify-around">
+          {NAV_ITEMS.map((item) => {
+            const isActive = currentView === item.view;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => setView(item.view)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex flex-col items-center gap-0.5 min-w-16 px-2 py-1 rounded-lg text-[11px] font-semibold ${isActive ? 'text-primary' : 'text-gray-500 dark:text-gray-400'}`}
+              >
+                <span className={`material-symbols-outlined text-[20px] ${isActive ? 'filled' : ''}`} aria-hidden="true">{item.icon}</span>
+                {item.label}
+              </button>
+            );
+          })}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setView(AppView.ADMIN)}
+              aria-current={currentView === AppView.ADMIN ? 'page' : undefined}
+              className={`relative flex flex-col items-center gap-0.5 min-w-16 px-2 py-1 rounded-lg text-[11px] font-semibold ${currentView === AppView.ADMIN ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500 dark:text-gray-400'}`}
+            >
+              <span className="material-symbols-outlined text-[20px]" aria-hidden="true">admin_panel_settings</span>
+              Admin
+              {pendingApprovalsCount > 0 && (
+                <span className="absolute top-0 right-2 min-w-4 h-4 px-1 bg-red-600 text-white text-[9px] rounded-full">{pendingApprovalsCount}</span>
+              )}
+            </button>
+          )}
+        </nav>
+      )}
       <footer className="no-print py-8 bg-white dark:bg-[#101822]/80 border-t border-gray-200 dark:border-gray-900 mt-auto">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 opacity-60 hover:opacity-100 transition-opacity">
           <div className="flex items-center gap-2 grayscale hover:grayscale-0 transition-all">
