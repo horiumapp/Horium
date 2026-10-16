@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { adminLicenseService, getSafeHttpsUrl } from '../../services/adminLicenseService';
+import { openDanfeDocument } from './danfeDocument';
 
 interface LicenseSelectionProps {
     onSelectPurchase: () => void;
@@ -16,6 +16,7 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
     onBack
 }) => {
     const [licenses, setLicenses] = useState<any[]>([]);
+    const [recipientName, setRecipientName] = useState('Destinatário da licença');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -26,6 +27,10 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                 if (userError) throw userError;
 
                 if (userData.user) {
+                    const meta = userData.user.user_metadata || {};
+                    const name = [meta.full_name, meta.name, userData.user.email].find((value) => typeof value === 'string' && value.trim());
+                    if (name) setRecipientName(name);
+
                     const { data, error } = await supabase
                         .from('licenses')
                         .select('*')
@@ -54,31 +59,6 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
         if (!dateString) return '-';
         const date = new Date(dateString);
         return new Intl.DateTimeFormat('pt-BR').format(date);
-    };
-
-    /**
-     * Abre o comprovante de pagamento com sanitização completa de URL.
-     * Utiliza a mesma camada de segurança do AdminPanelPage para prevenção de Open Redirect / XSS.
-     */
-    const handleOpenReceipt = async (urlOrPath: string) => {
-        if (!urlOrPath) return;
-
-        try {
-            // Gera URL assinada segura via serviço de admin (sanitiza esquemas perigosos + valida HTTPS)
-            const signedUrl = await adminLicenseService.getReceiptSignedUrl(urlOrPath);
-            const safeUrl = getSafeHttpsUrl(signedUrl);
-
-            if (safeUrl) {
-                window.open(safeUrl, '_blank', 'noopener,noreferrer');
-                return;
-            }
-        } catch (e) {
-            console.warn("Erro ao gerar URL assinada segura para visualização:", e);
-        }
-
-        // Se não foi possível gerar uma URL segura, não abre — evita Open Redirect
-        console.warn("Comprovante não pôde ser aberto com segurança:", urlOrPath);
-        alert("Não foi possível abrir o comprovante com segurança. Verifique o arquivo.");
     };
 
     return (
@@ -154,12 +134,13 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                                     </td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center font-medium">{formatDate(license.valid_until)}</td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center">
-                                        {license.receipt_url && (
-                                            <button type="button" aria-label="Abrir comprovante de pagamento" className="mx-auto flex size-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-50 hover:text-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 dark:text-slate-300 dark:hover:bg-blue-900/20" onClick={() => handleOpenReceipt(license.receipt_url)}>
+                                        {license.payment_status === 'Aprovado' ? (
+                                            <button type="button" aria-label="Abrir nota fiscal" className="mx-auto flex size-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-50 hover:text-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 dark:text-slate-300 dark:hover:bg-blue-900/20" onClick={() => openDanfeDocument(license, recipientName)}>
                                                 <span className="material-symbols-outlined text-xl">receipt_long</span>
                                             </button>
+                                        ) : (
+                                            <span className="text-slate-300 dark:text-slate-600">—</span>
                                         )}
-                                        {!license.receipt_url && <span className="text-slate-300 dark:text-slate-600">—</span>}
                                     </td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center"><span className="text-slate-300 dark:text-slate-600">—</span></td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center"><span className="text-slate-300 dark:text-slate-600">—</span></td>
