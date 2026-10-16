@@ -386,7 +386,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
                 <p className="font-black text-xl text-gray-900 dark:text-gray-100 tracking-tight">{pixPayload ? 'Escaneie o QR Code' : 'Pagamento indisponível'}</p>
                 <p className="text-xs font-bold text-gray-500 max-w-[220px] mx-auto mt-1 mb-4">{pixPayload ? 'Abra o app do seu banco e escolha pagar via PIX QR Code.' : 'Defina VITE_PIX_KEY no build antes de gerar uma cobrança.'}</p>
 
-                <div className="w-full space-y-1.5 text-left mb-2">
+                {pixPayload && <div className="w-full space-y-1.5 text-left mb-2">
                   <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Pix Copia e Cola:</label>
                   <div className="flex gap-2">
                     <div className="flex-1 bg-gray-50 dark:bg-gray-950 text-gray-500 dark:text-gray-400 text-[10px] p-2.5 rounded-lg overflow-hidden text-ellipsis whitespace-nowrap font-mono border border-dashed border-gray-200 dark:border-gray-800">
@@ -396,9 +396,9 @@ const PlansPage: React.FC<PlansPageProps> = ({
                       <span className="material-symbols-outlined text-sm">{copied ? 'check' : 'content_copy'}</span>
                     </Button>
                   </div>
-                </div>
+                </div>}
 
-                {showUploadOption && (
+                {pixPayload && showUploadOption && (
                   <div className="w-full mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 animate-in fade-in slide-in-from-bottom-2">
                     <div className="bg-blue-50/80 dark:bg-blue-900/10 rounded-xl p-4 border border-blue-100 dark:border-blue-800/30 flex flex-col items-center text-center space-y-2">
                       <p className="text-xs font-bold text-blue-800 dark:text-blue-300">

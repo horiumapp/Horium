@@ -120,6 +120,23 @@ describe('Receipt Security & XSS Mitigation Tests', () => {
             expect(result).toBe('');
         });
 
+        it('não abre URL HTTPS absoluta enviada pelo usuário, mesmo com token', async () => {
+            const hostile = 'https://evil.example/storage/v1/object/sign/receipts/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11/comprovante.pdf?token=abc';
+            mockCreateSignedUrl.mockResolvedValue({
+                data: { signedUrl: 'https://supabase.co/storage/v1/object/sign/receipts/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11/comprovante.pdf?token=signed' },
+                error: null
+            });
+
+            const result = await adminLicenseService.getReceiptSignedUrl(hostile);
+
+            expect(mockCreateSignedUrl).toHaveBeenCalledWith(
+                'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11/comprovante.pdf',
+                3600
+            );
+            expect(result.startsWith('https://supabase.co/')).toBe(true);
+            expect(result.includes('evil.example')).toBe(false);
+        });
+
         it('deve gerar URL assinada HTTPS para caminho válido de storage', async () => {
             const validPath = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11/comprovante_pix.pdf';
             const generatedSignedUrl = 'https://supabase.co/storage/v1/object/sign/receipts/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11/comprovante_pix.pdf?token=abc';

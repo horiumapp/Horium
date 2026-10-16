@@ -585,13 +585,40 @@ CREATE OR REPLACE FUNCTION public.delete_license_rpc(
     p_license_id UUID
 )
 RETURNS VOID AS $$
+DECLARE
+    v_user_id UUID;
 BEGIN
     IF NOT public.is_admin() THEN
         RAISE EXCEPTION 'Acesso negado. Apenas administradores podem excluir licenças.';
     END IF;
 
+    SELECT user_id INTO v_user_id
+    FROM public.licenses
+    WHERE id = p_license_id;
+
     DELETE FROM public.licenses
     WHERE id = p_license_id;
+
+    IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    UPDATE public.schedules s
+    SET is_licensed = false,
+        data = CASE
+            WHEN s.data ? 'fixedLessons' THEN s.data - 'fixedLessons'
+            ELSE s.data
+        END,
+        updated_at = timezone('utc', now())
+    WHERE s.user_id = v_user_id
+      AND NOT EXISTS (
+            SELECT 1
+            FROM public.licenses l
+            WHERE l.user_id = v_user_id
+              AND l.payment_status = 'Aprovado'
+              AND (l.valid_until IS NULL OR l.valid_until >= CURRENT_DATE)
+              AND (l.schedule_id = s.id OR l.schedule_id IS NULL)
+      );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 

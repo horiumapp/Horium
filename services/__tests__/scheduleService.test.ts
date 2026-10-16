@@ -162,6 +162,18 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         expect(solution).toEqual(mockSolution);
     });
 
+    it('getScheduleSolution: não lê schedules.data quando a RPC recusa a grade', async () => {
+        mockRpc.mockResolvedValue({
+            data: null,
+            error: { message: 'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.' }
+        });
+
+        const solution = await scheduleService.getScheduleSolution('schedule-uuid-123');
+
+        expect(solution).toEqual([]);
+        expect(mockFrom).not.toHaveBeenCalled();
+    });
+
     it('getSchedules: deve mascarar fixedLessons como vazio quando a grade não for licenciada', async () => {
         const rawSchedule = {
             id: 'unlicensed-id',
