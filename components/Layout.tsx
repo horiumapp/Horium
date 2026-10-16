@@ -28,7 +28,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
   const [userEmail, setUserEmail] = useState<string>('Usuário Horium');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window === 'undefined') return false;
-    return localStorage.getItem('horium-theme') === 'dark';
+    const saved = localStorage.getItem('horium-theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
@@ -123,9 +125,32 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
   }, [hideNav, currentView]);
 
   useEffect(() => {
-    const dark = localStorage.getItem('horium-theme') === 'dark';
-    setIsDarkMode(dark);
-    document.documentElement.classList.toggle('dark', dark);
+    const savedTheme = localStorage.getItem('horium-theme');
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const applyTheme = (dark: boolean) => {
+      setIsDarkMode(dark);
+      if (dark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    if (savedTheme) {
+      applyTheme(savedTheme === 'dark');
+    } else {
+      applyTheme(mediaQuery.matches);
+    }
+
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem('horium-theme')) {
+        applyTheme(e.matches);
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
   const toggleTheme = () => {

@@ -5,6 +5,7 @@ import { SetupData } from '../types';
 import { ScheduleList } from '../components/dashboard/ScheduleList';
 import { TicketModal } from '../components/dashboard/TicketModal';
 import { DeletedSchedulesModal } from '../components/dashboard/DeletedSchedulesModal';
+
 interface DashboardPageProps {
   onNewSchedule: () => void;
   onOpenLicenses: () => void;
@@ -32,75 +33,121 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [isDeletedModalOpen, setIsDeletedModalOpen] = useState(false);
 
-  const actions = [
-    { icon: 'add_box', label: 'Novo Horário', onClick: onNewSchedule, primary: true },
-    { icon: 'confirmation_number', label: 'Ticket Suporte', onClick: () => setIsTicketModalOpen(true) },
-    { icon: 'chat', label: 'WhatsApp', onClick: () => setIsWhatsAppModalOpen(true) },
-    { icon: 'badge', label: 'Licenças', onClick: onOpenLicenses },
-    { icon: 'restore_from_trash', label: 'Horários Excluídos', onClick: () => setIsDeletedModalOpen(true) },
+  const quickActions = [
+    { icon: 'confirmation_number', label: 'Abrir chamado', onClick: () => setIsTicketModalOpen(true) },
+    { icon: 'chat', label: 'Suporte via WhatsApp', onClick: () => setIsWhatsAppModalOpen(true) },
+    { icon: 'workspace_premium', label: 'Gerenciar licenças', onClick: onOpenLicenses },
+    { icon: 'restore_from_trash', label: 'Horários excluídos', onClick: () => setIsDeletedModalOpen(true) },
   ];
 
-  const hasSchedules = schedules && schedules.length > 0;
+  const completedSchedules = schedules.filter(schedule => schedule.status === 'Finalizado').length;
+  const isLicenseApproved = activeLicenseStatus === 'Aprovado';
+  const licenseTone = isLicenseApproved
+    ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20'
+    : activeLicenseStatus === 'Aguardando' || activeLicenseStatus === 'under_review'
+      ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20'
+      : 'text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800';
+
+  const metrics = [
+    {
+      label: 'Grades cadastradas',
+      value: schedules.length,
+      detail: schedules.length === 1 ? '1 planejamento escolar' : 'Planejamentos da sua escola',
+      icon: 'calendar_month',
+      tone: 'bg-blue-50 text-primary dark:bg-blue-500/10 dark:text-blue-300',
+    },
+    {
+      label: 'Grades finalizadas',
+      value: completedSchedules,
+      detail: 'Prontas para consulta',
+      icon: 'task_alt',
+      tone: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
+    },
+    {
+      label: 'Licença da conta',
+      value: activeLicenseStatus || 'Sem Licença',
+      detail: isLicenseApproved ? 'Acesso liberado' : 'Consulte suas opções de acesso',
+      icon: 'workspace_premium',
+      tone: licenseTone,
+      isStatus: true,
+    },
+  ];
 
   return (
-    <div className="flex-1 academic-gradient flex flex-col p-4 sm:p-6 lg:p-8 relative min-h-[calc(100vh-64px)] overflow-hidden">
-      <div className="relative z-10 w-full max-w-7xl mx-auto">
-      <div className="flex flex-col gap-6 w-full mb-8">
-        <div>
-          <p className="text-sm font-semibold text-primary mb-2">Painel de planejamento</p>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Organize os horários da sua escola</h1>
-          <p className="mt-2 text-sm sm:text-base text-slate-500 dark:text-slate-400">Acesse suas grades e continue de onde parou.</p>
-        </div>
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3">
-          {actions.map((action) => (
+    <div className="flex-1 academic-gradient relative min-h-[calc(100vh-64px)] overflow-hidden px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+      <div className="relative z-10 mx-auto w-full max-w-7xl">
+        <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+              <span className="size-2 rounded-full bg-teal-500"></span>
+              Painel de planejamento
+            </p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+              Olá! Vamos organizar sua semana?
+            </h1>
+            <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400 sm:text-base">
+              Acompanhe suas grades e continue de onde parou.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onNewSchedule}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-md shadow-primary/20 transition hover:-translate-y-0.5 hover:brightness-95 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
+          >
+            <span className="material-symbols-outlined text-xl">add</span>
+            Criar novo horário
+          </button>
+        </header>
+
+        <section aria-label="Ações rápidas" className="mt-5 flex flex-wrap gap-2">
+          {quickActions.map(action => (
             <button
               key={action.label}
+              type="button"
               onClick={action.onClick}
-              className={`flex min-h-[88px] sm:min-h-[104px] sm:w-[132px] flex-col items-start justify-center gap-3 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 group ${action.primary
-                ? 'bg-primary text-white shadow-lg shadow-primary/20 hover:brightness-95'
-                : 'bg-white/90 dark:bg-slate-900/90 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-primary/40 hover:shadow-md'
-                }`}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white/85 px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-primary/30 hover:bg-white hover:text-primary dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-blue-300 sm:text-sm"
             >
-              <span className={`material-symbols-outlined text-2xl ${action.primary ? 'text-white' : 'text-primary'}`}>
-                {action.icon}
-              </span>
-              <span className="text-xs sm:text-sm font-semibold leading-tight">
-                {action.label}
-              </span>
+              <span className="material-symbols-outlined text-[18px] text-primary">{action.icon}</span>
+              {action.label}
             </button>
           ))}
-        </div>
-      </div>
+        </section>
 
-      <div className="flex-1 overflow-visible">
-        {!hasSchedules ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-8 sm:py-14">
-            <div className="w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-7 sm:p-10 rounded-3xl shadow-sm text-center max-w-2xl animate-in fade-in zoom-in duration-500">
-              <div className="bg-primary/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                <span className="material-symbols-outlined text-primary text-3xl">calendar_today</span>
+        <section aria-label="Resumo da conta" className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {metrics.map(metric => (
+            <article key={metric.label} className="flex min-h-[96px] items-center gap-4 rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 sm:p-5">
+              <div className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${metric.tone}`}>
+                <span className="material-symbols-outlined text-[23px]">{metric.icon}</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Seu próximo horário começa aqui</h2>
-              <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-2 mb-7">
-                Ainda não há horários cadastrados. Crie uma grade para começar a organizar a semana da sua escola.
-              </p>
-              <button
-                onClick={onNewSchedule}
-                className="group inline-flex min-h-12 items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-primary/20 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
-              >
-                <span className="material-symbols-outlined text-xl">add</span>
-                Criar primeiro horário
-              </button>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{metric.label}</p>
+                {metric.isStatus ? (
+                  <p className={`mt-1 inline-flex max-w-full rounded-full px-2.5 py-1 text-xs font-semibold ${metric.tone}`}>
+                    <span className="truncate">{metric.value}</span>
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-2xl font-bold leading-none tracking-tight text-slate-900 dark:text-white">{metric.value}</p>
+                )}
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{metric.detail}</p>
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <section aria-labelledby="schedules-heading" className="mt-7 sm:mt-8">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="schedules-heading" className="text-lg font-bold text-slate-900 dark:text-white sm:text-xl">Grades da escola</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Acesse, edite ou consulte cada planejamento.</p>
             </div>
+            {schedules.length > 0 && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {schedules.length} {schedules.length === 1 ? 'grade' : 'grades'}
+              </span>
+            )}
           </div>
-        ) : (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex flex-wrap items-center gap-3 mb-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Meus horários</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{schedules.length} {schedules.length === 1 ? 'grade cadastrada' : 'grades cadastradas'}</p>
-              </div>
-              <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800"></div>
-            </div>
+
+          {schedules.length > 0 ? (
             <ScheduleList
               schedules={schedules}
               onEdit={onEditSchedule}
@@ -109,60 +156,57 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
               onViewSolutions={onViewSolutions}
               activeLicenseStatus={activeLicenseStatus}
             />
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white/75 px-6 py-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/70 sm:px-10">
+              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <span className="material-symbols-outlined text-3xl">calendar_add_on</span>
+              </div>
+              <h3 className="mt-4 text-lg font-bold text-slate-900 dark:text-white">Sua primeira grade começa aqui</h3>
+              <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                Cadastre os horários da semana, as turmas e os professores em um fluxo guiado.
+              </p>
+              <button
+                type="button"
+                onClick={onNewSchedule}
+                className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
+              >
+                <span className="material-symbols-outlined text-lg">add</span>
+                Criar primeiro horário
+              </button>
+            </div>
+          )}
+        </section>
       </div>
 
-      <Modal
-        isOpen={isWhatsAppModalOpen}
-        onClose={() => setIsWhatsAppModalOpen(false)}
-        size="md"
-      >
+      <Modal isOpen={isWhatsAppModalOpen} onClose={() => setIsWhatsAppModalOpen(false)} size="md">
         <div className="p-6">
           <div className="flex justify-between items-start mb-2">
-            <h3 className="text-[#003366] dark:text-blue-400 text-xl font-medium uppercase tracking-wide border-b-2 border-[#003366] dark:border-blue-400 pb-1 pr-12 inline-block">
-              Horium - Suporte
-            </h3>
+            <h3 className="text-primary dark:text-blue-400 text-xl font-semibold">Horium · Suporte</h3>
           </div>
-          <div className="flex items-center gap-6 py-6">
+          <div className="flex flex-col items-center gap-5 py-5 sm:flex-row">
             <div className="relative shrink-0">
-              <div className="size-20 rounded-full bg-gradient-to-b from-[#70c5ce] to-[#36a5b5] flex items-center justify-center shadow-inner">
-                <span className="text-white font-serif text-5xl font-bold italic">i</span>
+              <div className="size-16 rounded-2xl bg-teal-500 flex items-center justify-center shadow-sm">
+                <span className="material-symbols-outlined text-white text-3xl">chat</span>
               </div>
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-16 h-1.5 bg-black/10 blur-[2px] rounded-full"></div>
             </div>
-            <div className="text-[#003366] dark:text-blue-100 text-base leading-relaxed font-medium">
-              Nos adicione no WhatsApp pelo número <br />
-              <span className="font-bold text-lg">(97) 99957-2377</span> e envie sua dúvida.
+            <div className="text-center text-sm leading-relaxed text-slate-600 dark:text-slate-300 sm:text-left">
+              Fale com a equipe pelo WhatsApp no número<br />
+              <span className="font-bold text-slate-900 dark:text-white">(97) 99957-2377</span>
             </div>
           </div>
           <div className="flex justify-end mt-2">
-            <Button
-              variant="secondary"
-              onClick={() => setIsWhatsAppModalOpen(false)}
-            >
-              Fechar
-            </Button>
+            <Button variant="secondary" onClick={() => setIsWhatsAppModalOpen(false)}>Fechar</Button>
           </div>
         </div>
       </Modal>
 
-      <TicketModal
-        isOpen={isTicketModalOpen}
-        onClose={() => setIsTicketModalOpen(false)}
-      />
+      <TicketModal isOpen={isTicketModalOpen} onClose={() => setIsTicketModalOpen(false)} />
 
       <DeletedSchedulesModal
         isOpen={isDeletedModalOpen}
         onClose={() => setIsDeletedModalOpen(false)}
-        onRestore={() => {
-          onRefreshSchedules?.();
-        }}
+        onRestore={() => onRefreshSchedules?.()}
       />
-
-      <div className="absolute bottom-[-100px] left-[-100px] w-[400px] h-[400px] bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute top-[20%] right-[-100px] w-[300px] h-[300px] bg-teal-500/5 rounded-full blur-3xl pointer-events-none"></div>
     </div>
   );
 };

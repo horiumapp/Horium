@@ -10,142 +10,141 @@ interface ScheduleListProps {
     activeLicenseStatus?: string;
 }
 
-export const ScheduleList: React.FC<ScheduleListProps> = ({ schedules, onEdit, onDelete, onDuplicate, onViewSolutions, activeLicenseStatus = 'Sem Licença' }) => {
+export const ScheduleList: React.FC<ScheduleListProps> = ({
+    schedules,
+    onEdit,
+    onDelete,
+    onDuplicate,
+    onViewSolutions,
+    activeLicenseStatus = 'Sem Licença'
+}) => {
     const formatDate = (isoString?: string) => {
-        if (!isoString) return '-';
+        if (!isoString) return 'Data não disponível';
         const date = new Date(isoString);
-        return date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        if (Number.isNaN(date.getTime())) return 'Data não disponível';
+        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+            + ' às '
+            + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     };
 
     return (
-        <div className="w-full overflow-x-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 custom-scrollbar">
-            <table className="w-full min-w-[960px] text-left border-collapse">
-                <thead>
-                    <tr className="bg-slate-800 dark:bg-slate-950 text-white text-[11px] font-semibold tracking-wide">
-                        <th className="px-4 py-3 border-r border-white/20">Acesso</th>
-                        <th className="px-4 py-3 border-r border-white/20">Instituição</th>
-                        <th className="px-4 py-3 border-r border-white/20 text-center">Status / Pendências</th>
-                        <th className="px-4 py-3 border-r border-white/20">Histórico do Horário</th>
-                        <th className="px-4 py-3 text-center">Opções</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {schedules.map((schedule) => {
-                        const isLicensed = schedule.isLicensed || activeLicenseStatus === 'Aprovado';
-                        const status = schedule.licenseStatus || activeLicenseStatus || 'Sem Licença';
-                        const isPending = !isLicensed && (status === 'Aguardando' || status === 'under_review' || activeLicenseStatus === 'Aguardando' || activeLicenseStatus === 'under_review');
+        <div className="grid gap-4 2xl:grid-cols-2">
+            {schedules.map((schedule, index) => {
+                const isLicensed = schedule.isLicensed || activeLicenseStatus === 'Aprovado';
+                const status = schedule.licenseStatus || activeLicenseStatus || 'Sem Licença';
+                const isPending = !isLicensed && (
+                    status === 'Aguardando'
+                    || status === 'under_review'
+                    || activeLicenseStatus === 'Aguardando'
+                    || activeLicenseStatus === 'under_review'
+                );
+                const licenseLabel = isLicensed ? 'Acesso liberado' : isPending ? 'Licença em análise' : 'Sem licença ativa';
+                const statusLabel = schedule.status || 'Em andamento';
 
-                        return (
-                            <tr key={schedule.id} className="hover:bg-blue-50/40 dark:hover:bg-slate-800/60 transition-colors">
-                                <td className="px-4 py-4 align-top text-center">
-                                    {isLicensed ? (
-                                        <div className="flex flex-col items-center gap-1">
-                                            <div className="size-10 bg-green-500/10 rounded-xl flex items-center justify-center">
-                                                <span className="material-symbols-outlined text-green-500 text-xl font-bold">check_circle</span>
-                                            </div>
-                                            <span className="text-[10px] font-black text-green-600 uppercase tracking-tighter">Liberado</span>
-                                        </div>
-                                    ) : isPending ? (
-                                        <div className="flex flex-col items-center gap-1">
-                                            <div className="size-10 bg-amber-500/10 rounded-xl flex items-center justify-center animate-pulse">
-                                                <span className="material-symbols-outlined text-amber-500 text-xl font-bold">hourglass_empty</span>
-                                            </div>
-                                            <span className="text-[9px] font-black text-amber-600 uppercase tracking-tight leading-none text-center">Aguardando<br />Liberação</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-col items-center gap-1">
-                                            <div className="size-10 bg-gray-100 dark:bg-gray-800 text-gray-400 rounded-xl flex items-center justify-center">
-                                                <span className="material-symbols-outlined text-2xl font-bold">lock</span>
-                                            </div>
-                                            <span className="text-[10px] text-gray-400 uppercase font-black text-center leading-tight">Sem<br />Licença</span>
-                                        </div>
-                                    )}
-                                </td>
-                            <td className="px-4 py-4 align-top">
-                                <div className="flex flex-col">
-                                    <button
-                                        onClick={() => onEdit(schedule)}
-                                        className="text-primary dark:text-blue-400 font-semibold hover:underline text-left focus-visible:rounded"
-                                    >
-                                        {schedule.institution.name || 'Sem Nome'} - {schedule.institution.year} - {schedule.institution.shift}
-                                    </button>
-                                </div>
-                            </td>
-                            <td className="px-4 py-4 align-top text-center">
-                                <div className="flex flex-col items-center gap-1">
-                                    <span className="font-bold text-gray-700 dark:text-gray-200">{schedule.status || 'Etapa Final'}</span>
-                                    {schedule.status === 'Finalizado' && (
-                                        <p className="text-[10px] text-gray-500 max-w-[200px]">
-                                            Processamento Finalizado. Veja o histórico ao lado. Se precisar, edite, faça ajustes e coloque em processamento novamente.
-                                        </p>
-                                    )}
-                                </div>
-                            </td>
-                            <td className="px-4 py-4 align-top">
-                                <div className="flex flex-col gap-2">
-                                            <div className="bg-slate-50 dark:bg-slate-800/70 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-gray-600 dark:text-gray-400 min-h-[60px] max-h-[100px] overflow-y-auto">
-                                        <div className="font-bold mb-1">{formatDate(schedule.createdAt)} - Horário criado</div>
-                                        {/* Aqui poderiam entrar logs de processamento futuramente */}
+                return (
+                    <article
+                        key={schedule.id || `${schedule.institution.name}-${index}`}
+                        className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900"
+                    >
+                        <div className="h-1 bg-gradient-to-r from-primary via-blue-400 to-teal-400"></div>
+                        <div className="p-4 sm:p-5">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="flex min-w-0 items-start gap-3.5">
+                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/10 dark:text-blue-300">
+                                        <span className="material-symbols-outlined text-[24px]">school</span>
                                     </div>
-                                    <button className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-primary focus-visible:rounded">
-                                        <span className="material-symbols-outlined text-sm">mail</span> Suporte
-                                    </button>
+                                    <div className="min-w-0 pt-0.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => onEdit(schedule)}
+                                            className="block max-w-full truncate text-left text-base font-bold text-slate-900 transition hover:text-primary focus-visible:rounded dark:text-white dark:hover:text-blue-300 sm:text-lg"
+                                            title={`Abrir ${schedule.institution.name || 'horário sem nome'}`}
+                                        >
+                                            {schedule.institution.name || 'Instituição sem nome'}
+                                        </button>
+                                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                            Ano letivo {schedule.institution.year} <span aria-hidden="true">·</span> Turno {schedule.institution.shift}
+                                        </p>
+                                    </div>
                                 </div>
-                            </td>
-                            <td className="px-4 py-4 align-top">
-                                <div className="flex justify-center gap-2">
-                                    <button
-                                        onClick={() => onEdit(schedule)}
-                                        title="Editar horário"
-                                        aria-label={`Editar ${schedule.institution.name || 'horário sem nome'}`}
-                                        className="flex flex-col items-center gap-1.5 group"
-                                    >
-                                        <div className="size-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center group-hover:bg-amber-50 dark:group-hover:bg-amber-900/20 transition-colors">
-                                            <span className="material-symbols-outlined text-2xl text-yellow-600">edit</span>
-                                        </div>
-                                        <span className="text-[9px] font-bold uppercase text-gray-600">Editar</span>
-                                    </button>
-                                    <button
-                                        onClick={() => onDuplicate(schedule)}
-                                        title="Duplicar horário"
-                                        aria-label={`Duplicar ${schedule.institution.name || 'horário sem nome'}`}
-                                        className="flex flex-col items-center gap-1.5 group"
-                                    >
-                                        <div className="size-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors">
-                                            <span className="material-symbols-outlined text-2xl text-blue-400">content_copy</span>
-                                        </div>
-                                        <span className="text-[9px] font-bold uppercase text-gray-600">Duplicar</span>
-                                    </button>
-                                    <button
-                                        onClick={() => isLicensed && onViewSolutions(schedule)}
-                                        disabled={!isLicensed}
-                                        aria-label={`${isLicensed ? 'Ver soluções de' : 'Soluções bloqueadas para'} ${schedule.institution.name || 'horário sem nome'}`}
-                                        className={`flex flex-col items-center gap-1 group ${!isLicensed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title={!isLicensed ? 'Liberação pendente para ver soluções' : ''}
-                                    >
-                                        <div className={`size-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center ${isLicensed ? 'group-hover:bg-purple-50 dark:group-hover:bg-purple-900/20' : ''} transition-colors`}>
-                                            <span className={`material-symbols-outlined text-2xl ${isLicensed ? 'text-purple-400' : 'text-gray-400'}`}>grid_view</span>
-                                        </div>
-                                        <span className="text-[9px] font-bold uppercase text-gray-600 text-center leading-none">Ver<br />Soluções</span>
-                                    </button>
-                                    <button
-                                        onClick={() => schedule.id && onDelete(schedule.id)}
-                                        title="Excluir horário"
-                                        aria-label={`Excluir ${schedule.institution.name || 'horário sem nome'}`}
-                                        className="flex flex-col items-center gap-1.5 group"
-                                    >
-                                        <div className="size-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center group-hover:bg-red-50 dark:group-hover:bg-red-900/20 transition-colors">
-                                            <span className="material-symbols-outlined text-2xl text-red-500">cancel</span>
-                                        </div>
-                                        <span className="text-[9px] font-bold uppercase text-gray-600">Excluir</span>
-                                    </button>
+
+                                <div className="flex flex-wrap gap-2 sm:justify-end">
+                                    <span className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${isLicensed
+                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300'
+                                        : isPending
+                                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/25 dark:text-amber-300'
+                                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                        }`}>
+                                        <span className="material-symbols-outlined text-[15px]">{isLicensed ? 'verified' : isPending ? 'hourglass_top' : 'lock'}</span>
+                                        {licenseLabel}
+                                    </span>
+                                    <span className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${schedule.status === 'Finalizado'
+                                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-300'
+                                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                        }`}>
+                                        <span className="size-1.5 rounded-full bg-current"></span>
+                                        {statusLabel}
+                                    </span>
                                 </div>
-                            </td>
-                        </tr>
-                    );
-                })}
-                </tbody>
-            </table>
+                            </div>
+
+                            <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-start gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                    <span className="material-symbols-outlined text-base text-slate-400">schedule</span>
+                                    <span><span className="font-semibold text-slate-700 dark:text-slate-300">Criado em</span> {formatDate(schedule.createdAt)}</span>
+                                </div>
+                                {schedule.status === 'Finalizado' && (
+                                    <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                        <span className="material-symbols-outlined text-base">check_circle</span>
+                                        Grade processada
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                <button
+                                    type="button"
+                                    onClick={() => onEdit(schedule)}
+                                    aria-label={`Editar ${schedule.institution.name || 'horário sem nome'}`}
+                                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
+                                >
+                                    <span className="material-symbols-outlined text-base">edit</span>
+                                    Editar horário
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => onDuplicate(schedule)}
+                                    aria-label={`Duplicar ${schedule.institution.name || 'horário sem nome'}`}
+                                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-primary/30 hover:bg-blue-50/60 hover:text-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                >
+                                    <span className="material-symbols-outlined text-base">content_copy</span>
+                                    Duplicar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => isLicensed && onViewSolutions(schedule)}
+                                    disabled={!isLicensed}
+                                    aria-label={`${isLicensed ? 'Ver soluções de' : 'Soluções bloqueadas para'} ${schedule.institution.name || 'horário sem nome'}`}
+                                    title={!isLicensed ? 'É necessária uma licença ativa para ver as soluções' : 'Ver grade de horários'}
+                                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-primary/30 hover:bg-blue-50/60 hover:text-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                >
+                                    <span className="material-symbols-outlined text-base">calendar_view_week</span>
+                                    Ver soluções
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => schedule.id && onDelete(schedule.id)}
+                                    aria-label={`Excluir ${schedule.institution.name || 'horário sem nome'}`}
+                                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/15 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-red-900 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+                                >
+                                    <span className="material-symbols-outlined text-base">delete</span>
+                                    Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </article>
+                );
+            })}
         </div>
     );
 };

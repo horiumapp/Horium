@@ -16,7 +16,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [pendingEmail, setPendingEmail] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -258,22 +257,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                     <input
                       className="form-input flex w-full rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-primary/10 border border-slate-200 dark:border-gray-600 bg-white dark:bg-slate-900 focus:border-primary min-h-12 placeholder:text-slate-400 px-4 text-sm font-normal pr-12 outline-none transition"
                       placeholder="Digite sua senha"
-                      type={showPassword ? 'text' : 'password'}
+                      type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((visible) => !visible)}
-                      aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                      aria-pressed={showPassword}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">
-                        {showPassword ? 'visibility_off' : 'visibility'}
-                      </span>
-                    </button>
                   </div>
                 </label>
               </div>
