@@ -256,9 +256,7 @@ export const createDanfePdf = async (page: HTMLElement) => {
     const { jsPDF } = await import('jspdf');
     const canvas = await domToCanvas(page, {
         scale: 2,
-        backgroundColor: '#ffffff',
-        width: page.scrollWidth,
-        height: page.scrollHeight
+        backgroundColor: '#ffffff'
     });
 
     if (!canvas.width || !canvas.height) {
@@ -272,7 +270,7 @@ export const createDanfePdf = async (page: HTMLElement) => {
     let remaining = imageHeight;
     let offset = 0;
 
-    pdf.addImage(image, 'JPEG', 0, offset, pageWidth, imageHeight);
+    pdf.addImage(image, 'PNG', 0, offset, pageWidth, imageHeight);
     remaining -= pageHeight;
 
     while (remaining > 1) {
