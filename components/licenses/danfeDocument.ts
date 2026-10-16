@@ -290,19 +290,17 @@ const renderDanfePdf = async (page: HTMLElement) => {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const image = canvas.toDataURL('image/png');
-    const imageHeight = (canvas.height * pageWidth) / canvas.width;
-    let remaining = imageHeight;
-    let offset = 0;
+    const imageRatio = canvas.height / canvas.width;
+    let drawWidth = pageWidth;
+    let drawHeight = drawWidth * imageRatio;
 
-    pdf.addImage(image, 'PNG', 0, offset, pageWidth, imageHeight);
-    remaining -= pageHeight;
-
-    while (remaining > 1) {
-        offset = remaining - imageHeight;
-        pdf.addPage();
-        pdf.addImage(image, 'PNG', 0, offset, pageWidth, imageHeight);
-        remaining -= pageHeight;
+    if (drawHeight > pageHeight) {
+        drawHeight = pageHeight;
+        drawWidth = drawHeight / imageRatio;
     }
+
+    const x = (pageWidth - drawWidth) / 2;
+    pdf.addImage(image, 'PNG', x, 0, drawWidth, drawHeight);
 
     return pdf.output('blob');
 };
