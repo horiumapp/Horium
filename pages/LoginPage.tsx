@@ -268,7 +268,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   <button
                     type="button"
                     onClick={() => setShowForgotPassword(true)}
-                    className="text-primary text-xs font-bold hover:underline"
+                    className="text-sm! font-semibold text-primary hover:underline"
                   >
                     Esqueci minha senha
                   </button>
