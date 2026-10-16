@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { saveAs } from 'file-saver';
 import { supabase } from '../../services/supabaseClient';
-import { openDanfeDocument } from './danfeDocument';
+import { createDanfePdf, getDanfeMarkup } from './danfeDocument';
 
 interface LicenseSelectionProps {
     onSelectPurchase: () => void;
@@ -17,8 +19,17 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
 }) => {
     const [licenses, setLicenses] = useState<any[]>([]);
     const [recipientName, setRecipientName] = useState('Destinatário da licença');
+    const [danfeLicense, setDanfeLicense] = useState<any | null>(null);
+    const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+    const [preparingPdf, setPreparingPdf] = useState(false);
+    const [pdfError, setPdfError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const danfePreviewRef = useRef<HTMLDivElement>(null);
+    const danfeMarkup = useMemo(
+        () => (danfeLicense ? getDanfeMarkup(danfeLicense, recipientName) : null),
+        [danfeLicense, recipientName]
+    );
 
     useEffect(() => {
         const fetchLicenses = async () => {
@@ -50,6 +61,32 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
 
         fetchLicenses();
     }, []);
+
+    useEffect(() => {
+        const page = danfePreviewRef.current?.querySelector('.danfe-page');
+        if (!danfeLicense || !(page instanceof HTMLElement)) return;
+
+        let cancelled = false;
+        setPdfBlob(null);
+        setPdfError(null);
+        setPreparingPdf(true);
+
+        createDanfePdf(page)
+            .then((blob) => {
+                if (!cancelled) setPdfBlob(blob);
+            })
+            .catch((previewError) => {
+                console.error('Erro ao montar a visualização da nota:', previewError);
+                if (!cancelled) setPdfError('Não foi possível montar o PDF da nota.');
+            })
+            .finally(() => {
+                if (!cancelled) setPreparingPdf(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [danfeLicense, danfeMarkup]);
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -135,7 +172,7 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center font-medium">{formatDate(license.valid_until)}</td>
                                     <td className="px-4 py-4 border border-[#dbe0e6] dark:border-gray-700 text-center">
                                         {license.payment_status === 'Aprovado' ? (
-                                            <button type="button" aria-label="Abrir nota fiscal" className="mx-auto flex size-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-50 hover:text-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 dark:text-slate-300 dark:hover:bg-blue-900/20" onClick={() => openDanfeDocument(license, recipientName)}>
+                                            <button type="button" aria-label="Abrir nota fiscal" className="mx-auto flex size-10 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition hover:bg-blue-50 hover:text-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 dark:text-slate-300 dark:hover:bg-blue-900/20" onClick={() => setDanfeLicense(license)}>
                                                 <span className="material-symbols-outlined text-xl">receipt_long</span>
                                             </button>
                                         ) : (
@@ -213,6 +250,48 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                 </div>
 
             </div>
+
+            {danfeLicense && createPortal(
+                <div className="fixed inset-0 flex flex-col bg-slate-900 p-3 sm:p-6" style={{ zIndex: 2147483646 }} role="dialog" aria-modal="true" aria-label="Visualização da nota fiscal">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-semibold text-white">Visualização da nota fiscal</p>
+                            <p className="text-xs text-slate-200">Confira o documento aqui. Para imprimir, baixe o PDF e abra no leitor do computador.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                                disabled={!pdfBlob || preparingPdf}
+                                onClick={() => pdfBlob && saveAs(pdfBlob, 'nota-fiscal-horium.pdf')}
+                            >
+                                Baixar PDF
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-800"
+                                onClick={() => setDanfeLicense(null)}
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                    {preparingPdf && (
+                        <p className="mb-2 text-sm font-medium text-white">Preparando o PDF para download...</p>
+                    )}
+                    {pdfError && (
+                        <p className="mb-2 text-sm font-medium text-rose-200" role="alert">{pdfError}</p>
+                    )}
+                    <div className="min-h-0 w-full flex-1 overflow-auto rounded-xl bg-slate-200">
+                        {danfeMarkup && <style>{danfeMarkup.css}</style>}
+                        <div
+                            ref={danfePreviewRef}
+                            dangerouslySetInnerHTML={{ __html: danfeMarkup?.body ?? '' }}
+                        />
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

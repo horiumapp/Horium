@@ -43,8 +43,8 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
   <meta charset="UTF-8">
   <title>DANFE - Licença Horium ${number}</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Times New Roman", Arial, sans-serif; background: #e2e8f0; padding: 20px; color: #000; }
+    .danfe-scope, .danfe-scope * { box-sizing: border-box; }
+    .danfe-scope { font-family: "Times New Roman", Arial, sans-serif; background: #e2e8f0; padding: 20px; color: #000; }
     .danfe-page { width: 210mm; min-height: 297mm; background: #fff; margin: 0 auto; padding: 8mm; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
     .no-print { text-align: center; margin-bottom: 15px; }
     .btn-print { background: #2563eb; color: #fff; border: none; padding: 10px 20px; font-family: sans-serif; font-weight: bold; border-radius: 6px; cursor: pointer; }
@@ -63,16 +63,13 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
     table.prod-table th, table.prod-table td { border: 1px solid #000; padding: 2px 3px; }
     table.prod-table th { font-size: 6pt; background: #f8f8f8; text-transform: uppercase; }
     @media print {
-      body { background: #fff; padding: 0; }
+      .danfe-scope { background: #fff; padding: 0; }
       .danfe-page { box-shadow: none; width: 100%; padding: 5mm; }
       .no-print { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="no-print">
-    <button class="btn-print" onclick="window.print()">Imprimir DANFE / Salvar em PDF</button>
-  </div>
   <div class="danfe-page">
     <div class="row">
       <div class="col" style="width: 80%;">
@@ -100,7 +97,6 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
       <div class="col" style="width: 42%; justify-content: center; text-align: center; padding: 6px;">
         <div style="font-size: 11pt; font-weight: bold; margin-bottom: 4px;">HORIUM</div>
         <div class="val-normal">Licença de uso de software</div>
-        <div class="val-normal">Documento auxiliar visual</div>
         <div class="val-normal">comercial@horium.com</div>
       </div>
       <div class="col text-center" style="width: 16%; justify-content: space-around;">
@@ -121,7 +117,7 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
         <div class="barcode"></div>
         <div style="border-top: 1px solid #000; padding-top: 2px;">
           <span class="lbl">CHAVE DE ACESSO</span>
-          <div class="val text-center" style="font-size: 7.8pt; letter-spacing: 0.5px;">DOCUMENTO VISUAL — SEM CHAVE DE ACESSO SEFAZ</div>
+          <div class="val text-center" style="font-size: 7.8pt; letter-spacing: 0.5px;">SEM CHAVE DE ACESSO SEFAZ</div>
         </div>
         <div style="border-top: 1px solid #000; padding-top: 2px; font-size: 6.5pt; text-align: center;">
           Este DANFE espelha o pagamento da licença. Não substitui NF-e autorizada.
@@ -135,7 +131,7 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
       </div>
       <div class="col" style="width: 42%;">
         <span class="lbl">PROTOCOLO DE AUTORIZAÇÃO DE USO</span>
-        <span class="val">Não autorizado na SEFAZ — modelo visual</span>
+        <span class="val">Não autorizado na SEFAZ</span>
       </div>
     </div>
     <div class="row border-bottom">
@@ -225,7 +221,7 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
       <div class="col" style="width: 65%; justify-content: flex-start;">
         <span class="lbl">INFORMAÇÕES COMPLEMENTARES</span>
         <div class="val-normal" style="margin-top: 3px;">
-          Documento visual da licença Horium (${classes} turmas), válida até ${formatDate(license.valid_until)}.<br>
+          Licença Horium (${classes} turmas), válida até ${formatDate(license.valid_until)}.<br>
           Não é NF-e autorizada pela SEFAZ e não gera crédito fiscal.
         </div>
       </div>
@@ -238,14 +234,72 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
 </html>`;
 };
 
-export const openDanfeDocument = (license: DanfeLicense, recipientName: string) => {
-    const popup = window.open('', '_blank');
-    if (!popup) {
-        window.alert('O navegador bloqueou a janela da nota fiscal. Permita pop-ups deste site e tente de novo.');
-        return;
-    }
-    popup.opener = null;
-    popup.document.open();
-    popup.document.write(buildDanfeHtml(license, recipientName));
-    popup.document.close();
+const scopeDanfeCss = (css: string) =>
+    css.replace(/(^|})\s*([^@{}][^{]*)\{/g, (_match, prefix: string, selector: string) => {
+        const scoped = selector.split(',').map((part) => {
+            const trimmed = part.trim();
+            if (!trimmed || trimmed.startsWith('.danfe-scope')) return trimmed;
+            return `.danfe-scope ${trimmed}`;
+        }).join(', ');
+        return `${prefix} ${scoped} {`;
+    });
+
+export const getDanfeMarkup = (license: DanfeLicense, recipientName: string) => {
+    const html = buildDanfeHtml(license, recipientName);
+    const css = scopeDanfeCss(html.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '');
+    const body = html.match(/<body>([\s\S]*?)<\/body>/)?.[1] ?? '';
+    return { css, body: `<div class="danfe-scope">${body}</div>` };
 };
+
+export const createDanfePdf = async (page: HTMLElement) => {
+    const { default: html2canvas } = await import('html2canvas');
+    const { jsPDF } = await import('jspdf');
+    const host = document.createElement('div');
+    host.className = 'danfe-scope';
+    host.style.position = 'absolute';
+    host.style.left = '0';
+    host.style.top = '0';
+    host.style.width = '210mm';
+    host.style.background = '#ffffff';
+    host.style.zIndex = '0';
+    host.appendChild(page.cloneNode(true));
+    document.body.appendChild(host);
+
+    let canvas: HTMLCanvasElement;
+    try {
+        const clone = host.firstElementChild;
+        if (!(clone instanceof HTMLElement)) {
+            throw new Error('A nota não pôde ser copiada para o PDF.');
+        }
+        canvas = await html2canvas(clone, {
+            scale: 2,
+            backgroundColor: '#ffffff'
+        });
+    } finally {
+        host.remove();
+    }
+
+    if (!canvas.width || !canvas.height) {
+        throw new Error('A nota foi capturada sem tamanho.');
+    }
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const image = canvas.toDataURL('image/jpeg', 0.95);
+    const imageHeight = (canvas.height * pageWidth) / canvas.width;
+    let remaining = imageHeight;
+    let offset = 0;
+
+    pdf.addImage(image, 'JPEG', 0, offset, pageWidth, imageHeight);
+    remaining -= pageHeight;
+
+    while (remaining > 1) {
+        offset = remaining - imageHeight;
+        pdf.addPage();
+        pdf.addImage(image, 'JPEG', 0, offset, pageWidth, imageHeight);
+        remaining -= pageHeight;
+    }
+
+    return pdf.output('blob');
+};
+
