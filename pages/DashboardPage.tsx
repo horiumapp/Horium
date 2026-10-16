@@ -75,7 +75,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="flex-1 academic-gradient relative min-h-[calc(100vh-64px)] overflow-hidden px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-      <div className="relative z-10 mx-auto w-full max-w-7xl">
+      <div className="relative z-10 mx-auto w-full max-w-[1400px]">
         <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
