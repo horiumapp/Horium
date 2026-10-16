@@ -16,6 +16,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [pendingEmail, setPendingEmail] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -242,28 +243,36 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 </label>
               </div>
               <div className="flex flex-col w-full">
-                <label className="flex flex-col w-full">
-                  <div className="flex justify-between items-center pb-2">
-                    <p className="text-[#111418] dark:text-white text-sm font-semibold leading-normal">Senha</p>
-                    <button
-                      type="button"
-                      onClick={() => setShowForgotPassword(true)}
-                      className="text-primary text-xs font-bold hover:underline"
-                    >
-                      Esqueci minha senha
-                    </button>
-                  </div>
-                  <div className="flex w-full items-stretch relative">
-                    <input
-                      className="form-input flex w-full rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-primary/10 border border-slate-200 dark:border-gray-600 bg-white dark:bg-slate-900 focus:border-primary min-h-12 placeholder:text-slate-400 px-4 text-sm font-normal pr-12 outline-none transition"
-                      placeholder="Digite sua senha"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                </label>
+                <label className="text-[#111418] dark:text-white text-sm font-semibold leading-normal pb-2" htmlFor="login-password">Senha</label>
+                <div className="relative w-full">
+                  <input
+                    id="login-password"
+                    className="form-input flex w-full rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-primary/10 border border-slate-200 dark:border-gray-600 bg-white dark:bg-slate-900 focus:border-primary min-h-12 placeholder:text-slate-400 px-4 pr-12 text-sm font-normal outline-none transition"
+                    placeholder="Digite sua senha"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(current => !current)}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
+                    aria-pressed={showPassword}
+                    className="absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  >
+                    <span className="material-symbols-outlined text-[22px]">{showPassword ? 'visibility_off' : 'visibility'}</span>
+                  </button>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-primary text-xs font-bold hover:underline"
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-2 px-1">
                 <input className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" id="remember" type="checkbox" />
