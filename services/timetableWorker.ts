@@ -1534,6 +1534,309 @@ export function runGeneratorEngine(
                 missing.push({ assignment: asg, size: 1, consecutive: false });
             }
         }
+        const copyState = () => currentFixed.map(lesson => ({ ...lesson }));
+        const restoreState = (snap: FixedLesson[]) => {
+            currentFixed.length = 0;
+            for (const lesson of snap) currentFixed.push(lesson);
+            rebuildBoard();
+        };
+        const teacherCanUse = (teacherId: string, day: string, slot: number): boolean => {
+            const di = dayIndex.get(day);
+            const ti = teacherIdx.get(teacherId);
+            if (di === undefined || ti === undefined || slot < 0 || slot >= slotsPerDay) return false;
+            if (teacherNd[tOff(ti, di)] & (1 << slot)) return false;
+            if (teacherOcc[tPos(ti, di, slot)]) return false;
+            return popcount(teacherMask[tOff(ti, di)]) < teacherLimit[tOff(ti, di)];
+        };
+        const teacherCanUseIgnoring = (teacherId: string, day: string, slot: number, ignoring: FixedLesson[]): boolean => {
+            const di = dayIndex.get(day);
+            const ti = teacherIdx.get(teacherId);
+            if (di === undefined || ti === undefined || slot < 0 || slot >= slotsPerDay) return false;
+            if (teacherNd[tOff(ti, di)] & (1 << slot)) return false;
+            const hit = teacherOcc[tPos(ti, di, slot)];
+            if (hit && !ignoring.includes(hit)) return false;
+            const staysOnDay = ignoring.some(item => item.teacherId === teacherId && item.day === day);
+            if (staysOnDay) return true;
+            let count = popcount(teacherMask[tOff(ti, di)]);
+            for (const item of ignoring) {
+                if (item.teacherId === teacherId && item.day === day) count--;
+            }
+            return count < teacherLimit[tOff(ti, di)];
+        };
+        // Tira a aula do horário atual dentro da própria turma. O destino pode ser o buraco
+        // ou o horário de outra aula que consiga assumir esse buraco.
+        const openSlotFor = (lesson: FixedLesson): boolean => {
+            if (pinnedSlots.has(`${lesson.classId}|${lesson.day}|${lesson.slotIndex}`)) return false;
+            const ci = classIdx.get(lesson.classId);
+            if (ci === undefined || currentFixed.indexOf(lesson) < 0) return false;
+            const originDay = lesson.day;
+            const originSlot = lesson.slotIndex;
+            const holes: { day: string; di: number; slot: number }[] = [];
+            const others: FixedLesson[] = [];
+            for (let di = 0; di < nDays; di++) {
+                for (let slot = 0; slot < slotsPerDay; slot++) {
+                    const occ = classOcc[cPos(ci, di, slot)];
+                    if (!occ) {
+                        if (classNd[cOff(ci, di)] & (1 << slot)) continue;
+                        holes.push({ day: originalDays[di], di, slot });
+                    } else if (occ !== lesson) {
+                        others.push(occ);
+                    }
+                }
+            }
+            for (const hole of holes) {
+                if (`${hole.day}|${hole.slot}` === `${originDay}|${originSlot}`) continue;
+                if (!teacherCanUseIgnoring(lesson.teacherId, hole.day, hole.slot, [lesson])) continue;
+                lesson.day = hole.day;
+                lesson.slotIndex = hole.slot;
+                rebuildBoard();
+                return true;
+            }
+            for (const other of others) {
+                if (pinnedSlots.has(`${other.classId}|${other.day}|${other.slotIndex}`)) continue;
+                if (!teacherCanUseIgnoring(lesson.teacherId, other.day, other.slotIndex, [lesson, other])) continue;
+                if (!teacherCanUseIgnoring(other.teacherId, originDay, originSlot, [other, lesson])) continue;
+                const otherDay = other.day;
+                const otherSlot = other.slotIndex;
+                other.day = originDay;
+                other.slotIndex = originSlot;
+                lesson.day = otherDay;
+                lesson.slotIndex = otherSlot;
+                rebuildBoard();
+                return true;
+            }
+            for (const other of others) {
+                if (!teacherCanUseIgnoring(lesson.teacherId, other.day, other.slotIndex, [lesson, other])) continue;
+                for (const third of others) {
+                    if (third === other) continue;
+                    if (pinnedSlots.has(`${other.classId}|${other.day}|${other.slotIndex}`)) continue;
+                    if (pinnedSlots.has(`${third.classId}|${third.day}|${third.slotIndex}`)) continue;
+                    if (!teacherCanUseIgnoring(other.teacherId, third.day, third.slotIndex, [other, third, lesson])) continue;
+                    if (!teacherCanUseIgnoring(third.teacherId, originDay, originSlot, [third, lesson, other])) continue;
+                    const otherDay = other.day;
+                    const otherSlot = other.slotIndex;
+                    const thirdDay = third.day;
+                    const thirdSlot = third.slotIndex;
+                    other.day = thirdDay;
+                    other.slotIndex = thirdSlot;
+                    third.day = originDay;
+                    third.slotIndex = originSlot;
+                    lesson.day = otherDay;
+                    lesson.slotIndex = otherSlot;
+                    rebuildBoard();
+                    return true;
+                }
+            }
+            for (const hole of holes) {
+                for (const other of others) {
+                    if (pinnedSlots.has(`${other.classId}|${other.day}|${other.slotIndex}`)) continue;
+                    if (!teacherCanUseIgnoring(other.teacherId, hole.day, hole.slot, [other, lesson])) continue;
+                    if (!teacherCanUseIgnoring(lesson.teacherId, other.day, other.slotIndex, [lesson, other])) continue;
+                    const otherDay = other.day;
+                    const otherSlot = other.slotIndex;
+                    other.day = hole.day;
+                    other.slotIndex = hole.slot;
+                    lesson.day = otherDay;
+                    lesson.slotIndex = otherSlot;
+                    rebuildBoard();
+                    return true;
+                }
+            }
+            return false;
+        };
+        const moveLessonAway = (lesson: FixedLesson): boolean => {
+            if (openSlotFor(lesson)) return true;
+            if (pinnedSlots.has(`${lesson.classId}|${lesson.day}|${lesson.slotIndex}`)) return false;
+            const idx = currentFixed.indexOf(lesson);
+            if (idx < 0) return false;
+            currentFixed.splice(idx, 1);
+            removeLesson(lesson);
+            return tryIntraClassEjectionChain(lesson, 6, true);
+        };
+        // Últimas aulas: o buraco da turma está num tempo em que o professor já dá aula em outra sala,
+        // ou o tempo livre dele está ocupado por alguém que também precisa sair do lugar.
+        const forcePlace = (lessonToPlace: FixedLesson): boolean => {
+            const ci = classIdx.get(lessonToPlace.classId);
+            const ti = teacherIdx.get(lessonToPlace.teacherId);
+            if (ci === undefined || ti === undefined) return false;
+            const holes: { day: string; di: number; slot: number }[] = [];
+            for (let di = 0; di < nDays; di++) {
+                for (let slot = 0; slot < slotsPerDay; slot++) {
+                    if (classOcc[cPos(ci, di, slot)]) continue;
+                    if (classNd[cOff(ci, di)] & (1 << slot)) continue;
+                    holes.push({ day: originalDays[di], di, slot });
+                }
+            }
+            const placeAt = (day: string, slot: number) => {
+                const placed: FixedLesson = { ...lessonToPlace, day, slotIndex: slot };
+                currentFixed.push(placed);
+                placeLesson(placed);
+            };
+            for (const hole of holes) {
+                if (!teacherCanUse(lessonToPlace.teacherId, hole.day, hole.slot)) continue;
+                placeAt(hole.day, hole.slot);
+                return true;
+            }
+            for (const hole of holes) {
+                const busy = teacherOcc[tPos(ti, hole.di, hole.slot)];
+                if (!busy || busy.classId === lessonToPlace.classId) continue;
+                const snap = copyState();
+                if (moveLessonAway(busy) && !classOcc[cPos(ci, hole.di, hole.slot)] && teacherCanUse(lessonToPlace.teacherId, hole.day, hole.slot)) {
+                    placeAt(hole.day, hole.slot);
+                    return true;
+                }
+                restoreState(snap);
+            }
+            for (let di = 0; di < nDays; di++) {
+                for (let slot = 0; slot < slotsPerDay; slot++) {
+                    const occ = classOcc[cPos(ci, di, slot)];
+                    if (!occ || pinnedSlots.has(`${occ.classId}|${occ.day}|${occ.slotIndex}`)) continue;
+                    if (!teacherCanUse(lessonToPlace.teacherId, originalDays[di], slot)) continue;
+                    const snap = copyState();
+                    if (moveLessonAway(occ) && !classOcc[cPos(ci, di, slot)] && teacherCanUse(lessonToPlace.teacherId, originalDays[di], slot)) {
+                        placeAt(originalDays[di], slot);
+                        return true;
+                    }
+                    restoreState(snap);
+                    for (const hole of holes) {
+                        const snapHole = copyState();
+                        const occTeacher = teacherIdx.get(occ.teacherId);
+                        const blocker = occTeacher === undefined ? undefined : teacherOcc[tPos(occTeacher, hole.di, hole.slot)];
+                        const freed = !blocker || blocker === occ || moveLessonAway(blocker);
+                        const occNow = classOcc[cPos(ci, di, slot)];
+                        if (freed && occNow && moveLessonAway(occNow) && !classOcc[cPos(ci, di, slot)] && teacherCanUse(lessonToPlace.teacherId, originalDays[di], slot)) {
+                            placeAt(originalDays[di], slot);
+                            return true;
+                        }
+                        restoreState(snapHole);
+                    }
+                }
+            }
+            return false;
+        };
+
+        const rematchClass = (classId: string): boolean => {
+            const needed: { teacherId: string; subjectId: string }[] = [];
+            for (const asg of assignments) {
+                if (asg.classId !== classId || asg.lessons <= 0) continue;
+                for (let n = 0; n < asg.lessons; n++) needed.push({ teacherId: asg.teacherId, subjectId: asg.subjectId });
+            }
+            const ci = classIdx.get(classId);
+            if (ci === undefined || needed.length === 0) return false;
+            const spots: { day: string; di: number; slot: number }[] = [];
+            for (let di = 0; di < nDays; di++) {
+                for (let slot = 0; slot < slotsPerDay; slot++) {
+                    if (classNd[cOff(ci, di)] & (1 << slot)) continue;
+                    spots.push({ day: originalDays[di], di, slot });
+                }
+            }
+            if (spots.length < needed.length) return false;
+            const snap = copyState();
+            const removed = currentFixed.filter(lesson => lesson.classId === classId);
+            for (const lesson of removed) {
+                const idx = currentFixed.indexOf(lesson);
+                if (idx >= 0) currentFixed.splice(idx, 1);
+                removeLesson(lesson);
+            }
+            const edges = needed.map(unit => {
+                const list: number[] = [];
+                for (let s = 0; s < spots.length; s++) {
+                    if (teacherCanUse(unit.teacherId, spots[s].day, spots[s].slot)) list.push(s);
+                }
+                return list;
+            });
+            const withinDailyLimit = (unitIndex: number, spotIndex: number, matchSlot: number[]): boolean => {
+                const unit = needed[unitIndex];
+                const spot = spots[spotIndex];
+                const ti = teacherIdx.get(unit.teacherId);
+                if (ti === undefined) return false;
+                let count = popcount(teacherMask[tOff(ti, spot.di)]) + 1;
+                for (let s = 0; s < spots.length; s++) {
+                    const matched = matchSlot[s];
+                    if (matched < 0 || spots[s].di !== spot.di) continue;
+                    if (needed[matched].teacherId === unit.teacherId) count++;
+                }
+                return count <= teacherLimit[tOff(ti, spot.di)];
+            };
+            const solve = (): number[] | null => {
+                const matchSlot = new Array<number>(spots.length).fill(-1);
+                const seen = new Array<boolean>(spots.length);
+                const unitMatched = new Array<boolean>(needed.length).fill(false);
+                const dfs = (unitIndex: number): boolean => {
+                    for (const spotIndex of edges[unitIndex]) {
+                        if (seen[spotIndex] || !withinDailyLimit(unitIndex, spotIndex, matchSlot)) continue;
+                        seen[spotIndex] = true;
+                        const previous = matchSlot[spotIndex];
+                        if (previous < 0 || dfs(previous)) {
+                            matchSlot[spotIndex] = unitIndex;
+                            unitMatched[unitIndex] = true;
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                for (let unitIndex = 0; unitIndex < needed.length; unitIndex++) {
+                    if (unitMatched[unitIndex]) continue;
+                    seen.fill(false);
+                    dfs(unitIndex);
+                }
+                const placed = matchSlot.filter(unitIndex => unitIndex >= 0).length;
+                return placed === needed.length ? matchSlot : null;
+            };
+            let matchSlot = solve();
+            if (!matchSlot) {
+                for (let attempt = 0; attempt < 6 && !matchSlot; attempt++) {
+                    for (let i = needed.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        const swapUnit = needed[i];
+                        needed[i] = needed[j];
+                        needed[j] = swapUnit;
+                        const swapEdges = edges[i];
+                        edges[i] = edges[j];
+                        edges[j] = swapEdges;
+                    }
+                    matchSlot = solve();
+                }
+            }
+            if (!matchSlot) {
+                restoreState(snap);
+                return false;
+            }
+            const used = new Set<number>();
+            for (let s = 0; s < spots.length; s++) {
+                const unitIndex = matchSlot[s];
+                if (unitIndex < 0 || used.has(unitIndex)) continue;
+                used.add(unitIndex);
+                const unit = needed[unitIndex];
+                const spot = spots[s];
+                const placed: FixedLesson = {
+                    day: spot.day,
+                    slotIndex: spot.slot,
+                    classId,
+                    teacherId: unit.teacherId,
+                    subjectId: unit.subjectId
+                };
+                currentFixed.push(placed);
+                placeLesson(placed);
+            }
+            return true;
+        };
+
+        if (missing.length > 0) {
+            const classesToRepair = [...new Set(missing.map(item => item.assignment.classId))];
+            for (const classId of classesToRepair) rematchClass(classId);
+            missing.length = 0;
+            for (const asg of assignments) {
+                if (asg.lessons <= 0) continue;
+                const placed = currentFixed.filter(lesson =>
+                    lesson.teacherId === asg.teacherId &&
+                    lesson.classId === asg.classId &&
+                    lesson.subjectId === asg.subjectId
+                ).length;
+                for (let n = placed; n < asg.lessons; n++) missing.push({ assignment: asg, size: 1, consecutive: false });
+            }
+        }
+
         if (missing.length > 0) {
             failures.length = 0;
             for (const failedBlock of missing) {
@@ -1545,7 +1848,8 @@ export function runGeneratorEngine(
                     subjectId: failedBlock.assignment.subjectId
                 };
                 const placed = tryIntraClassEjectionChain(singleLesson, 8, true)
-                    || tryInterClassRelocation(singleLesson);
+                    || tryInterClassRelocation(singleLesson)
+                    || forcePlace(singleLesson);
                 if (!placed) {
                     const key = `${failedBlock.assignment.teacherId}|${failedBlock.assignment.classId}|${failedBlock.assignment.subjectId}`;
                     failedAssignmentWeights[key] = (failedAssignmentWeights[key] || 0) + 20;
