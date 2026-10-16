@@ -189,138 +189,142 @@ export const excelService = {
     },
 
     /**
-     * Generates a styled Excel for the Weekly view (All classes as columns)
+     * Gera um único Excel da semana, com uma planilha para cada dia.
      */
-    exportWeeklyView: async (dayIndex: number, data: SetupData) => {
+    exportWeeklyView: async (data: SetupData) => {
         const normalizedData = ensureScheduleSlots(data);
         const activeDays = normalizedData.weekConfig?.activeDays && normalizedData.weekConfig.activeDays.length > 0
             ? normalizedData.weekConfig.activeDays
             : DAYS_OF_WEEK;
-        const dayName = activeDays[dayIndex] || DAYS_OF_WEEK[dayIndex] || 'Dia';
         const sortedClasses = [...normalizedData.classes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         const totalCols = 1 + sortedClasses.length;
-
-        // Title row (Row 1)
-        const titleRow: Row = [
-            {
-                value: `RELATÓRIO SEMANAL - ${dayName.toUpperCase()}`,
-                fontWeight: 'bold',
-                fontSize: 16,
-                textColor: '#136DEC',
-                align: 'center',
-                alignVertical: 'center',
-                columnSpan: totalCols,
-                height: 40,
-            },
-            ...Array(totalCols - 1).fill(null)
-        ];
-
-        // Empty spacing row (Row 2)
-        const emptyRow: Row = [
-            {
-                value: '',
-                columnSpan: totalCols,
-                height: 12,
-            },
-            ...Array(totalCols - 1).fill(null)
-        ];
-
-        // Header row (Row 3)
-        const headerRow: Row = [
-            {
-                value: 'HORA',
-                fontWeight: 'bold',
-                textColor: '#FFFFFF',
-                backgroundColor: '#136DEC',
-                align: 'center',
-                alignVertical: 'center',
-                borderColor: '#000000',
-                borderStyle: 'thin',
-                height: 25,
-            },
-            ...sortedClasses.map(c => ({
-                value: c.name,
-                fontWeight: 'bold' as const,
-                textColor: '#FFFFFF',
-                backgroundColor: '#136DEC',
-                align: 'center' as const,
-                alignVertical: 'center' as const,
-                borderColor: '#000000',
-                borderStyle: 'thin' as const,
-                height: 25,
-            }))
-        ];
-
-        const lessons = data.schedule?.[0]?.slots?.filter(s => s.type === 'AULA') || [];
+        const lessons = normalizedData.schedule?.[0]?.slots?.filter(s => s.type === 'AULA') || [];
         const teacherColors = teacherColorMap(normalizedData.teachers);
-
-        const lessonRows: Row[] = lessons.map((lesson, idx) => {
-            const timeCell: Cell = {
-                value: `${lesson.start} - ${lesson.end}\n${idx + 1}ª AULA`,
-                fontWeight: 'bold',
-                align: 'center',
-                alignVertical: 'center',
-                wrap: true,
-                borderColor: '#000000',
-                borderStyle: 'thin',
-                height: 45,
-                fontSize: 10,
-            };
-
-            const classCells: Cell[] = sortedClasses.map(cls => {
-                const lessonData = data.fixedLessons?.find(fl =>
-                    fl.day === dayName &&
-                    fl.slotIndex === idx &&
-                    fl.classId === cls.id
-                );
-
-                if (lessonData) {
-                    const subject = data.subjects.find(s => s.id === lessonData.subjectId);
-                    const teacher = data.teachers.find(t => t.id === lessonData.teacherId);
-
-                    const subjectName = subject?.shortName || subject?.name || '';
-                    const teacherName = teacher?.name ? `\n(${teacher.name})` : '';
-                    const bgColor = formatHexColor(teacherColors.get(lessonData.teacherId), '#FFFFFF');
-                    const textColor = getContrastTextColor(bgColor);
-
-                    return {
-                        value: `${subjectName}${teacherName}`,
-                        align: 'center',
-                        alignVertical: 'center',
-                        wrap: true,
-                        backgroundColor: bgColor,
-                        textColor: textColor,
-                        fontWeight: 'bold',
-                        fontSize: 9,
-                        borderColor: '#000000',
-                        borderStyle: 'thin',
-                    };
-                }
-
-                return {
-                    value: '-',
-                    align: 'center',
-                    alignVertical: 'center',
-                    backgroundColor: '#F9FAFB',
-                    textColor: '#9CA3AF',
-                    borderColor: '#000000',
-                    borderStyle: 'thin',
-                };
-            });
-
-            return [timeCell, ...classCells];
-        });
-
         const columns = [
             { width: 15 },
             ...sortedClasses.map(() => ({ width: 18 }))
         ];
+        const usedSheetNames = new Set<string>();
 
-        const blob = await writeXlsxFile([titleRow, emptyRow, headerRow, ...lessonRows], {
-            sheet: `Semanal - ${dayName}`,
-            columns,
-        }).toBlob();
+        const sheets = activeDays.map((dayName, dayIndex) => {
+            const titleRow: Row = [
+                {
+                    value: `HORÁRIO - ${dayName.toUpperCase()}`,
+                    fontWeight: 'bold',
+                    fontSize: 16,
+                    textColor: '#136DEC',
+                    align: 'center',
+                    alignVertical: 'center',
+                    columnSpan: totalCols,
+                    height: 40,
+                },
+                ...Array(totalCols - 1).fill(null)
+            ];
 
-        saveAs(blob, `Relatório Semanal - ${dayName}.xlsx`);
+            const emptyRow: Row = [
+                {
+                    value: '',
+                    columnSpan: totalCols,
+                    height: 12,
+                },
+                ...Array(totalCols - 1).fill(null)
+            ];
+
+            const headerRow: Row = [
+                {
+                    value: 'HORA',
+                    fontWeight: 'bold',
+                    textColor: '#FFFFFF',
+                    backgroundColor: '#136DEC',
+                    align: 'center',
+                    alignVertical: 'center',
+                    borderColor: '#000000',
+                    borderStyle: 'thin',
+                    height: 25,
+                },
+                ...sortedClasses.map(c => ({
+                    value: c.name,
+                    fontWeight: 'bold' as const,
+                    textColor: '#FFFFFF',
+                    backgroundColor: '#136DEC',
+                    align: 'center' as const,
+                    alignVertical: 'center' as const,
+                    borderColor: '#000000',
+                    borderStyle: 'thin' as const,
+                    height: 25,
+                }))
+            ];
+
+            const lessonRows: Row[] = lessons.map((lesson, idx) => {
+                const timeCell: Cell = {
+                    value: `${lesson.start} - ${lesson.end}\n${idx + 1}ª AULA`,
+                    fontWeight: 'bold',
+                    align: 'center',
+                    alignVertical: 'center',
+                    wrap: true,
+                    borderColor: '#000000',
+                    borderStyle: 'thin',
+                    height: 45,
+                    fontSize: 10,
+                };
+
+                const classCells: Cell[] = sortedClasses.map(cls => {
+                    const lessonData = normalizedData.fixedLessons?.find(fl =>
+                        fl.day === dayName &&
+                        fl.slotIndex === idx &&
+                        fl.classId === cls.id
+                    );
+
+                    if (lessonData) {
+                        const subject = normalizedData.subjects.find(s => s.id === lessonData.subjectId);
+                        const teacher = normalizedData.teachers.find(t => t.id === lessonData.teacherId);
+
+                        const subjectName = subject?.shortName || subject?.name || '';
+                        const teacherName = teacher?.name ? `\n(${teacher.name})` : '';
+                        const bgColor = formatHexColor(teacherColors.get(lessonData.teacherId), '#FFFFFF');
+                        const textColor = getContrastTextColor(bgColor);
+
+                        return {
+                            value: `${subjectName}${teacherName}`,
+                            align: 'center' as const,
+                            alignVertical: 'center' as const,
+                            wrap: true,
+                            backgroundColor: bgColor,
+                            textColor: textColor,
+                            fontWeight: 'bold' as const,
+                            fontSize: 9,
+                            borderColor: '#000000',
+                            borderStyle: 'thin' as const,
+                        };
+                    }
+
+                    return {
+                        value: '-',
+                        align: 'center' as const,
+                        alignVertical: 'center' as const,
+                        backgroundColor: '#F9FAFB',
+                        textColor: '#9CA3AF',
+                        borderColor: '#000000',
+                        borderStyle: 'thin' as const,
+                    };
+                });
+
+                return [timeCell, ...classCells];
+            });
+
+            let sheetName = (dayName || `Dia ${dayIndex + 1}`).slice(0, 31);
+            if (usedSheetNames.has(sheetName)) sheetName = `${sheetName.slice(0, 28)} ${dayIndex + 1}`;
+            usedSheetNames.add(sheetName);
+
+            return {
+                data: [titleRow, emptyRow, headerRow, ...lessonRows],
+                sheet: sheetName,
+                columns,
+                orientation: 'landscape' as const,
+            };
+        });
+
+        const blob = await writeXlsxFile(sheets).toBlob();
+        saveAs(blob, 'Horário - Semana.xlsx');
     }
 };

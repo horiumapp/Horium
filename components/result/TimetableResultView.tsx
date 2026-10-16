@@ -26,7 +26,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
 }) => {
     const normalizedData = useMemo(() => ensureScheduleSlots(data), [data]);
     const isLocked = !normalizedData.isLicensed && activeLicenseStatus !== 'Aprovado';
-    const [viewMode, setViewMode] = useState<ViewMode>('CLASS');
+    const [viewMode, setViewMode] = useState<ViewMode>('WEEKLY');
     const [showFailureDetails, setShowFailureDetails] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<{ day: string; slotIndex: number; classId: string; teacherId: string } | null>(null);
@@ -64,7 +64,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
         return [...normalizedData.classes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
     }, [normalizedData.classes]);
 
-    const [selectedId, setSelectedId] = useState<string>(sortedClasses[0]?.id || '');
+    const [selectedId, setSelectedId] = useState<string>('general-week');
     const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
 
     const lessons = useMemo(() => {
@@ -485,7 +485,7 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                         return;
                                     }
                                     if (viewMode === 'WEEKLY') {
-                                        excelService.exportWeeklyView(selectedDayIndex, normalizedData);
+                                        excelService.exportWeeklyView(normalizedData);
                                     } else {
                                         excelService.exportEntityView(viewMode, selectedId, normalizedData);
                                     }
