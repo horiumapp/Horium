@@ -3,6 +3,7 @@ import { adminLicenseService, AdminLicense, getSafeHttpsUrl, isPdfReceipt } from
 import { ticketService, TicketData } from '../services/ticketService';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { toPublicError } from '../utils/publicError';
 
 interface AdminPanelPageProps {
     onBack: () => void;
@@ -38,7 +39,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
             setLicenses(data);
         } catch (err: any) {
             console.error(err);
-            setError(err.message || "Falha ao buscar as licenças (Verifique se as permissões do administrador estão corretas).");
+            setError(toPublicError(err, 'Falha ao buscar as licenças. Verifique se a sua conta é de administrador.'));
         } finally {
             setLoading(false);
         }
@@ -77,7 +78,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
 
             setSelectedLicense(null); // Close modal
         } catch (err: any) {
-            alert("Erro ao aprovar licença: " + err.message);
+            alert(toPublicError(err, 'Não foi possível aprovar a licença.'));
         } finally {
             setIsApproving(false);
         }
@@ -92,7 +93,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
             await adminLicenseService.deleteLicense(id);
             setLicenses(prev => prev.filter(lic => lic.id !== id));
         } catch (err: any) {
-            alert("Erro ao excluir licença: " + err.message);
+            alert(toPublicError(err, 'Não foi possível excluir a licença.'));
         }
     };
 
@@ -102,7 +103,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
             await ticketService.updateTicketStatus(ticketId, status);
             setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status } : t));
         } catch (err: any) {
-            alert("Erro ao atualizar chamado: " + err.message);
+            alert(toPublicError(err, 'Não foi possível atualizar o chamado.'));
         } finally {
             setUpdatingTicketId(null);
         }

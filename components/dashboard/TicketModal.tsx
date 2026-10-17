@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { ticketService } from '../../services/ticketService';
+import { toPublicError } from '../../utils/publicError';
 
 interface TicketModalProps {
     isOpen: boolean;
@@ -36,7 +37,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ isOpen, onClose }) => 
             }, 2000);
         } catch (err: any) {
             console.error('Erro ao abrir ticket:', err);
-            setError(err.message || 'Erro ao enviar o ticket. Tente novamente mais tarde.');
+            setError(toPublicError(err, 'Erro ao enviar o ticket. Tente novamente mais tarde.'));
         } finally {
             setIsSubmitting(false);
         }

@@ -4,6 +4,7 @@ import { generatePixPayload } from '../utils/pix';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../services/supabaseClient';
 import { pricingService, PLAN_OPTIONS, PlanDuration } from '../services/pricingService';
+import { toPublicError } from '../utils/publicError';
 
 const DURATION_OPTIONS = PLAN_OPTIONS;
 const FULL_PRICE_TABLE = pricingService.generatePriceTable();
@@ -135,7 +136,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
 
       if (rpcError) {
         console.error("RPC request_license_order falhou:", rpcError);
-        alert(`Erro ao registrar a licença: ${rpcError.message || 'Falha na validação do pedido no servidor.'}`);
+        alert(toPublicError(rpcError, 'Falha na validação do pedido no servidor.'));
         setPaymentStatus('upload_receipt');
         return;
       }

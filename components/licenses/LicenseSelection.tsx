@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { saveAs } from 'file-saver';
 import { supabase } from '../../services/supabaseClient';
 import { createDanfePdf, getDanfeMarkup } from './danfeDocument';
+import { toPublicError } from '../../utils/publicError';
 
 interface LicenseSelectionProps {
     onSelectPurchase: () => void;
@@ -53,7 +54,7 @@ export const LicenseSelection: React.FC<LicenseSelectionProps> = ({
                 }
             } catch (err: any) {
                 console.error("Erro ao buscar licenças:", err);
-                setError(err.message || 'Erro ao carregar as licenças');
+                setError(toPublicError(err, 'Erro ao carregar as licenças.'));
             } finally {
                 setLoading(false);
             }
