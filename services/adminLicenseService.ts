@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { audio } from './audioService';
+import { isSupabaseStorageHost } from '../utils/safeMedia';
 
 export interface AdminLicense {
     id: string;
@@ -288,7 +289,8 @@ export const adminLicenseService = {
 
             // 5. Garante que a URL gerada é HTTPS válida
             const safeSigned = getSafeHttpsUrl(data.signedUrl);
-            return safeSigned || '';
+            if (!safeSigned || !isSupabaseStorageHost(safeSigned)) return '';
+            return safeSigned;
         } catch (e) {
             console.error("Exceção ao criar signed URL para comprovante:", e);
             return '';

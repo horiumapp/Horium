@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { supabase } from '../services/supabaseClient';
 import { pricingService, PLAN_OPTIONS, PlanDuration } from '../services/pricingService';
 import { toPublicError } from '../utils/publicError';
+import { receiptContentType, receiptFileProblem } from '../utils/safeMedia';
 
 const DURATION_OPTIONS = PLAN_OPTIONS;
 const FULL_PRICE_TABLE = pricingService.generatePriceTable();
@@ -101,22 +102,22 @@ const PlansPage: React.FC<PlansPageProps> = ({
         return;
       }
 
-      const rawExt = (receiptFile.name.split('.').pop() || '').toLowerCase();
-      const allowedExt = ['png', 'jpg', 'jpeg', 'webp', 'pdf'];
-      if (!allowedExt.includes(rawExt)) {
-        alert('Envie o comprovante em PNG, JPG, WEBP ou PDF.');
+      const receiptProblem = receiptFileProblem(receiptFile);
+      if (receiptProblem) {
+        alert(receiptProblem);
         setPaymentStatus('upload_receipt');
         return;
       }
+      const rawExt = (receiptFile.name.split('.').pop() || '').toLowerCase();
       const fileExt = rawExt === 'jpeg' ? 'jpg' : rawExt;
       const filePath = `${userData.user.id}/${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
 
-      // Upload para o bucket receipts
       const { error: uploadError } = await supabase.storage
         .from('receipts')
         .upload(filePath, receiptFile, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          contentType: receiptContentType(receiptFile)
         });
 
       if (uploadError) {
@@ -317,12 +318,19 @@ const PlansPage: React.FC<PlansPageProps> = ({
             <div className="w-full flex-1 border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary/50 rounded-2xl p-6 flex flex-col items-center justify-center space-y-4 bg-gray-50/50 dark:bg-gray-800/20 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all relative cursor-pointer group">
               <input
                 type="file"
-                accept="image/*,application/pdf"
+                accept="image/png,image/jpeg,image/webp,application/pdf"
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    setReceiptFile(e.target.files[0]);
+                  const selected = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!selected) return;
+                  const problem = receiptFileProblem(selected);
+                  if (problem) {
+                    setReceiptFile(null);
+                    alert(problem);
+                    return;
                   }
+                  setReceiptFile(selected);
                 }}
               />
               <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-transform group-hover:scale-110 shadow-sm ${receiptFile ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-primary/10 text-primary'}`}>

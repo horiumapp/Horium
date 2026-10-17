@@ -1,5 +1,6 @@
 import React from 'react';
 import { SetupData } from '../../types';
+import { safeInstitutionLogo } from '../../utils/safeMedia';
 
 interface ScheduleListProps {
     schedules: SetupData[];
@@ -42,6 +43,7 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({
                 );
                 const licenseLabel = isLicensed ? 'Acesso liberado' : isPending ? 'Licença em análise' : 'Sem licença ativa';
                 const statusLabel = schedule.status || 'Em andamento';
+                const logoSrc = safeInstitutionLogo(schedule.institution.logo);
 
                 return (
                     <article
@@ -52,10 +54,10 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({
                         <div className={fillsRow ? 'p-6 sm:p-8' : 'p-4 sm:p-5'}>
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="flex min-w-0 items-start gap-4">
-                                    <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/10 dark:text-blue-300 ${schedule.institution.logo ? 'border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950' : ''} ${fillsRow ? 'size-20' : 'size-12'}`}>
-                                        {schedule.institution.logo ? (
+                                    <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-50 text-primary dark:bg-blue-500/10 dark:text-blue-300 ${logoSrc ? 'border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950' : ''} ${fillsRow ? 'size-20' : 'size-12'}`}>
+                                        {logoSrc ? (
                                             <img
-                                                src={schedule.institution.logo}
+                                                src={logoSrc}
                                                 alt=""
                                                 className="size-full object-contain p-1.5"
                                                 onError={(event) => {

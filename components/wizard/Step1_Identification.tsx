@@ -5,6 +5,7 @@ import { WizardStepHeader } from './WizardStepHeader';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
+import { safeInstitutionLogo } from '../../utils/safeMedia';
 
 interface Step1IdentificationProps {
     data: SetupData;
@@ -42,6 +43,7 @@ const readInstitutionLogo = (file: File) => new Promise<string>((resolve, reject
 export const Step1Identification: React.FC<Step1IdentificationProps> = ({ data, setData, onNext }) => {
     const [errors, setErrors] = React.useState<Record<string, string>>({});
     const logoInputRef = React.useRef<HTMLInputElement>(null);
+    const logoSrc = safeInstitutionLogo(data.institution.logo);
 
     const handleNext = () => {
         const newErrors: Record<string, string> = {};
@@ -95,8 +97,8 @@ export const Step1Identification: React.FC<Step1IdentificationProps> = ({ data, 
                 <div className="w-full max-w-2xl space-y-6">
                     <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-800/40">
                         <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white text-primary dark:border-slate-700 dark:bg-slate-900">
-                            {data.institution.logo ? (
-                                <img src={data.institution.logo} alt="" className="size-full object-contain p-1.5" />
+                            {logoSrc ? (
+                                <img src={logoSrc} alt="" className="size-full object-contain p-1.5" />
                             ) : (
                                 <span className="material-symbols-outlined text-[32px]">school</span>
                             )}

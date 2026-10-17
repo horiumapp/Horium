@@ -153,6 +153,18 @@ describe('Receipt Security & XSS Mitigation Tests', () => {
             expect(result).toBe(generatedSignedUrl);
         });
 
+        it('descarta signed URL cujo host não é do Supabase', async () => {
+            const validPath = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11/comprovante_pix.pdf';
+            mockCreateSignedUrl.mockResolvedValue({
+                data: { signedUrl: 'https://evil.example/storage/v1/object/sign/receipts/a.pdf?token=abc' },
+                error: null
+            });
+
+            const result = await adminLicenseService.getReceiptSignedUrl(validPath);
+
+            expect(result).toBe('');
+        });
+
         it('nunca deve repassar o input cru caso a geração de signedUrl falhe', async () => {
             const validPath = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11/falha.pdf';
 
