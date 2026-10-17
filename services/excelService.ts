@@ -8,6 +8,11 @@ import { teacherColorMap } from '../utils/teacherColors';
 /**
  * Formats a color string to valid 6-digit hex (#RRGGBB)
  */
+export const excelText = (value: unknown) => {
+    const text = String(value ?? '');
+    return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+};
+
 const formatHexColor = (color?: string, fallback = '#FFFFFF'): string => {
     if (!color) return fallback;
     const clean = color.replace('#', '').trim();
@@ -65,7 +70,7 @@ export const excelService = {
         // Title row (Row 1)
         const titleRow: Row = [
             {
-                value: `HORÁRIO - ${entityName || 'GERAL'}`,
+                value: excelText(`HORÁRIO - ${entityName || 'GERAL'}`),
                 fontWeight: 'bold',
                 fontSize: 16,
                 textColor: '#136DEC',
@@ -101,7 +106,7 @@ export const excelService = {
                 height: 25,
             },
             ...activeDays.map(day => ({
-                value: day,
+                value: excelText(day),
                 fontWeight: 'bold' as const,
                 textColor: '#FFFFFF',
                 backgroundColor: '#136DEC',
@@ -148,7 +153,7 @@ export const excelService = {
                     const textColor = getContrastTextColor(bgColor);
 
                     return {
-                        value: `${subjectName}${entityLabel}`,
+                        value: excelText(`${subjectName}${entityLabel}`),
                         align: 'center',
                         alignVertical: 'center',
                         wrap: true,
@@ -209,7 +214,7 @@ export const excelService = {
         const sheets = activeDays.map((dayName, dayIndex) => {
             const titleRow: Row = [
                 {
-                    value: `HORÁRIO - ${dayName.toUpperCase()}`,
+                    value: excelText(`HORÁRIO - ${dayName.toUpperCase()}`),
                     fontWeight: 'bold',
                     fontSize: 16,
                     textColor: '#136DEC',
@@ -243,7 +248,7 @@ export const excelService = {
                     height: 25,
                 },
                 ...sortedClasses.map(c => ({
-                    value: c.name,
+                    value: excelText(c.name),
                     fontWeight: 'bold' as const,
                     textColor: '#FFFFFF',
                     backgroundColor: '#136DEC',
@@ -285,7 +290,7 @@ export const excelService = {
                         const textColor = getContrastTextColor(bgColor);
 
                         return {
-                            value: `${subjectName}${teacherName}`,
+                            value: excelText(`${subjectName}${teacherName}`),
                             align: 'center' as const,
                             alignVertical: 'center' as const,
                             wrap: true,

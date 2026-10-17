@@ -570,7 +570,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
                                     src={safeUrl}
                                     title="Visualização PDF"
                                     className="w-full h-[500px] rounded-lg border-0"
-                                    sandbox="allow-scripts-to-close allow-same-origin"
+                                    sandbox=""
                                 />
                             ) : (
                                 <img

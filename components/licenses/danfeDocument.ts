@@ -33,8 +33,9 @@ const invoiceNumber = (id: string) => {
 };
 
 export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => {
-    const total = Number(license.value_paid) || 0;
-    const classes = license.classes_amount ?? 0;
+    const paid = Number(license.value_paid);
+    const total = Number.isFinite(paid) ? paid : 0;
+    const classes = Math.max(0, Math.trunc(Number(license.classes_amount) || 0));
     const issuedAt = formatDate(license.payment_date);
     const number = invoiceNumber(license.id);
     const description = `Licença de uso Horium — ${classes} turmas`;
@@ -219,7 +220,7 @@ export const buildDanfeHtml = (license: DanfeLicense, recipientName: string) => 
       <div class="col" style="width: 65%; justify-content: flex-start;">
         <span class="lbl">INFORMAÇÕES COMPLEMENTARES</span>
         <div class="val-normal" style="margin-top: 3px;">
-          Licença Horium (${classes} turmas), válida até ${formatDate(license.valid_until)}.<br>
+          Licença Horium (${escapeHtml(String(classes))} turmas), válida até ${escapeHtml(formatDate(license.valid_until))}.<br>
           Não é NF-e autorizada pela SEFAZ e não gera crédito fiscal.
         </div>
       </div>
@@ -242,10 +243,16 @@ const scopeDanfeCss = (css: string) =>
         return `${prefix} ${scoped} {`;
     });
 
+const danfeMarkupIsSafe = (value: string) =>
+    !/<\s*script|javascript\s*:|on[a-z]+\s*=/i.test(value);
+
 export const getDanfeMarkup = (license: DanfeLicense, recipientName: string) => {
     const html = buildDanfeHtml(license, recipientName);
     const css = scopeDanfeCss(html.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '');
     const body = html.match(/<body>([\s\S]*?)<\/body>/)?.[1] ?? '';
+    if (!danfeMarkupIsSafe(css) || !danfeMarkupIsSafe(body)) {
+        return { css: '', body: '' };
+    }
     return { css, body: `<div class="danfe-scope">${body}</div>` };
 };
 

@@ -48,9 +48,10 @@ describe('Receipt Security & XSS Mitigation Tests', () => {
             expect(getSafeHttpsUrl('blob:http://localhost/uuid')).toBeNull();
         });
 
-        it('deve aceitar URLs que utilizam estritamente o protocolo HTTPS', () => {
-            const validUrl = 'https://supabase.project.co/storage/v1/object/sign/receipts/user-1/rec.pdf?token=abc';
+        it('deve aceitar URL HTTPS apenas no host do Supabase', () => {
+            const validUrl = 'https://abcd.supabase.co/storage/v1/object/sign/receipts/user-1/rec.pdf?token=abc';
             expect(getSafeHttpsUrl(validUrl)).toBe(validUrl);
+            expect(getSafeHttpsUrl('https://evil.example/receipt.pdf')).toBeNull();
         });
 
         it('deve retornar null para strings vazias ou nulas', () => {
@@ -64,6 +65,10 @@ describe('Receipt Security & XSS Mitigation Tests', () => {
         it('deve detectar PDF corretamente a partir do pathname de URLs HTTPS com token', () => {
             const url = 'https://supabase.co/storage/v1/object/sign/receipts/u1/comprovante.pdf?token=secret123&expiry=3600';
             expect(isPdfReceipt(url)).toBe(true);
+        });
+
+        it('não trata PDF de outro host como comprovante', () => {
+            expect(isPdfReceipt('https://evil.example/comprovante.pdf')).toBe(false);
         });
 
         it('deve retornar false para URLs com imagens mesmo que terminem com parâmetros', () => {

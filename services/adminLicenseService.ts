@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { audio } from './audioService';
 import { isSupabaseStorageHost } from '../utils/safeMedia';
+import { toPublicError } from '../utils/publicError';
 
 export interface AdminLicense {
     id: string;
@@ -49,7 +50,7 @@ export const getSafeHttpsUrl = (url: string | null | undefined): string | null =
 
     try {
         const parsed = new URL(trimmed);
-        if (parsed.protocol !== 'https:') {
+        if (parsed.protocol !== 'https:' || !isSupabaseStorageHost(trimmed)) {
             return null;
         }
         return trimmed;
@@ -78,6 +79,7 @@ export const isPdfReceipt = (urlOrPath: string | null | undefined): boolean => {
 
     try {
         if (lower.startsWith('http://') || lower.startsWith('https://')) {
+            if (!getSafeHttpsUrl(urlOrPath)) return false;
             const parsed = new URL(urlOrPath);
             return parsed.pathname.toLowerCase().endsWith('.pdf');
         }
@@ -103,7 +105,7 @@ export const adminLicenseService = {
 
             if (error) {
                 console.error("Error fetching admin licenses (RPC):", error);
-                throw new Error(error.message);
+                throw new Error(toPublicError(error, 'Não foi possível carregar as licenças.'));
             }
 
             return (data || []).map((item: any) => ({
@@ -146,7 +148,7 @@ export const adminLicenseService = {
 
             if (error) {
                 console.error("Erro ao aprovar licença via RPC:", error);
-                throw new Error(error.message);
+                throw new Error(toPublicError(error, 'Não foi possível aprovar a licença.'));
             }
 
             audio.playSuccess();
@@ -168,7 +170,7 @@ export const adminLicenseService = {
 
             if (error) {
                 console.error("Erro ao rejeitar licença:", error);
-                throw new Error(error.message);
+                throw new Error(toPublicError(error, 'Não foi possível rejeitar a licença.'));
             }
 
             audio.playPop();
@@ -189,7 +191,7 @@ export const adminLicenseService = {
 
             if (error) {
                 console.error("Erro ao excluir licença via RPC:", error);
-                throw new Error(error.message);
+                throw new Error(toPublicError(error, 'Não foi possível excluir a licença.'));
             }
 
             audio.playPop();

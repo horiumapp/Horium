@@ -69,7 +69,7 @@ export const Step1Identification: React.FC<Step1IdentificationProps> = ({ data, 
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) return;
-        if (!file.type.startsWith('image/')) {
+        if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
             setErrors(prev => ({ ...prev, logo: 'Envie um arquivo de imagem (PNG, JPG ou WEBP).' }));
             return;
         }
@@ -130,7 +130,7 @@ export const Step1Identification: React.FC<Step1IdentificationProps> = ({ data, 
                         <input
                             ref={logoInputRef}
                             type="file"
-                            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                            accept="image/png,image/jpeg,image/webp"
                             className="sr-only"
                             onChange={handleLogoChange}
                         />
