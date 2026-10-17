@@ -16,6 +16,10 @@ const SAFE_EXACT = new Set([
     'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.',
     'Tipo de arquivo não permitido. Apenas imagens (PNG, JPG, WEBP) e PDF são aceitos.',
     'O arquivo excede o limite máximo de 5MB.',
+    'Envie o comprovante em PNG, JPG, WEBP ou PDF.',
+    'O comprovante precisa ter no máximo 5 MB.',
+    'Envie o anexo em PNG, JPG, WEBP ou PDF.',
+    'O anexo precisa ter no máximo 5 MB.',
     'Apenas o status de leitura da notificação pode ser atualizado.',
 ]);
 

@@ -3,6 +3,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { ticketService } from '../../services/ticketService';
 import { toPublicError } from '../../utils/publicError';
+import { receiptFileProblem } from '../../utils/safeMedia';
 
 interface TicketModalProps {
     isOpen: boolean;
@@ -53,15 +54,17 @@ export const TicketModal: React.FC<TicketModalProps> = ({ isOpen, onClose }) => 
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            if (file.size > 5 * 1024 * 1024) { // 5MB limit
-                setError('A imagem deve ter no máximo 5MB.');
-                return;
-            }
-            setImageFile(file);
-            setError(null);
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        const problem = receiptFileProblem(file, 'anexo');
+        if (problem) {
+            setImageFile(null);
+            setError(problem);
+            return;
         }
+        setImageFile(file);
+        setError(null);
     };
 
     return (
@@ -137,7 +140,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ isOpen, onClose }) => 
                                     type="file"
                                     ref={fileInputRef}
                                     onChange={handleFileChange}
-                                    accept="image/*"
+                                    accept="image/png,image/jpeg,image/webp,application/pdf"
                                     className="sr-only"
                                     aria-label="Selecionar imagem para anexar ao chamado"
                                     disabled={isSubmitting}
@@ -158,7 +161,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ isOpen, onClose }) => 
                                     <button type="button" onClick={() => fileInputRef.current?.click()} className="flex w-full flex-col items-center gap-1.5 py-2 text-slate-500 transition dark:text-slate-400" disabled={isSubmitting}>
                                         <span className="mb-1 flex size-10 items-center justify-center rounded-xl bg-white text-primary shadow-sm dark:bg-slate-900"><span className="material-symbols-outlined text-xl">cloud_upload</span></span>
                                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Clique para selecionar uma imagem</span>
-                                        <span className="text-xs">PNG ou JPG · até 5 MB</span>
+                                        <span className="text-xs">PNG, JPG, WEBP ou PDF · até 5 MB</span>
                                     </button>
                                 )}
                             </div>

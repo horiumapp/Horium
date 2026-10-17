@@ -10,14 +10,14 @@ const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
 const MAX_LOGO_LENGTH = 200_000;
 const SAFE_LOGO = /^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/]+={0,2}$/i;
 
-export const receiptFileProblem = (file: File) => {
+export const receiptFileProblem = (file: File, label = 'comprovante') => {
     const extension = (file.name.split('.').pop() || '').toLowerCase();
     const expectedType = RECEIPT_TYPES[extension];
     if (!expectedType || file.type !== expectedType) {
-        return 'Envie o comprovante em PNG, JPG, WEBP ou PDF.';
+        return `Envie o ${label} em PNG, JPG, WEBP ou PDF.`;
     }
     if (file.size > MAX_RECEIPT_BYTES) {
-        return 'O comprovante precisa ter no máximo 5 MB.';
+        return `O ${label} precisa ter no máximo 5 MB.`;
     }
     return null;
 };

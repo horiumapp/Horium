@@ -4,6 +4,7 @@ import { ticketService, TicketData } from '../services/ticketService';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { toPublicError } from '../utils/publicError';
+import { isSupabaseStorageHost } from '../utils/safeMedia';
 
 interface AdminPanelPageProps {
     onBack: () => void;
@@ -125,7 +126,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
             const signedUrl = await adminLicenseService.getReceiptSignedUrl(urlOrPath);
             const safeUrl = getSafeHttpsUrl(signedUrl);
 
-            if (safeUrl) {
+            if (safeUrl && isSupabaseStorageHost(safeUrl)) {
                 setViewingReceiptUrl(safeUrl);
                 return;
             }
@@ -143,7 +144,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
             const signedUrl = await ticketService.getAttachmentSignedUrl(urlOrPath);
             const safeUrl = getSafeHttpsUrl(signedUrl);
 
-            if (safeUrl) {
+            if (safeUrl && isSupabaseStorageHost(safeUrl)) {
                 setViewingReceiptUrl(safeUrl);
                 return;
             }

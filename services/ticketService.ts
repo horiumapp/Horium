@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { SAFE_STORAGE_PATH_REGEX, getSafeHttpsUrl } from './adminLicenseService';
+import { isSupabaseStorageHost, receiptContentType, receiptFileProblem } from '../utils/safeMedia';
 
 export interface TicketData {
     id?: string;
@@ -12,8 +13,8 @@ export interface TicketData {
     status: 'aberto' | 'em_andamento' | 'fechado';
 }
 
-const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'pdf'];
-const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+const missingRpc = (error: { code?: string; message?: string } | null) =>
+    error?.code === 'PGRST202' || /could not find the function/i.test(error?.message || '');
 
 export const ticketService = {
     async createTicket(ticket: Omit<TicketData, 'id' | 'createdAt' | 'userId' | 'status'>, imageFile?: File): Promise<TicketData> {
@@ -23,14 +24,10 @@ export const ticketService = {
         let storedPath = '';
 
         if (imageFile) {
-            const rawExt = (imageFile.name.split('.').pop() || '').toLowerCase();
-            if (!ALLOWED_EXTENSIONS.includes(rawExt) || !ALLOWED_MIME_TYPES.includes(imageFile.type)) {
-                throw new Error('Tipo de arquivo não permitido. Apenas imagens (PNG, JPG, WEBP) e PDF são aceitos.');
-            }
+            const fileProblem = receiptFileProblem(imageFile, 'anexo');
+            if (fileProblem) throw new Error(fileProblem);
 
-            if (imageFile.size > 5 * 1024 * 1024) {
-                throw new Error('O arquivo excede o limite máximo de 5MB.');
-            }
+            const rawExt = (imageFile.name.split('.').pop() || '').toLowerCase();
 
             const fileName = `${Date.now()}_${crypto.randomUUID()}.${rawExt}`;
             const filePath = `${user.id}/${fileName}`;
@@ -39,7 +36,8 @@ export const ticketService = {
                 .from('tickets-attachments')
                 .upload(filePath, imageFile, {
                     cacheControl: '3600',
-                    upsert: false
+                    upsert: false,
+                    contentType: receiptContentType(imageFile)
                 });
 
             if (uploadError) {
@@ -116,7 +114,9 @@ export const ticketService = {
             return '';
         }
 
-        return getSafeHttpsUrl(data.signedUrl) || '';
+        const safeSigned = getSafeHttpsUrl(data.signedUrl);
+        if (!safeSigned || !isSupabaseStorageHost(safeSigned)) return '';
+        return safeSigned;
     },
 
     /**
@@ -139,7 +139,12 @@ export const ticketService = {
             }));
         }
 
-        // Fallback para select direto na tabela tickets
+        if (rpcError && !missingRpc(rpcError)) {
+            console.error('Error fetching tickets:', rpcError);
+            throw rpcError;
+        }
+
+        // A tabela direta só entra se a RPC ainda não existir neste projeto.
         const { data, error } = await supabase
             .from('tickets')
             .select('*')
@@ -205,7 +210,12 @@ export const ticketService = {
             return;
         }
 
-        // Se a RPC não existir ou falhar, tenta o update direto na tabela como fallback
+        if (!missingRpc(rpcError)) {
+            console.error('Error updating ticket status:', rpcError);
+            throw rpcError;
+        }
+
+        // Update direto só se a RPC ainda não existir neste projeto.
         const { error } = await supabase
             .from('tickets')
             .update({ status })
