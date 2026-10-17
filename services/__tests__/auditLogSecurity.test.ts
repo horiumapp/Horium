@@ -96,7 +96,7 @@ describe('auditLogService & RLS Security Contracts', () => {
 
         it('[Critério 3] Tentativa de INSERT direto por usuário comum é rejeitada pela ausência de política de INSERT', async () => {
             // Cenário: Usuário autenticado tenta executar POST /rest/v1/audit_logs
-            // Com o RLS restritivo, não há política de INSERT para authenticated (apenas service_role e admin)
+            // Com o RLS restritivo, não há política de INSERT para authenticated (apenas service_role; o trigger grava como dono da função)
             // O PostgreSQL rejeita com erro 42501 (violates row-level security policy)
             const rlsViolationError = {
                 code: '42501',

@@ -1,7 +1,16 @@
 import { setRememberSession, supabase } from './supabaseClient';
 
+const MIN_PASSWORD_LENGTH = 8;
+
+const assertPasswordLength = (password: string) => {
+    if (password.length < MIN_PASSWORD_LENGTH) {
+        throw new Error('Password should be at least 8 characters');
+    }
+};
+
 export const authService = {
     async signUp(email: string, password: string, gender: string) {
+        assertPasswordLength(password);
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -43,6 +52,7 @@ export const authService = {
     },
 
     async updatePassword(password: string) {
+        assertPasswordLength(password);
         const { data, error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
         return data;
@@ -96,6 +106,6 @@ export const authService = {
             'Too many requests': 'Muitas solicitações simultâneas. Tente novamente em alguns minutos.',
         };
 
-        return errorMap[message] || errorMap[code] || message || 'Ocorreu um erro inesperado.';
+        return errorMap[message] || errorMap[code] || 'Ocorreu um erro inesperado.';
     }
 };

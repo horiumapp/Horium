@@ -700,7 +700,7 @@ const App: React.FC = () => {
                 minLength={8}
                 value={newPasswordInput}
                 onChange={(e) => setNewPasswordInput(e.target.value)}
-                placeholder="Mínimo de 6 caracteres"
+                placeholder="Mínimo de 8 caracteres"
                 className="w-full h-11 px-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:border-primary"
               />
             </div>

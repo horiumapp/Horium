@@ -35,19 +35,14 @@ DROP POLICY IF EXISTS "Users read own profile" ON public.profiles;
 -- 2. FUNÇÃO AUXILIAR DE SEGURANÇA (ADMIN) DINÂMICA E PROTEGIDA
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
-DECLARE
-    v_user_email TEXT;
 BEGIN
     IF auth.uid() IS NULL THEN
         RETURN false;
     END IF;
 
-    v_user_email := LOWER(COALESCE(auth.jwt() ->> 'email', ''));
-
     RETURN EXISTS (
         SELECT 1 FROM public.admin_users au
-        WHERE (au.user_id IS NOT NULL AND au.user_id = auth.uid())
-           OR (au.email IS NOT NULL AND LOWER(au.email) = v_user_email)
+        WHERE au.user_id IS NOT NULL AND au.user_id = auth.uid()
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
@@ -58,14 +53,34 @@ FOR SELECT TO authenticated
 USING (id = auth.uid() OR public.is_admin());
 
 -- Gerenciamento de Administradores:
--- O papel de administrador é dinâmico e determinado unicamente por registros na tabela admin_users.
--- Exemplo para cadastrar administradores:
--- INSERT INTO public.admin_users (email) VALUES ('admin@dominio.com') ON CONFLICT (email) DO NOTHING;
+-- O papel de administrador depende só de admin_users.user_id = auth.uid().
+-- O e-mail da linha não concede acesso.
+-- INSERT INTO public.admin_users (user_id, email)
+-- VALUES ('<uuid de auth.users>', 'admin@dominio.com');
 
 -- Políticas de RLS para admin_users (Apenas admins gerenciam/visualizam)
 DROP POLICY IF EXISTS "Admins can manage admin_users" ON public.admin_users;
 CREATE POLICY "Admins can manage admin_users" ON public.admin_users
 FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+CREATE OR REPLACE FUNCTION public.admin_users_require_user_id()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    IF NEW.user_id IS NULL THEN
+        RAISE EXCEPTION 'admin_users.user_id é obrigatório.';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_admin_users_require_user_id ON public.admin_users;
+CREATE TRIGGER trg_admin_users_require_user_id
+BEFORE INSERT OR UPDATE ON public.admin_users
+FOR EACH ROW
+EXECUTE FUNCTION public.admin_users_require_user_id();
 
 -- RPC para o frontend consultar status de admin do usuário autenticado de forma segura
 CREATE OR REPLACE FUNCTION public.is_current_user_admin()
@@ -399,7 +414,7 @@ ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS client_ip TEXT;
 -- Habilitar RLS para audit_logs
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Políticas de RLS restritivas para audit_logs (Isolamento Multi-Tenant e Imutabilidade para Usuários Comuns)
+-- Políticas de RLS restritivas para audit_logs (Isolamento Multi-Tenant e imutabilidade para authenticated)
 DROP POLICY IF EXISTS "Permitir acesso audit_logs" ON public.audit_logs;
 
 DROP POLICY IF EXISTS "Service role can manage audit_logs" ON public.audit_logs;
@@ -407,10 +422,10 @@ CREATE POLICY "Service role can manage audit_logs" ON public.audit_logs
 FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Admins can manage audit_logs" ON public.audit_logs;
-CREATE POLICY "Admins can manage audit_logs" ON public.audit_logs
-FOR ALL TO authenticated 
-USING (public.is_admin()) 
-WITH CHECK (public.is_admin());
+DROP POLICY IF EXISTS "Admins can view audit_logs" ON public.audit_logs;
+CREATE POLICY "Admins can view audit_logs" ON public.audit_logs
+FOR SELECT TO authenticated
+USING (public.is_admin());
 
 DROP POLICY IF EXISTS "Users can view their own audit_logs" ON public.audit_logs;
 CREATE POLICY "Users can view their own audit_logs" ON public.audit_logs
