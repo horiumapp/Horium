@@ -65,6 +65,9 @@ export const ticketService = {
 
         if (error) {
             console.error('Error creating ticket:', error);
+            if (storedPath) {
+                await supabase.storage.from('tickets-attachments').remove([storedPath]);
+            }
             throw error;
         }
 

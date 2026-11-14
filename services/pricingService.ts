@@ -19,9 +19,9 @@ export const PLAN_PRICES: Record<PlanDuration, number> = {
 };
 
 export const PLAN_OPTIONS: PlanOption[] = [
-    { label: '06 meses', sub: 'SEM REAJUSTE', pricePerClass: 15.00, description: 'Acesso completo por 6 meses' },
-    { label: '1 ano', sub: 'MAIS POPULAR', pricePerClass: 25.00, description: 'Ano letivo completo com atualizações' },
-    { label: '2 anos', sub: 'MELHOR CUSTO-BENEFÍCIO', pricePerClass: 50.00, description: 'Dois anos com congelamento de valor' }
+    { label: '06 meses', sub: 'SEM REAJUSTE', pricePerClass: PLAN_PRICES['06 meses'], description: 'Acesso completo por 6 meses' },
+    { label: '1 ano', sub: 'MAIS POPULAR', pricePerClass: PLAN_PRICES['1 ano'], description: 'Ano letivo completo com atualizações' },
+    { label: '2 anos', sub: 'MELHOR CUSTO-BENEFÍCIO', pricePerClass: PLAN_PRICES['2 anos'], description: 'Dois anos com congelamento de valor' }
 ];
 
 export const pricingService = {
@@ -30,7 +30,7 @@ export const pricingService = {
      */
     calculatePrice(classesCount: number, duration: PlanDuration): number {
         const count = Math.max(1, Math.min(100, Math.floor(classesCount || 1)));
-        const unitPrice = PLAN_PRICES[duration] || 15.00;
+        const unitPrice = PLAN_PRICES[duration] ?? PLAN_PRICES['06 meses'];
         return count * unitPrice;
     },
 

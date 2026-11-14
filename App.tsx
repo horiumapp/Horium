@@ -63,6 +63,7 @@ const App: React.FC = () => {
   const latestSaveSeq = React.useRef(0);
   const setupDataRef = React.useRef(setupData);
   const saveChainRef = React.useRef(Promise.resolve());
+  const lastSavedJson = React.useRef('');
   setupDataRef.current = setupData;
 
   // Debounced Auto-save com proteção contra race conditions e backup local
@@ -86,6 +87,9 @@ const App: React.FC = () => {
       }
     }
 
+    const pendingJson = JSON.stringify(setupData);
+    if (pendingJson === lastSavedJson.current) return;
+
     const currentSeq = ++latestSaveSeq.current;
     const timer = setTimeout(() => {
       saveChainRef.current = saveChainRef.current
@@ -99,6 +103,7 @@ const App: React.FC = () => {
             const saved = await scheduleService.saveSchedule(snapshot);
 
             if (currentSeq !== latestSaveSeq.current) return;
+            lastSavedJson.current = JSON.stringify(snapshot);
             setSchedules(prev => prev.map(s => s.id === saved.id ? {
               ...saved,
               institution: {
@@ -273,6 +278,8 @@ const App: React.FC = () => {
       if (event === 'PASSWORD_RECOVERY') {
         setShowResetPasswordModal(true);
       }
+      // O refresh do token não muda os dados. Recarregar a grade aqui baixa tudo de novo sem necessidade.
+      if (event === 'TOKEN_REFRESHED') return;
       if (newSession) {
         loadLicenseStatus(newSession.user.id);
         scheduleService.getSchedules()

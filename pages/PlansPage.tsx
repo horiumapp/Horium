@@ -137,6 +137,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
 
       if (rpcError) {
         console.error("RPC request_license_order falhou:", rpcError);
+        await supabase.storage.from('receipts').remove([filePath]);
         alert(toPublicError(rpcError, 'Falha na validação do pedido no servidor.'));
         setPaymentStatus('upload_receipt');
         return;

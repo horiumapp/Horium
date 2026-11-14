@@ -47,7 +47,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
 
-DROP POLICY IF EXISTS "Users read own profile" ON public.profiles;
+-- Dia civil em Brasília. CURRENT_DATE no servidor é UTC e vira o dia seguinte às 21h.
+CREATE OR REPLACE FUNCTION public.business_today()
+RETURNS DATE AS $$
+    SELECT (timezone('America/Sao_Paulo', now()))::date;
+$$ LANGUAGE sql STABLE SET search_path = public, pg_temp;
+
 CREATE POLICY "Users read own profile" ON public.profiles
 FOR SELECT TO authenticated
 USING (id = auth.uid() OR public.is_admin());
@@ -441,8 +446,9 @@ BEGIN
         TG_TABLE_NAME,
         COALESCE(NEW.id, OLD.id),
         TG_OP,
-        CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN to_jsonb(OLD) ELSE NULL END,
-        CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN to_jsonb(NEW) ELSE NULL END,
+        -- O JSON da grade fica em schedules.data. A auditoria guarda o evento, não uma cópia inteira a cada auto-save.
+        CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN to_jsonb(OLD) - 'data' ELSE NULL END,
+        CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN to_jsonb(NEW) - 'data' ELSE NULL END,
         auth.uid(),
         timezone('utc', now())
     );
@@ -615,7 +621,7 @@ BEGIN
             FROM public.licenses l
             WHERE l.user_id = v_user_id
               AND l.payment_status = 'Aprovado'
-              AND (l.valid_until IS NULL OR l.valid_until >= CURRENT_DATE)
+              AND (l.valid_until IS NULL OR l.valid_until >= public.business_today())
               AND (l.schedule_id = s.id OR l.schedule_id IS NULL)
       );
 
@@ -665,7 +671,7 @@ BEGIN
             FROM public.licenses l
             WHERE l.user_id = v_user_id
               AND l.payment_status = 'Aprovado'
-              AND (l.valid_until IS NULL OR l.valid_until >= CURRENT_DATE)
+              AND (l.valid_until IS NULL OR l.valid_until >= public.business_today())
               AND (l.schedule_id = s.id OR l.schedule_id IS NULL)
       );
 END;
@@ -833,7 +839,7 @@ BEGIN
     ) VALUES (
         auth.uid(),
         p_schedule_id,
-        CURRENT_DATE,
+        public.business_today(),
         p_classes_amount,
         v_total_price,
         'PIX',
@@ -883,7 +889,7 @@ BEGIN
             SELECT 1 FROM public.licenses
             WHERE (schedule_id = p_schedule_id OR (user_id = v_owner_id AND schedule_id IS NULL))
               AND payment_status = 'Aprovado'
-              AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
+              AND (valid_until IS NULL OR valid_until >= public.business_today())
         ) THEN
             -- Revogação efetiva: a flag e qualquer cópia legada da solução saem no mesmo UPDATE.
             UPDATE public.schedules
@@ -898,7 +904,8 @@ BEGIN
                     is_licensed IS DISTINCT FROM false
                     OR (data ? 'fixedLessons')
               );
-            RAISE EXCEPTION 'Para visualizar as tabelas e exportar os resultados, é necessário possuir uma licença ativa para esta grade.';
+            -- Retorna vazio em vez de lançar erro: um RAISE EXCEPTION desfaz o UPDATE acima.
+            RETURN '[]'::jsonb;
         END IF;
     END IF;
 
@@ -994,6 +1001,8 @@ CREATE INDEX IF NOT EXISTS idx_licenses_valid_until ON public.licenses(valid_unt
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON public.notifications(user_id, is_read, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON public.tickets(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON public.audit_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_users_user_id ON public.admin_users(user_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_solutions_user_id ON public.schedule_solutions(user_id);
 
 
 -- 10. RPC para envio seguro de notificação administrativa

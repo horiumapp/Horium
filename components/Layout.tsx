@@ -113,7 +113,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
 
     fetchUser();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED') return;
       if (!hideNav && currentView !== AppView.LOGIN) {
         fetchUser(session?.user);
       }
