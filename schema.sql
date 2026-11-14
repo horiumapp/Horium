@@ -1045,3 +1045,38 @@ BEGIN
 END;
 $$;
 
+-- 11. schema_migrations fica fora da API pública.
+-- Sem policy para anon e authenticated. service_role continua pelo bypass de RLS.
+CREATE TABLE IF NOT EXISTS public.schema_migrations (
+    version TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
+);
+
+ALTER TABLE public.schema_migrations ENABLE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE
+    r record;
+BEGIN
+    FOR r IN
+        SELECT policyname
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'schema_migrations'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.schema_migrations', r.policyname);
+    END LOOP;
+END $$;
+
+REVOKE ALL ON TABLE public.schema_migrations FROM PUBLIC;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+        EXECUTE 'REVOKE ALL ON TABLE public.schema_migrations FROM anon';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        EXECUTE 'REVOKE ALL ON TABLE public.schema_migrations FROM authenticated';
+    END IF;
+END $$;
+
