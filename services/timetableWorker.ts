@@ -1,6 +1,7 @@
 import { SetupData, FixedLesson, SchedulingFailure, AvailabilityStatus } from '../types';
 import { ensureScheduleSlots } from '../utils/scheduleUtils';
 import { runPreflightFeasibility } from './enginePreflight';
+import { throwIfGeneratorAborted } from './generatorAbort';
 
 export interface GroupingRule {
     maxDaily: number;
@@ -166,12 +167,6 @@ export type RunGeneratorEngineOptions = {
     /** Quando > 0, cede ao event loop a cada N iterações (necessário para cancelar no fallback da main thread). */
     yieldEvery?: number;
 };
-
-function throwIfGeneratorAborted(signal?: AbortSignal): void {
-    if (signal?.aborted) {
-        throw new DOMException('Geração cancelada.', 'AbortError');
-    }
-}
 
 export async function runGeneratorEngine(
     rawSetupData: SetupData,

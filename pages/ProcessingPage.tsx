@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 
 interface ProcessingPageProps {
   onComplete: () => void;
+  onCancel?: () => void;
   isMuted?: boolean;
   progress: number;
   message: string;
 }
 
-const ProcessingPage: React.FC<ProcessingPageProps> = ({ onComplete, isMuted = false, progress, message }) => {
+const ProcessingPage: React.FC<ProcessingPageProps> = ({ onComplete, onCancel, isMuted = false, progress, message }) => {
 
   // Remove auto-complete to force a user gesture, which unlocks the AudioContext reliably
   // useEffect(() => {
@@ -52,6 +53,17 @@ const ProcessingPage: React.FC<ProcessingPageProps> = ({ onComplete, isMuted = f
             <span className="material-symbols-outlined text-sm">info</span>
             <p>Isso costuma levar até 45 segundos. Por favor, não feche o navegador.</p>
           </div>
+          {onCancel && progress < 100 && (
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="text-xs text-slate-500 hover:text-slate-700 dark:text-gray-400 dark:hover:text-gray-200 underline font-semibold transition-colors"
+              >
+                Cancelar geração e voltar
+              </button>
+            </div>
+          )}
         </div>
         <div className="w-full max-w-[520px]">
           <h4 className="text-slate-500 dark:text-gray-400 text-xs font-semibold leading-normal tracking-wide px-4 py-2 text-center border-t border-slate-200 dark:border-gray-800">

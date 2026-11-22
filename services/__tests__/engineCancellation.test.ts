@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runGeneratorEngine } from '../timetableWorker';
 import { generateTimetable } from '../timetableGenerator';
+import { isGeneratorAbortError } from '../generatorAbort';
 import { SetupData } from '../../types';
 
 const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
@@ -102,8 +103,7 @@ async function expectAbort(promise: Promise<unknown>): Promise<void> {
     await promise;
     expect.unreachable('deveria ter abortado');
   } catch (err) {
-    expect(err).toBeInstanceOf(DOMException);
-    expect((err as DOMException).name).toBe('AbortError');
+    expect(isGeneratorAbortError(err)).toBe(true);
   }
 }
 

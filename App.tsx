@@ -4,6 +4,7 @@ import { INITIAL_SETUP } from './constants';
 import Layout from './components/Layout';
 import { scheduleService } from './services/scheduleService';
 import { generateTimetable } from './services/timetableGenerator';
+import { isGeneratorAbortError } from './services/generatorAbort';
 import { authService } from './services/authService';
 import { supabase } from './services/supabaseClient';
 import { audio } from './services/audioService';
@@ -410,6 +411,15 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const cancelGeneration = () => {
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = null;
+    generationRunIdRef.current += 1;
+    setGenerationProgress(0);
+    setGenerationMessage('');
+    setView(AppView.SETUP);
+  };
+
   const handleSetupComplete = async () => {
     audio.playClick();
     setView(AppView.PROCESSING);
@@ -449,8 +459,8 @@ const App: React.FC = () => {
         fixedLessons: result.fixedLessons,
         failures: result.failures
       }));
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (isGeneratorAbortError(err)) return;
       console.error('Erro na geração de horários:', err);
       alert('Ocorreu um erro ao gerar os horários. Tente novamente.');
       setView(AppView.SETUP);
@@ -631,6 +641,7 @@ const App: React.FC = () => {
         return (
           <ProcessingPage
             onComplete={handleProcessingComplete}
+            onCancel={cancelGeneration}
             isMuted={isMuted}
             progress={generationProgress}
             message={generationMessage}

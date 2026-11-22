@@ -1,6 +1,7 @@
 import { SetupData, FixedLesson, SchedulingFailure } from '../types';
 import { runGeneratorEngine } from './timetableWorker';
 import { ensureScheduleSlots } from '../utils/scheduleUtils';
+import { createGeneratorAbortError, isGeneratorAbortError } from './generatorAbort';
 
 export type GenerateTimetableResult = { fixedLessons: FixedLesson[]; failures: SchedulingFailure[] };
 
@@ -21,7 +22,7 @@ export const generateTimetable = async (
     const signal = options?.signal;
 
     if (signal?.aborted) {
-        throw new DOMException('Geração cancelada.', 'AbortError');
+        throw createGeneratorAbortError();
     }
 
     if (onProgress) {
@@ -30,7 +31,7 @@ export const generateTimetable = async (
 
     const throwIfAborted = () => {
         if (signal?.aborted) {
-            throw new DOMException('Geração cancelada.', 'AbortError');
+            throw createGeneratorAbortError();
         }
     };
 
@@ -55,7 +56,7 @@ export const generateTimetable = async (
                 };
 
                 const onAbort = () => {
-                    finish(() => reject(new DOMException('Geração cancelada.', 'AbortError')));
+                    finish(() => reject(createGeneratorAbortError()));
                 };
 
                 const timeoutId = setTimeout(() => {
@@ -94,7 +95,7 @@ export const generateTimetable = async (
                 worker.postMessage({ setupData: normalizedData });
             });
         } catch (workerInitErr) {
-            if (workerInitErr instanceof DOMException && workerInitErr.name === 'AbortError') {
+            if (isGeneratorAbortError(workerInitErr)) {
                 throw workerInitErr;
             }
             console.warn('Could not start Web Worker, using main thread fallback:', workerInitErr);
