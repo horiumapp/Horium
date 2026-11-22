@@ -94,8 +94,9 @@ export interface SchedulingFailure {
   subjectId: string;
   classId: string;
   teacherId: string;
-  reason: 'TEACHER_LIMIT' | 'NO_AVAILABILITY' | 'CLASS_LIMIT' | 'CONFLICT';
+  reason: 'TEACHER_LIMIT' | 'NO_AVAILABILITY' | 'CLASS_LIMIT' | 'CONFLICT' | 'NO_TEACHER';
   details?: string;
+  suggestions?: string[];
 }
 
 export interface SetupData {

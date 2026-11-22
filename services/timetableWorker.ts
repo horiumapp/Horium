@@ -109,6 +109,57 @@ interface Block {
     consecutive: boolean;
 }
 
+function diagnosePlacementFailure(opts: {
+    assignment: Assignment;
+    teacherFreeSlots: number;
+    classFreeSlots: number;
+    teacherName?: string;
+    className?: string;
+    subjectName?: string;
+    requested: number;
+}): SchedulingFailure {
+    const {
+        assignment,
+        teacherFreeSlots,
+        classFreeSlots,
+        teacherName = 'o professor',
+        className = 'a turma',
+        subjectName = 'a disciplina',
+        requested,
+    } = opts;
+
+    const suggestions: string[] = [];
+    let reason: SchedulingFailure['reason'] = 'NO_AVAILABILITY';
+    let details = `Não foi possível alocar todas as aulas de ${subjectName} da turma ${className}.`;
+
+    if (teacherFreeSlots < requested && teacherFreeSlots <= classFreeSlots) {
+        reason = 'TEACHER_LIMIT';
+        details = `Não foi possível alocar todas as aulas de ${subjectName} da turma ${className}. ${teacherName} possui apenas ${teacherFreeSlots} período(s) disponível(is), mas são necessários ${requested}.`;
+        suggestions.push('Liberar mais horários para o professor (reduzir bloqueios ND).');
+        suggestions.push('Redistribuir a carga horária desta disciplina.');
+        suggestions.push('Ajustar o limite diário do professor, se estiver muito restritivo.');
+    } else if (classFreeSlots < requested) {
+        reason = 'CLASS_LIMIT';
+        details = `Não foi possível alocar todas as aulas de ${subjectName} da turma ${className}. A turma possui apenas ${classFreeSlots} período(s) livre(s), mas são necessários ${requested}.`;
+        suggestions.push('Reduzir a carga horária total da turma ou liberar horários bloqueados.');
+        suggestions.push('Ajustar restrições de tempo (ND) da turma.');
+    } else {
+        details = `Não foi possível alocar 1 aula de ${subjectName} da turma ${className} com ${teacherName}. Há conflito entre disponibilidade, agrupamento e horários já ocupados.`;
+        suggestions.push('Revisar regras de agrupamento (máximo diário / consecutivas).');
+        suggestions.push('Verificar aulas fixas que possam estar bloqueando slots.');
+        suggestions.push('Liberar disponibilidade do professor ou da turma.');
+    }
+
+    return {
+        teacherId: assignment.teacherId,
+        classId: assignment.classId,
+        subjectId: assignment.subjectId,
+        reason,
+        details,
+        suggestions,
+    };
+}
+
 export function runGeneratorEngine(
     rawSetupData: SetupData,
     onProgress?: (progress: number, message: string) => void
@@ -408,10 +459,26 @@ export function runGeneratorEngine(
                                 'Não Especificado',
                             rule
                         });
+                    } else {
+                        const subjectName = subjectById.get(subjectId)?.name || 'disciplina';
+                        failures.push({
+                            teacherId: '',
+                            classId: classroom.id,
+                            subjectId,
+                            reason: 'NO_TEACHER',
+                            details: `Não há professor elegível para ${subjectName} na turma ${classroom.name}. São necessárias ${lessonCount} aula(s).`,
+                            suggestions: [
+                                'Atribua um professor como OBRIGATORIAMENTE ou PODERÁ para esta disciplina/turma.',
+                                'Verifique se a disciplina está marcada como NÃO para todos os professores.',
+                            ],
+                        });
                     }
                 }
             });
         });
+
+        // Falhas estruturais (ex.: sem professor) devem sobreviver ao recálculo de failures no fim.
+        const structuralFailures: SchedulingFailure[] = [...failures];
 
         // Professores sem folga (Informática e Jurídico: 2 dias, 5+5 primeiros tempos)
         // entram antes do restante, senão a grade fecha os únicos horários deles.
@@ -1332,13 +1399,35 @@ export function runGeneratorEngine(
                     if (!placed) {
                         const key = `${failedBlock.assignment.teacherId}|${failedBlock.assignment.classId}|${failedBlock.assignment.subjectId}`;
                         failedAssignmentWeights[key] = (failedAssignmentWeights[key] || 0) + 20;
-                        failures.push({
-                            teacherId: failedBlock.assignment.teacherId,
-                            classId: failedBlock.assignment.classId,
-                            subjectId: failedBlock.assignment.subjectId,
-                            reason: 'NO_AVAILABILITY',
-                            details: `Não foi possível encontrar slot para 1 aula de ${subjectById.get(failedBlock.assignment.subjectId)?.name}.`
-                        });
+                        const ti = teacherIdx.get(failedBlock.assignment.teacherId);
+                        const ci = classIdx.get(failedBlock.assignment.classId);
+                        let teacherFree = 0;
+                        let classFree = 0;
+                        if (ti !== undefined) {
+                            for (let di = 0; di < nDays; di++) {
+                                for (let s = 0; s < slotsPerDay; s++) {
+                                    const bit = 1 << s;
+                                    if (!(teacherNd[tOff(ti, di)] & bit) && !(teacherMask[tOff(ti, di)] & bit)) teacherFree++;
+                                }
+                            }
+                        }
+                        if (ci !== undefined) {
+                            for (let di = 0; di < nDays; di++) {
+                                for (let s = 0; s < slotsPerDay; s++) {
+                                    const bit = 1 << s;
+                                    if (!(classNd[cOff(ci, di)] & bit) && !(classMask[cOff(ci, di)] & bit)) classFree++;
+                                }
+                            }
+                        }
+                        failures.push(diagnosePlacementFailure({
+                            assignment: failedBlock.assignment,
+                            teacherFreeSlots: teacherFree,
+                            classFreeSlots: classFree,
+                            teacherName: teacherById.get(failedBlock.assignment.teacherId)?.name,
+                            className: classById.get(failedBlock.assignment.classId)?.name,
+                            subjectName: subjectById.get(failedBlock.assignment.subjectId)?.name,
+                            requested: failedBlock.assignment.lessons,
+                        }));
                     }
                 }
             }
@@ -1777,7 +1866,19 @@ export function runGeneratorEngine(
             }
             if (spots.length < needed.length) return false;
             const snap = copyState();
-            const removed = currentFixed.filter(lesson => lesson.classId === classId);
+            // Preserva aulas pinadas/manuais; rematch só reconstrói o restante.
+            const removed = currentFixed.filter(lesson =>
+                lesson.classId === classId &&
+                !pinnedSlots.has(`${lesson.classId}|${lesson.day}|${lesson.slotIndex}`)
+            );
+            const pinnedCount = currentFixed.filter(lesson =>
+                lesson.classId === classId &&
+                pinnedSlots.has(`${lesson.classId}|${lesson.day}|${lesson.slotIndex}`)
+            ).length;
+            const unitsToPlace = Math.max(0, needed.length - pinnedCount);
+            if (spots.filter(s => !pinnedSlots.has(`${classId}|${s.day}|${s.slot}`)).length < unitsToPlace) {
+                return false;
+            }
             for (const lesson of removed) {
                 const idx = currentFixed.indexOf(lesson);
                 if (idx >= 0) currentFixed.splice(idx, 1);
@@ -1911,20 +2012,43 @@ export function runGeneratorEngine(
                 if (!placed) {
                     const key = `${failedBlock.assignment.teacherId}|${failedBlock.assignment.classId}|${failedBlock.assignment.subjectId}`;
                     failedAssignmentWeights[key] = (failedAssignmentWeights[key] || 0) + 20;
-                    failures.push({
-                        teacherId: failedBlock.assignment.teacherId,
-                        classId: failedBlock.assignment.classId,
-                        subjectId: failedBlock.assignment.subjectId,
-                        reason: 'NO_AVAILABILITY',
-                        details: `Não foi possível encontrar slot para 1 aula de ${subjectById.get(failedBlock.assignment.subjectId)?.name}.`
-                    });
+                    const ti = teacherIdx.get(failedBlock.assignment.teacherId);
+                    const ci = classIdx.get(failedBlock.assignment.classId);
+                    let teacherFree = 0;
+                    let classFree = 0;
+                    if (ti !== undefined) {
+                        for (let di = 0; di < nDays; di++) {
+                            for (let s = 0; s < slotsPerDay; s++) {
+                                const bit = 1 << s;
+                                if (!(teacherNd[tOff(ti, di)] & bit) && !(teacherMask[tOff(ti, di)] & bit)) teacherFree++;
+                            }
+                        }
+                    }
+                    if (ci !== undefined) {
+                        for (let di = 0; di < nDays; di++) {
+                            for (let s = 0; s < slotsPerDay; s++) {
+                                const bit = 1 << s;
+                                if (!(classNd[cOff(ci, di)] & bit) && !(classMask[cOff(ci, di)] & bit)) classFree++;
+                            }
+                        }
+                    }
+                    failures.push(diagnosePlacementFailure({
+                        assignment: failedBlock.assignment,
+                        teacherFreeSlots: teacherFree,
+                        classFreeSlots: classFree,
+                        teacherName: teacherById.get(failedBlock.assignment.teacherId)?.name,
+                        className: classById.get(failedBlock.assignment.classId)?.name,
+                        subjectName: subjectById.get(failedBlock.assignment.subjectId)?.name,
+                        requested: failedBlock.assignment.lessons,
+                    }));
                 }
             }
         } else {
             failures.length = 0;
         }
 
-        return { fixedLessons: currentFixed, failures, score: calculateScore(currentFixed, failures) };
+        const allFailures = structuralFailures.concat(failures);
+        return { fixedLessons: currentFixed, failures: allFailures, score: calculateScore(currentFixed, allFailures) };
     };
 
     let bestResult = { fixedLessons: [] as FixedLesson[], failures: [] as SchedulingFailure[], score: -Infinity };

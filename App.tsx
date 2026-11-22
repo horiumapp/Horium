@@ -10,6 +10,7 @@ import { audio } from './services/audioService';
 import { adminLicenseService } from './services/adminLicenseService';
 import { Modal } from './components/ui/Modal';
 import { Button } from './components/ui/Button';
+import { businessToday, isBusinessDateExpired } from './utils/businessDate';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -153,15 +154,14 @@ const App: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (!licenseError && userLicenses && userLicenses.length > 0) {
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = businessToday();
         const activeApproved = userLicenses.filter(l => {
           if (l.payment_status !== 'Aprovado') return false;
-          if (l.valid_until && l.valid_until < todayStr) return false;
-          return true;
+          return !isBusinessDateExpired(l.valid_until, todayStr);
         });
 
         const hasPending = userLicenses.some(l => l.payment_status === 'Aguardando' || l.payment_status === 'under_review');
-        const hasExpired = userLicenses.some(l => l.payment_status === 'Aprovado' && l.valid_until && l.valid_until < todayStr);
+        const hasExpired = userLicenses.some(l => l.payment_status === 'Aprovado' && isBusinessDateExpired(l.valid_until, todayStr));
 
         if (activeApproved.length > 0) {
           setActiveLicenseStatus('Aprovado');

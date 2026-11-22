@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { toPublicError } from '../utils/publicError';
 import { isSupabaseStorageHost } from '../utils/safeMedia';
+import { addBusinessMonths, businessToday, inferPlanDurationMonths } from '../utils/businessDate';
 
 interface AdminPanelPageProps {
     onBack: () => void;
@@ -25,11 +26,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
 
     // Approval Modal States
     const [selectedLicense, setSelectedLicense] = useState<AdminLicense | null>(null);
-    const [validUntilInput, setValidUntilInput] = useState(() => {
-        const today = new Date();
-        today.setMonth(today.getMonth() + 6); // Default +6 months
-        return today.toISOString().split('T')[0];
-    });
+    const [validUntilInput, setValidUntilInput] = useState(() => addBusinessMonths(businessToday(), 6));
     const [isApproving, setIsApproving] = useState(false);
     const [viewingReceiptUrl, setViewingReceiptUrl] = useState<string | null>(null);
 
@@ -336,7 +333,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
                                                         <div className="flex justify-end items-center gap-2">
                                                             {isPending ? (
                                                                 <Button
-                                                                    onClick={() => setSelectedLicense(lic)}
+                                                                    onClick={() => {
+                                                                        setSelectedLicense(lic);
+                                                                        const months = inferPlanDurationMonths(Number(lic.value_paid) || 0, Number(lic.classes_amount) || 1);
+                                                                        setValidUntilInput(addBusinessMonths(businessToday(), months));
+                                                                    }}
                                                                     className="bg-green-600 hover:bg-green-700 text-white shadow-md rounded-xl text-sm"
                                                                 >
                                                                     Aprovar

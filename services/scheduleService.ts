@@ -4,6 +4,7 @@ import { SetupData, TimeSlot, DaySchedule, FixedLesson } from '../types';
 export { formatTime, ensureScheduleSlots } from '../utils/scheduleUtils';
 import { ensureScheduleSlots } from '../utils/scheduleUtils';
 import { adminLicenseService } from './adminLicenseService';
+import { businessToday, isBusinessDateExpired } from '../utils/businessDate';
 
 export const scheduleService = {
     async getSchedules(): Promise<SetupData[]> {
@@ -33,12 +34,11 @@ export const scheduleService = {
             console.error('Error fetching licenses:', licensesError);
         }
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = businessToday();
 
         // Licenças ativas devidamente validadas e aprovadas pelo administrador
         const activeApprovedUserLicenses = (licensesData || []).filter(l => {
-            const isNotExpired = !l.valid_until || l.valid_until >= todayStr;
-            return l.payment_status === 'Aprovado' && isNotExpired;
+            return l.payment_status === 'Aprovado' && !isBusinessDateExpired(l.valid_until, todayStr);
         });
 
         // Licenças pendentes aguardando validação do administrador
@@ -51,6 +51,14 @@ export const scheduleService = {
         return (schedulesData || []).map(item => {
             // 1. Licença vinculada diretamente por schedule_id
             const specificLicense = (licensesData || []).find(l => l.schedule_id === item.id);
+            const classCount = Array.isArray(item.data?.classes) ? item.data.classes.length : 0;
+
+            // Licença legada sem schedule_id só cobre grades cujo nº de turmas cabe no cupo contratado
+            const legacyCoveringLicense = activeApprovedUserLicenses.find(l =>
+                l.schedule_id == null &&
+                typeof l.classes_amount === 'number' &&
+                l.classes_amount >= classCount
+            );
 
             let isApproved = false;
             let licenseStatus = 'Sem Licença';
@@ -59,11 +67,18 @@ export const scheduleService = {
                 isApproved = true;
                 licenseStatus = 'Aprovado';
             } else if (specificLicense) {
-                const isNotExpired = !specificLicense.valid_until || specificLicense.valid_until >= todayStr;
                 if (specificLicense.payment_status === 'Aprovado') {
-                    if (isNotExpired) {
-                        isApproved = true;
-                        licenseStatus = 'Aprovado';
+                    if (!isBusinessDateExpired(specificLicense.valid_until, todayStr)) {
+                        const licensedClasses = typeof specificLicense.classes_amount === 'number'
+                            ? specificLicense.classes_amount
+                            : Number.POSITIVE_INFINITY;
+                        if (classCount <= licensedClasses) {
+                            isApproved = true;
+                            licenseStatus = 'Aprovado';
+                        } else {
+                            isApproved = false;
+                            licenseStatus = 'Limite de turmas excedido';
+                        }
                     } else {
                         isApproved = false;
                         licenseStatus = 'Expirada';
@@ -71,11 +86,11 @@ export const scheduleService = {
                 } else {
                     licenseStatus = specificLicense.payment_status || 'Sem Licença';
                 }
-            } else if (item.is_licensed === true) {
+            } else if (legacyCoveringLicense) {
                 isApproved = true;
                 licenseStatus = 'Aprovado';
-            } else if (activeApprovedUserLicenses.length > 0) {
-                // Administrador já verificou e aprovou a licença do usuário
+            } else if (item.is_licensed === true && activeApprovedUserLicenses.some(l => l.schedule_id === item.id || l.schedule_id == null)) {
+                // Flag server-side só vale se ainda existir licença aprovada relacionada
                 isApproved = true;
                 licenseStatus = 'Aprovado';
             } else if (pendingUserLicenses.length > 0) {

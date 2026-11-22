@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient';
 import { audio } from './audioService';
 import { isSupabaseStorageHost } from '../utils/safeMedia';
 import { toPublicError } from '../utils/publicError';
+import { addBusinessMonths, businessToday } from '../utils/businessDate';
 
 export interface AdminLicense {
     id: string;
@@ -135,11 +136,7 @@ export const adminLicenseService = {
      */
     async approveLicense(licenseId: string, validUntilDate?: string): Promise<void> {
         try {
-            const validUntil = validUntilDate || (() => {
-                const oneYear = new Date();
-                oneYear.setFullYear(oneYear.getFullYear() + 1);
-                return oneYear.toISOString().split('T')[0];
-            })();
+            const validUntil = validUntilDate || addBusinessMonths(businessToday(), 12);
 
             const { error } = await supabase.rpc('approve_license_rpc', {
                 p_license_id: licenseId,

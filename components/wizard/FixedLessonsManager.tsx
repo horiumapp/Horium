@@ -29,6 +29,22 @@ export const FixedLessonsManager: React.FC<FixedLessonsManagerProps> = ({ isOpen
         return data.subjects.filter(s => selectedClass.subjects.includes(s.id));
     }, [data.subjects, selectedClass]);
 
+    // Índice de aula (AULA only) — INTERVALO não conta; o motor e a disponibilidade usam esse índice.
+    const lessonSlotByRow = useMemo(() => {
+        let lessonIdx = 0;
+        return gridRows.map((slot) => {
+            if (slot?.type === 'INTERVALO') return -1;
+            return lessonIdx++;
+        });
+    }, [gridRows]);
+
+    const activeDaysList = useMemo(
+        () => (data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0
+            ? data.weekConfig.activeDays
+            : DAYS_OF_WEEK),
+        [data.weekConfig?.activeDays]
+    );
+
     const getAllocatedCount = (subId: string) => {
         if (!selectedClassId) return 0;
         return (data.fixedLessons || []).filter(fl => fl.classId === selectedClassId && fl.subjectId === subId).length;
@@ -50,7 +66,6 @@ export const FixedLessonsManager: React.FC<FixedLessonsManagerProps> = ({ isOpen
         if (alreadyAtSlot) return;
 
         const teacher = data.teachers.find(t => t.id === selectedTeacherId);
-        const activeDaysList = data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0 ? data.weekConfig.activeDays : DAYS_OF_WEEK;
         const dayIdx = activeDaysList.indexOf(day);
         const status = teacher?.availability?.[`${dayIdx}-${slotIndex}`];
         if (status === 'ND') return;
@@ -237,17 +252,17 @@ export const FixedLessonsManager: React.FC<FixedLessonsManagerProps> = ({ isOpen
 
                             <div className="flex border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
                                 <div className="w-[72px] shrink-0" />
-                                {DAYS_OF_WEEK.map(day => (
+                                {activeDaysList.map(day => (
                                     <div key={day} className="w-[92px] py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                                         {day.substring(0, 3)}
                                     </div>
                                 ))}
                             </div>
 
-                            {gridRows.map((slot, sIdx) => {
+                            {gridRows.map((slot, rowIdx) => {
                                 if (slot.type === 'INTERVALO') {
                                     return (
-                                        <div key={sIdx} className="flex items-center border-b border-gray-100 bg-amber-50/70 last:border-b-0 dark:border-gray-800 dark:bg-amber-950/20">
+                                        <div key={rowIdx} className="flex items-center border-b border-gray-100 bg-amber-50/70 last:border-b-0 dark:border-gray-800 dark:bg-amber-950/20">
                                             <div className="w-[72px] shrink-0" />
                                             <div className="flex-1 py-2 text-center text-xs font-semibold text-amber-800 dark:text-amber-200">
                                                 Intervalo · {formatTime(slot.end - slot.start)}
@@ -256,13 +271,16 @@ export const FixedLessonsManager: React.FC<FixedLessonsManagerProps> = ({ isOpen
                                     );
                                 }
 
+                                const lessonSlot = lessonSlotByRow[rowIdx];
+                                if (lessonSlot < 0) return null;
+
                                 return (
-                                    <div key={sIdx} className="flex border-b border-gray-100 last:border-b-0 dark:border-gray-800">
+                                    <div key={rowIdx} className="flex border-b border-gray-100 last:border-b-0 dark:border-gray-800">
                                         <div className="flex w-[72px] shrink-0 items-center justify-center text-xs font-bold text-gray-500">
                                             {formatTime(slot.start)}
                                         </div>
-                                        {DAYS_OF_WEEK.map((day) => {
-                                            const fixed = data.fixedLessons?.find(fl => fl.classId === selectedClassId && fl.day === day && fl.slotIndex === sIdx);
+                                        {activeDaysList.map((day) => {
+                                            const fixed = data.fixedLessons?.find(fl => fl.classId === selectedClassId && fl.day === day && fl.slotIndex === lessonSlot);
                                             const sub = fixed ? data.subjects.find(s => s.id === fixed.subjectId) : null;
                                             const teacher = fixed ? data.teachers.find(t => t.id === fixed.teacherId) : null;
 
@@ -270,7 +288,7 @@ export const FixedLessonsManager: React.FC<FixedLessonsManagerProps> = ({ isOpen
                                                 <button
                                                     key={day}
                                                     type="button"
-                                                    onClick={() => fixed ? handleDeallocate(day, sIdx) : handleAllocate(day, sIdx)}
+                                                    onClick={() => fixed ? handleDeallocate(day, lessonSlot) : handleAllocate(day, lessonSlot)}
                                                     className="m-1 flex h-[52px] w-[84px] items-center justify-center rounded-lg border border-transparent bg-gray-50 text-center hover:border-primary/30 dark:bg-gray-800/60"
                                                     style={fixed ? { backgroundColor: sub?.color || '#1259bd', color: textOn(sub?.color) } : undefined}
                                                 >

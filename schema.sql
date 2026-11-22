@@ -189,7 +189,9 @@ BEGIN
         ON CONFLICT (schedule_id) DO UPDATE 
         SET fixed_lessons = EXCLUDED.fixed_lessons,
             user_id = EXCLUDED.user_id,
-            updated_at = timezone('utc', now());
+            updated_at = timezone('utc', now())
+        WHERE public.schedule_solutions.user_id IS NOT DISTINCT FROM EXCLUDED.user_id
+           OR public.is_admin();
     END IF;
 
     -- A solução nunca fica em schedules.data. O SELECT do dono não é o canal do paywall;
@@ -622,7 +624,13 @@ BEGIN
             WHERE l.user_id = v_user_id
               AND l.payment_status = 'Aprovado'
               AND (l.valid_until IS NULL OR l.valid_until >= public.business_today())
-              AND (l.schedule_id = s.id OR l.schedule_id IS NULL)
+              AND (
+                    l.schedule_id = s.id
+                    OR (
+                        l.schedule_id IS NULL
+                        AND COALESCE(l.classes_amount, 0) >= jsonb_array_length(COALESCE(s.data->'classes', '[]'::jsonb))
+                    )
+              )
       );
 
     INSERT INTO public.notifications (user_id, title, message)
@@ -672,7 +680,13 @@ BEGIN
             WHERE l.user_id = v_user_id
               AND l.payment_status = 'Aprovado'
               AND (l.valid_until IS NULL OR l.valid_until >= public.business_today())
-              AND (l.schedule_id = s.id OR l.schedule_id IS NULL)
+              AND (
+                    l.schedule_id = s.id
+                    OR (
+                        l.schedule_id IS NULL
+                        AND COALESCE(l.classes_amount, 0) >= jsonb_array_length(COALESCE(s.data->'classes', '[]'::jsonb))
+                    )
+              )
       );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
@@ -766,31 +780,50 @@ DECLARE
     v_price_per_class NUMERIC;
     v_total_price NUMERIC;
     v_license_id UUID;
+    v_pending_count INTEGER;
 BEGIN
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Usuário não autenticado.';
     END IF;
 
-    -- Se schedule_id for fornecido, valida propriedade e quantidade mínima de turmas
-    IF p_schedule_id IS NOT NULL THEN
-        DECLARE
-            v_actual_classes_count INTEGER;
-        BEGIN
-            SELECT user_id, jsonb_array_length(COALESCE(data->'classes', '[]'::jsonb))
-            INTO v_schedule_owner, v_actual_classes_count
-            FROM public.schedules
-            WHERE id = p_schedule_id;
-
-            IF v_schedule_owner IS NULL OR v_schedule_owner <> auth.uid() THEN
-                RAISE EXCEPTION 'A grade especificada não pertence ao usuário autenticado.';
-            END IF;
-
-            IF v_actual_classes_count > 0 AND p_classes_amount < v_actual_classes_count THEN
-                RAISE EXCEPTION 'A quantidade contratada (% turmas) não pode ser inferior ao total de turmas cadastradas na grade (% turmas).',
-                    p_classes_amount, v_actual_classes_count;
-            END IF;
-        END;
+    IF p_schedule_id IS NULL THEN
+        RAISE EXCEPTION 'A grade (schedule_id) é obrigatória para solicitar licença.';
     END IF;
+
+    IF p_duration IS NULL OR btrim(p_duration) = '' THEN
+        RAISE EXCEPTION 'Duração de plano inválida.';
+    END IF;
+
+    IF p_classes_amount IS NULL OR p_classes_amount <= 0 OR p_classes_amount > 100 THEN
+        RAISE EXCEPTION 'Quantidade de turmas inválida: %', p_classes_amount;
+    END IF;
+
+    SELECT COUNT(*) INTO v_pending_count
+    FROM public.licenses
+    WHERE user_id = auth.uid()
+      AND payment_status IN ('Aguardando', 'under_review');
+
+    IF v_pending_count >= 3 THEN
+        RAISE EXCEPTION 'Há pedidos pendentes demais. Aguarde a análise ou cancele um pedido antigo.';
+    END IF;
+
+    DECLARE
+        v_actual_classes_count INTEGER;
+    BEGIN
+        SELECT user_id, jsonb_array_length(COALESCE(data->'classes', '[]'::jsonb))
+        INTO v_schedule_owner, v_actual_classes_count
+        FROM public.schedules
+        WHERE id = p_schedule_id;
+
+        IF v_schedule_owner IS NULL OR v_schedule_owner IS DISTINCT FROM auth.uid() THEN
+            RAISE EXCEPTION 'A grade especificada não pertence ao usuário autenticado.';
+        END IF;
+
+        IF v_actual_classes_count > 0 AND p_classes_amount < v_actual_classes_count THEN
+            RAISE EXCEPTION 'A quantidade contratada (% turmas) não pode ser inferior ao total de turmas cadastradas na grade (% turmas).',
+                p_classes_amount, v_actual_classes_count;
+        END IF;
+    END;
 
     -- Validação da duração e determinação do preço unitário oficial
     IF p_duration = '06 meses' THEN
@@ -801,10 +834,6 @@ BEGIN
         v_price_per_class := 50.00;
     ELSE
         RAISE EXCEPTION 'Duração de plano inválida: %', p_duration;
-    END IF;
-
-    IF p_classes_amount <= 0 OR p_classes_amount > 100 THEN
-        RAISE EXCEPTION 'Quantidade de turmas inválida: %', p_classes_amount;
     END IF;
 
     v_total_price := p_classes_amount * v_price_per_class;
@@ -869,8 +898,15 @@ DECLARE
     v_is_licensed BOOLEAN;
     v_data JSONB;
     v_solution JSONB;
+    v_class_count INTEGER;
 BEGIN
-    SELECT user_id, is_licensed, data INTO v_owner_id, v_is_licensed, v_data
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Acesso negado.';
+    END IF;
+
+    SELECT user_id, is_licensed, data,
+           jsonb_array_length(COALESCE(data->'classes', '[]'::jsonb))
+    INTO v_owner_id, v_is_licensed, v_data, v_class_count
     FROM public.schedules
     WHERE id = p_schedule_id AND deleted_at IS NULL;
 
@@ -878,18 +914,25 @@ BEGIN
         RAISE EXCEPTION 'Horário não encontrado.';
     END IF;
 
-    -- Apenas o proprietário ou um admin podem acessar
-    IF v_owner_id <> auth.uid() AND NOT public.is_admin() THEN
+    -- IS DISTINCT FROM evita bypass quando auth.uid() é NULL (comparação <> NULL = NULL).
+    IF v_owner_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin() THEN
         RAISE EXCEPTION 'Acesso negado.';
     END IF;
 
     -- Validação do Paywall no Servidor (Valida estritamente vigência na tabela licenses)
     IF NOT public.is_admin() THEN
         IF NOT EXISTS (
-            SELECT 1 FROM public.licenses
-            WHERE (schedule_id = p_schedule_id OR (user_id = v_owner_id AND schedule_id IS NULL))
-              AND payment_status = 'Aprovado'
-              AND (valid_until IS NULL OR valid_until >= public.business_today())
+            SELECT 1 FROM public.licenses l
+            WHERE l.payment_status = 'Aprovado'
+              AND (l.valid_until IS NULL OR l.valid_until >= public.business_today())
+              AND (
+                    l.schedule_id = p_schedule_id
+                    OR (
+                        l.user_id = v_owner_id
+                        AND l.schedule_id IS NULL
+                        AND COALESCE(l.classes_amount, 0) >= COALESCE(v_class_count, 0)
+                    )
+              )
         ) THEN
             -- Revogação efetiva: a flag e qualquer cópia legada da solução saem no mesmo UPDATE.
             UPDATE public.schedules
@@ -966,11 +1009,15 @@ USING (
 
 DROP POLICY IF EXISTS "Users and admins can delete receipts" ON storage.objects;
 DROP POLICY IF EXISTS "Admins can delete receipts" ON storage.objects;
-CREATE POLICY "Admins can delete receipts" ON storage.objects
+DROP POLICY IF EXISTS "Users can delete own receipts" ON storage.objects;
+CREATE POLICY "Users can delete own receipts" ON storage.objects
 FOR DELETE TO authenticated 
 USING (
     bucket_id = 'receipts' 
-    AND public.is_admin()
+    AND (
+        (storage.foldername(name))[1] = auth.uid()::text
+        OR public.is_admin()
+    )
 );
 
 -- Políticas de Storage para Anexos de Tickets (tickets-attachments)
@@ -988,6 +1035,17 @@ FOR SELECT TO authenticated
 USING (
     bucket_id = 'tickets-attachments' 
     AND ((storage.foldername(name))[1] = auth.uid()::text OR public.is_admin())
+);
+
+DROP POLICY IF EXISTS "Users can delete own ticket attachments" ON storage.objects;
+CREATE POLICY "Users can delete own ticket attachments" ON storage.objects
+FOR DELETE TO authenticated
+USING (
+    bucket_id = 'tickets-attachments'
+    AND (
+        (storage.foldername(name))[1] = auth.uid()::text
+        OR public.is_admin()
+    )
 );
 
 
