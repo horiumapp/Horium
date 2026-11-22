@@ -31,6 +31,15 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
   const generationAbortRef = React.useRef<AbortController | null>(null);
   const generationRunIdRef = React.useRef(0);
 
+  // Cancela geração em andamento ao desmontar o wizard
+  React.useEffect(() => {
+    return () => {
+      generationAbortRef.current?.abort();
+      generationAbortRef.current = null;
+      generationRunIdRef.current += 1;
+    };
+  }, []);
+
   // Sync local step with prop data
   React.useEffect(() => {
     if (data.currentStep && data.currentStep !== step) {
@@ -201,7 +210,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
         status: 'Finalizado'
       };
 
-      // Salva os dados no banco
+      // Não persiste resultado de uma geração já cancelada/superseded
+      if (runId !== generationRunIdRef.current || abortController.signal.aborted) return;
       await scheduleService.saveSchedule(finalData);
 
       if (runId !== generationRunIdRef.current) return;

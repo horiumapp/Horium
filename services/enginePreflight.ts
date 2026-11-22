@@ -1,21 +1,37 @@
 import { AvailabilityStatus, FixedLesson, SchedulingFailure, SetupData } from '../types';
 import { ensureScheduleSlots } from '../utils/scheduleUtils';
 
-type Demand = {
+type FixedDemand = {
   teacherId: string;
   classId: string;
   subjectId: string;
   lessons: number;
 };
 
-/**
- * Checagem barata e conservadora: só reporta impossibilidade clara.
- * Nunca deve bloquear um cenário que o motor ainda conseguiria resolver.
- */
-export function runPreflightFeasibility(raw: SetupData): {
+type FlexibleDemand = {
+  classId: string;
+  subjectId: string;
+  lessons: number;
+  eligibleTeacherIds: string[];
+};
+
+/** Resultado da pré-checagem: só bloqueia quando a inviabilidade é comprovada. */
+export type PreflightStatus = 'infeasible' | 'unknown';
+
+export type PreflightResult = {
+  status: PreflightStatus;
   failures: SchedulingFailure[];
   pinnedLessons: FixedLesson[];
-} {
+};
+
+/**
+ * Checagem barata e conservadora: só reporta impossibilidade comprovada.
+ *
+ * Regra: falso negativo (deixar o motor tentar) é preferível a bloquear grade viável.
+ * Por isso NÃO usa atribuição greedy de professores PODERÁ para somar carga —
+ * isso gera falsos positivos quando a carga pode ser redistribuída.
+ */
+export function runPreflightFeasibility(raw: SetupData): PreflightResult {
   const data = ensureScheduleSlots(raw);
   const days = (data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0)
     ? data.weekConfig.activeDays
@@ -70,10 +86,30 @@ export function runPreflightFeasibility(raw: SetupData): {
     return cap;
   };
 
-  // Demanda por atribuição (mesma prioridade do motor: OBRIGATORIAMENTE primeiro)
-  const demands: Demand[] = [];
+  const commonCapacity = (teacherId: string, classId: string): number => {
+    const teacher = teacherById.get(teacherId);
+    const classroom = classById.get(classId);
+    if (!teacher || !classroom) return 0;
+    let commonFree = 0;
+    for (let d = 0; d < nDays; d++) {
+      let dayFree = 0;
+      for (let s = 0; s < slotsPerDay; s++) {
+        if (isBlocked(teacher.availability, d, s)) continue;
+        if (isBlocked(classroom.timeConstraints, d, s)) continue;
+        dayFree++;
+      }
+      const dailyLimit = teacher.dailyLimits?.[`${d}`];
+      const limit = dailyLimit !== undefined ? dailyLimit : slotsPerDay;
+      commonFree += Math.min(dayFree, Math.max(0, limit));
+    }
+    return commonFree;
+  };
+
+  const fixedDemands: FixedDemand[] = [];
+  const flexibleDemands: FlexibleDemand[] = [];
   const covered = new Set<string>();
 
+  // Atribuições OBRIGATORIAMENTE: professor fixo — carga agregada é prova válida
   data.teachers.forEach(teacher => {
     Object.entries(teacher.classAssignments || {}).forEach(([subjectId, classes]) => {
       Object.entries(classes).forEach(([classId, status]) => {
@@ -84,13 +120,14 @@ export function runPreflightFeasibility(raw: SetupData): {
         const key = `${classId}|${subjectId}`;
         if (covered.has(key)) return;
         covered.add(key);
-        demands.push({ teacherId: teacher.id, classId, subjectId, lessons });
+        fixedDemands.push({ teacherId: teacher.id, classId, subjectId, lessons });
       });
     });
   });
 
   const failures: SchedulingFailure[] = [];
 
+  // Demandas sem professor obrigatório: manter elenco elegível (sem greedy)
   data.classes.forEach(classroom => {
     Object.entries(classroom.lessonsPerSubject || {}).forEach(([subjectId, lessonCount]) => {
       if (lessonCount <= 0) return;
@@ -115,22 +152,21 @@ export function runPreflightFeasibility(raw: SetupData): {
             'Verifique se a disciplina não está marcada como NÃO para todos.',
           ],
         });
+        covered.add(key);
         return;
       }
 
-      // Conservador: assume o professor elegível com MAIOR capacidade (melhor caso)
-      const best = [...eligible].sort((a, b) => teacherCapacity(b.id) - teacherCapacity(a.id))[0];
       covered.add(key);
-      demands.push({
-        teacherId: best.id,
+      flexibleDemands.push({
         classId: classroom.id,
         subjectId,
         lessons: lessonCount,
+        eligibleTeacherIds: eligible.map(t => t.id),
       });
     });
   });
 
-  // Capacidade da turma vs carga total
+  // Capacidade da turma vs carga total (prova independente de professor)
   data.classes.forEach(classroom => {
     const needed = Object.values(classroom.lessonsPerSubject || {}).reduce((a, b) => a + b, 0);
     if (needed <= 0) return;
@@ -154,9 +190,9 @@ export function runPreflightFeasibility(raw: SetupData): {
     }
   });
 
-  // Capacidade do professor vs soma das demandas atribuídas a ele
+  // Capacidade agregada só para demandas com professor OBRIGATÓRIO (prova)
   const loadByTeacher = new Map<string, number>();
-  demands.forEach(d => {
+  fixedDemands.forEach(d => {
     loadByTeacher.set(d.teacherId, (loadByTeacher.get(d.teacherId) || 0) + d.lessons);
   });
 
@@ -167,14 +203,14 @@ export function runPreflightFeasibility(raw: SetupData): {
     const remainingCap = Math.max(0, cap - pinnedHere);
     if (remainingNeed > remainingCap) {
       const teacher = teacherById.get(teacherId);
-      const related = demands.filter(d => d.teacherId === teacherId);
+      const related = fixedDemands.filter(d => d.teacherId === teacherId);
       const sample = related[0];
       failures.push({
         teacherId,
         classId: sample?.classId || '',
         subjectId: sample?.subjectId || '',
         reason: 'TEACHER_LIMIT',
-        details: `Pré-checagem: ${teacher?.name || 'o professor'} tem capacidade de ${cap} período(s) (disponibilidade + limite diário), mas a carga atribuída é ${needed}.`,
+        details: `Pré-checagem: ${teacher?.name || 'o professor'} tem capacidade de ${cap} período(s) (disponibilidade + limite diário), mas a carga obrigatória atribuída é ${needed}.`,
         suggestions: [
           'Liberar horários ND do professor.',
           'Aumentar o limite diário, se estiver restritivo.',
@@ -184,25 +220,13 @@ export function runPreflightFeasibility(raw: SetupData): {
     }
   });
 
-  // Demanda individual professor×turma×disciplina vs slots comuns livres
-  demands.forEach(demand => {
+  // Pares obrigatórios: slots comuns insuficientes (prova)
+  fixedDemands.forEach(demand => {
     const teacher = teacherById.get(demand.teacherId);
     const classroom = classById.get(demand.classId);
     if (!teacher || !classroom) return;
 
-    let commonFree = 0;
-    for (let d = 0; d < nDays; d++) {
-      let dayFree = 0;
-      for (let s = 0; s < slotsPerDay; s++) {
-        if (isBlocked(teacher.availability, d, s)) continue;
-        if (isBlocked(classroom.timeConstraints, d, s)) continue;
-        dayFree++;
-      }
-      const dailyLimit = teacher.dailyLimits?.[`${d}`];
-      const limit = dailyLimit !== undefined ? dailyLimit : slotsPerDay;
-      commonFree += Math.min(dayFree, Math.max(0, limit));
-    }
-
+    const commonFree = commonCapacity(demand.teacherId, demand.classId);
     const pinnedPair = pinnedLessons.filter(p =>
       p.teacherId === demand.teacherId &&
       p.classId === demand.classId &&
@@ -225,5 +249,59 @@ export function runPreflightFeasibility(raw: SetupData): {
     }
   });
 
-  return { failures, pinnedLessons };
+  // Demandas flexíveis: só impossível se NENHUM elegível tem capacidade/slots comuns suficientes.
+  // Não somamos carga greedy — distribuição alternativa pode resolver.
+  flexibleDemands.forEach(demand => {
+    const classroom = classById.get(demand.classId);
+    if (!classroom) return;
+
+    const pinnedForDemand = pinnedLessons.filter(p =>
+      p.classId === demand.classId && p.subjectId === demand.subjectId
+    ).length;
+    const remaining = Math.max(0, demand.lessons - pinnedForDemand);
+    if (remaining <= 0) return;
+
+    let bestCommon = 0;
+    let bestTeacherId = '';
+    for (const teacherId of demand.eligibleTeacherIds) {
+      const common = commonCapacity(teacherId, demand.classId);
+      const pinnedOnTeacher = pinnedLessons.filter(p => p.teacherId === teacherId).length;
+      const teacherCap = Math.max(0, teacherCapacity(teacherId) - pinnedOnTeacher);
+      const usable = Math.min(common, teacherCap);
+      if (usable > bestCommon) {
+        bestCommon = usable;
+        bestTeacherId = teacherId;
+      }
+    }
+
+    if (remaining > bestCommon) {
+      const subjectName = subjectById.get(demand.subjectId)?.name || 'disciplina';
+      failures.push({
+        teacherId: bestTeacherId,
+        classId: demand.classId,
+        subjectId: demand.subjectId,
+        reason: bestCommon <= 0 ? 'NO_AVAILABILITY' : 'TEACHER_LIMIT',
+        details: `Pré-checagem: ${subjectName} da turma ${classroom.name} precisa de ${demand.lessons} aula(s), mas nenhum professor elegível tem capacidade suficiente (melhor caso: ${bestCommon} período(s)).`,
+        suggestions: [
+          'Liberar horários ND dos professores elegíveis.',
+          'Atribuir mais professores como PODERÁ.',
+          'Reduzir a carga desta disciplina.',
+        ],
+      });
+    }
+  });
+
+  // infeasible = impossibilidade comprovada; unknown = sem prova (motor deve tentar)
+  const provenBlocked = failures.some(f =>
+    f.reason === 'CLASS_LIMIT' ||
+    f.reason === 'TEACHER_LIMIT' ||
+    f.reason === 'NO_AVAILABILITY' ||
+    f.reason === 'NO_TEACHER'
+  );
+
+  return {
+    status: provenBlocked ? 'infeasible' : 'unknown',
+    failures,
+    pinnedLessons,
+  };
 }

@@ -46,7 +46,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
     });
 
     describe('Timetable Engine Generation under Grouping Constraints', () => {
-        it('NEVER creates 3 consecutive periods of the same subject under default rule', () => {
+        it('NEVER creates 3 consecutive periods of the same subject under default rule', async () => {
             // Recreating the exact scenario from user:
             // Turma 1º A has Ciências (3 lessons), Matemática (4 lessons), Português (4 lessons), História (3 lessons), Geografia (3 lessons), Artes (2 lessons), EdFísica (2 lessons), Espanhol (2 lessons)
             // Total 23 lessons in a 5-day, 5-slot week (25 total slots)
@@ -94,7 +94,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                 }
             };
 
-            const result = runGeneratorEngine(setupData);
+            const result = await runGeneratorEngine(setupData);
 
             expect(result.failures).toHaveLength(0);
             expect(result.fixedLessons).toHaveLength(23);
@@ -137,7 +137,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             expect(carlaDays.size, 'As 3 aulas de Ciências devem estar divididas em pelo menos 2 dias').toBeGreaterThanOrEqual(2);
         });
 
-        it('strictly enforces Intercalated rules when requested (no consecutive periods)', () => {
+        it('strictly enforces Intercalated rules when requested (no consecutive periods)', async () => {
             const setupData: any = {
                 classes: [
                     {
@@ -161,7 +161,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                 }
             };
 
-            const result = runGeneratorEngine(setupData);
+            const result = await runGeneratorEngine(setupData);
             expect(result.failures).toHaveLength(0);
 
             const daySubjectMap: Record<string, number[]> = {};
@@ -178,7 +178,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             });
         });
 
-        it('regenerates a fresh timetable when reprocessed and does not lock previous generated results', () => {
+        it('regenerates a fresh timetable when reprocessed and does not lock previous generated results', async () => {
             const setupData: any = {
                 classes: [
                     { id: 'c1', name: '1º A', lessonsPerSubject: { 's1': 4, 's2': 4, 's3': 4 } }
@@ -200,7 +200,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             };
 
             // 1ª Geração
-            const firstResult = runGeneratorEngine(setupData);
+            const firstResult = await runGeneratorEngine(setupData);
             expect(firstResult.fixedLessons).toHaveLength(12);
 
             // Simula reprocessamento onde o estado anterior continha status 'Finalizado' e as fixedLessons da 1ª rodada
@@ -210,7 +210,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                 fixedLessons: firstResult.fixedLessons
             };
 
-            const secondResult = runGeneratorEngine(reprocessData);
+            const secondResult = await runGeneratorEngine(reprocessData);
             expect(secondResult.fixedLessons).toHaveLength(12);
             expect(secondResult.failures).toHaveLength(0);
 
@@ -227,7 +227,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             });
         });
 
-        it('gives a 2-day teacher the first 5 periods each day for 10 lessons', () => {
+        it('gives a 2-day teacher the first 5 periods each day for 10 lessons', async () => {
             const availability: Record<string, 'D' | 'ND'> = {};
             const juridicoAvailability: Record<string, 'D' | 'ND'> = {};
             for (let d = 0; d < 5; d++) {
@@ -289,7 +289,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                 }
             };
 
-            const result = runGeneratorEngine(setupData);
+            const result = await runGeneratorEngine(setupData);
             expect(result.failures).toHaveLength(0);
             expect(result.fixedLessons).toHaveLength(40);
             for (const classroom of classes) {
@@ -312,7 +312,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             assertPacked('t_jur', ['Quinta', 'Sexta']);
         });
 
-        it('fills every class period when the weekly load matches the grid', () => {
+        it('fills every class period when the weekly load matches the grid', async () => {
             const classCount = 5;
             const classes = Array.from({ length: classCount }, (_, index) => ({
                 id: `c_${index}`,
@@ -338,7 +338,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                     classAssignments: { [subjectId]: Object.fromEntries(classes.map(classroom => [classroom.id, 'OBRIGATORIAMENTE'])) }
                 }))
             ];
-            const result = runGeneratorEngine({
+            const result = await runGeneratorEngine({
                 classes,
                 teachers,
                 subjects: [
@@ -368,7 +368,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             expect(infoByDay['Quarta']).toBe(5);
         }, 20000);
 
-        it('correctly allocates 10 lessons for a teacher available on 2 days (e.g. CETAM-INFO)', () => {
+        it('correctly allocates 10 lessons for a teacher available on 2 days (e.g. CETAM-INFO)', async () => {
             // Days: Segunda (0), Terça (1), Quarta (2), Quinta (3), Sexta (4)
             // Teacher CETAM-INFO is available only on Terça (1) and Quarta (2)
             const availability: Record<string, 'D' | 'ND'> = {};
@@ -406,7 +406,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                 }
             };
 
-            const result = runGeneratorEngine(setupData);
+            const result = await runGeneratorEngine(setupData);
             expect(result.failures).toHaveLength(0);
             expect(result.fixedLessons).toHaveLength(10);
             
@@ -416,7 +416,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
             expect(tercaLessons).toHaveLength(5);
         });
 
-        it('successfully allocates 100% of workload for morning-only teacher (like Gleugila) and high-density schedule with zero failures', () => {
+        it('successfully allocates 100% of workload for morning-only teacher (like Gleugila) and high-density schedule with zero failures', async () => {
             // 8 classes, 7 slots per day (slots 0-3 morning, 4-6 afternoon), 5 days = 35 slots per class
             const classes = Array.from({ length: 8 }, (_, i) => ({
                 id: `c_${i + 1}`,
@@ -503,7 +503,7 @@ describe('Pedagogical Grouping Constraints and Max Consecutive Streaks', () => {
                 }
             };
 
-            const result = runGeneratorEngine(setupData);
+            const result = await runGeneratorEngine(setupData);
             expect(result.failures).toHaveLength(0);
             expect(result.fixedLessons).toHaveLength(totalRequested);
 

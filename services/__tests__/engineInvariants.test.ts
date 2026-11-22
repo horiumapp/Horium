@@ -78,21 +78,21 @@ function assertNoDoubleBooking(lessons: FixedLesson[]) {
 }
 
 describe('Engine invariants', () => {
-  it('não aloca o mesmo professor ou turma no mesmo horário', () => {
-    const result = runGeneratorEngine(baseSetup());
+  it('não aloca o mesmo professor ou turma no mesmo horário', async () => {
+    const result = await runGeneratorEngine(baseSetup());
     assertNoDoubleBooking(result.fixedLessons);
     expect(result.failures.length).toBe(0);
     expect(result.fixedLessons.length).toBe(7);
   });
 
-  it('respeita disponibilidade ND do professor', () => {
+  it('respeita disponibilidade ND do professor', async () => {
     const availability: Record<string, 'ND'> = {};
     for (let d = 0; d < 5; d++) {
       for (let s = 0; s < 5; s++) {
         if (!(d === 0 && s < 2)) availability[`${d}-${s}`] = 'ND';
       }
     }
-    const result = runGeneratorEngine(baseSetup({
+    const result = await runGeneratorEngine(baseSetup({
       teachers: [
         {
           id: 't1',
@@ -126,7 +126,7 @@ describe('Engine invariants', () => {
     assertNoDoubleBooking(result.fixedLessons);
   });
 
-  it('preserva aulas pinadas (isManual)', () => {
+  it('preserva aulas pinadas (isManual)', async () => {
     const pinned = {
       classId: 'c1',
       subjectId: 's1',
@@ -135,7 +135,7 @@ describe('Engine invariants', () => {
       slotIndex: 2,
       isManual: true,
     };
-    const result = runGeneratorEngine(baseSetup({
+    const result = await runGeneratorEngine(baseSetup({
       pinnedLessons: [pinned],
       fixedLessons: [pinned],
     }));
@@ -147,8 +147,8 @@ describe('Engine invariants', () => {
     assertNoDoubleBooking(result.fixedLessons);
   });
 
-  it('cenário sem professor elegível gera diagnóstico NO_TEACHER', () => {
-    const result = runGeneratorEngine(baseSetup({
+  it('cenário sem professor elegível gera diagnóstico NO_TEACHER', async () => {
+    const result = await runGeneratorEngine(baseSetup({
       teachers: [
         {
           id: 't2',
@@ -173,8 +173,8 @@ describe('Engine invariants', () => {
     expect(noTeacher[0].suggestions?.length).toBeGreaterThan(0);
   });
 
-  it('cenário impossível (carga > slots) identifica incompleto com diagnóstico', () => {
-    const result = runGeneratorEngine(baseSetup({
+  it('cenário impossível (carga > slots) identifica incompleto com diagnóstico', async () => {
+    const result = await runGeneratorEngine(baseSetup({
       classes: [
         {
           id: 'c1',

@@ -111,6 +111,8 @@ export const scheduleService = {
                 ...safeData,
                 id: item.id,
                 createdAt: item.created_at,
+                updatedAt: item.updated_at,
+                version: typeof item.version === 'number' ? item.version : 1,
                 status: item.data?.status || 'Em andamento',
                 isLicensed: isApproved,
                 licenseStatus: licenseStatus
@@ -142,15 +144,16 @@ export const scheduleService = {
 
         const normalized = ensureScheduleSlots(scheduleData);
 
-        const { id, ...rest } = normalized;
+        const { id, version: clientVersion, updatedAt: _updatedAt, createdAt: _createdAt, ...rest } = normalized;
 
         let fixedLessonsToSave = rest.fixedLessons;
         let storedLogo: string | null = null;
+        let expectedVersion = typeof clientVersion === 'number' ? clientVersion : undefined;
         if (id && id.length > 30) { // UUID check
             try {
                 const { data: existing } = await supabase
                     .from('schedules')
-                    .select('data')
+                    .select('data, version')
                     .eq('id', id)
                     .eq('user_id', user.id)
                     .single();
@@ -164,13 +167,21 @@ export const scheduleService = {
                     && existing.data.fixedLessons.length > 0) {
                     fixedLessonsToSave = existing.data.fixedLessons;
                 }
+                const dbVersion = typeof existing?.version === 'number' ? existing.version : 1;
+                if (expectedVersion !== undefined && expectedVersion !== dbVersion) {
+                    throw new Error('CONFLICT: A grade foi alterada em outra aba ou dispositivo. Recarregue antes de salvar.');
+                }
+                expectedVersion = expectedVersion ?? dbVersion;
             } catch (e) {
+                if (e instanceof Error && e.message.startsWith('CONFLICT:')) throw e;
                 console.warn('Erro ao ler a grade existente no salvamento:', e);
+                expectedVersion = expectedVersion ?? 1;
             }
         }
 
         const incomingLogo = rest.institution?.logo;
         const logoToSave = incomingLogo === undefined ? storedLogo : (incomingLogo || null);
+        const nextVersion = (expectedVersion ?? 0) + 1;
 
         const payload = {
             user_id: user.id,
@@ -183,32 +194,42 @@ export const scheduleService = {
                 },
                 fixedLessons: fixedLessonsToSave || []
             },
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
+            version: nextVersion
         };
 
         if (id && id.length > 30) { // UUID check
-            const { data, error } = await supabase
+            let query = supabase
                 .from('schedules')
                 .update(payload)
                 .eq('id', id)
-                .eq('user_id', user.id)
-                .select()
-                .single();
+                .eq('user_id', user.id);
+
+            if (expectedVersion !== undefined) {
+                query = query.eq('version', expectedVersion);
+            }
+
+            const { data, error } = await query.select().maybeSingle();
 
             if (error) {
                 console.error('Error updating schedule:', error);
                 throw error;
             }
+            if (!data) {
+                throw new Error('CONFLICT: A grade foi alterada em outra aba ou dispositivo. Recarregue antes de salvar.');
+            }
             return {
                 ...data.data,
                 id: data.id,
                 createdAt: data.created_at,
+                updatedAt: data.updated_at,
+                version: typeof data.version === 'number' ? data.version : nextVersion,
                 fixedLessons: scheduleData.fixedLessons || data.data?.fixedLessons || []
             };
         } else {
             const { data, error } = await supabase
                 .from('schedules')
-                .insert([payload])
+                .insert([{ ...payload, version: 1 }])
                 .select()
                 .single();
 
@@ -220,6 +241,8 @@ export const scheduleService = {
                 ...data.data,
                 id: data.id,
                 createdAt: data.created_at,
+                updatedAt: data.updated_at,
+                version: typeof data.version === 'number' ? data.version : 1,
                 fixedLessons: scheduleData.fixedLessons || data.data?.fixedLessons || []
             };
         }

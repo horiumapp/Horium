@@ -161,13 +161,30 @@ function diagnosePlacementFailure(opts: {
     };
 }
 
-export function runGeneratorEngine(
+export type RunGeneratorEngineOptions = {
+    signal?: AbortSignal;
+    /** Quando > 0, cede ao event loop a cada N iterações (necessário para cancelar no fallback da main thread). */
+    yieldEvery?: number;
+};
+
+function throwIfGeneratorAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+        throw new DOMException('Geração cancelada.', 'AbortError');
+    }
+}
+
+export async function runGeneratorEngine(
     rawSetupData: SetupData,
-    onProgress?: (progress: number, message: string) => void
-): { fixedLessons: FixedLesson[]; failures: SchedulingFailure[] } {
+    onProgress?: (progress: number, message: string) => void,
+    options?: RunGeneratorEngineOptions
+): Promise<{ fixedLessons: FixedLesson[]; failures: SchedulingFailure[] }> {
+    const signal = options?.signal;
+    const yieldEvery = options?.yieldEvery ?? 0;
+    throwIfGeneratorAborted(signal);
+
     const data = ensureScheduleSlots(rawSetupData);
 
-    // Pré-checagem barata: só aborta cedo em impossibilidade de capacidade (evita ~15s inúteis).
+    // Pré-checagem barata: só aborta cedo em impossibilidade comprovada (evita ~15s inúteis).
     // NO_TEACHER sozinho não aborta — o motor ainda pode montar o restante da grade.
     if (onProgress) onProgress(3, 'Verificando viabilidade das restrições...');
     const preflight = runPreflightFeasibility(data);
@@ -2201,6 +2218,14 @@ export function runGeneratorEngine(
     const progressStep = Math.max(1, Math.floor(maxIters / 35));
 
     for (let iter = 1; iter <= maxIters; iter++) {
+        throwIfGeneratorAborted(signal);
+
+        // Cede ao event loop para o AbortSignal poder disparar na main thread
+        if (yieldEvery > 0 && iter % yieldEvery === 0) {
+            await new Promise<void>(resolve => setTimeout(resolve, 0));
+            throwIfGeneratorAborted(signal);
+        }
+
         // Encerra caso exceda o tempo de busca
         if (iter > 15 && (Date.now() - startTime) > maxTimeBudgetMs) {
             if (onProgress) onProgress(100, "Grade ideal otimizada e finalizada!");
@@ -2237,6 +2262,8 @@ export function runGeneratorEngine(
         }
     }
 
+    throwIfGeneratorAborted(signal);
+
     if (onProgress) {
         onProgress(100, "Grade gerada com sucesso!");
     }
@@ -2246,15 +2273,16 @@ export function runGeneratorEngine(
 
 // Handler do Web Worker
 if (typeof self !== 'undefined' && typeof window === 'undefined') {
-    self.onmessage = (e: MessageEvent) => {
+    self.onmessage = async (e: MessageEvent) => {
         try {
             const { setupData } = e.data;
-            const result = runGeneratorEngine(setupData, (progress, message) => {
+            const result = await runGeneratorEngine(setupData, (progress, message) => {
                 self.postMessage({ type: 'PROGRESS', progress, message });
             });
             self.postMessage({ type: 'SUCCESS', result });
-        } catch (error: any) {
-            self.postMessage({ type: 'ERROR', error: error?.message || 'Erro durante a geração do horário' });
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Erro durante a geração do horário';
+            self.postMessage({ type: 'ERROR', error: message });
         }
     };
 }

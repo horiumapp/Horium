@@ -146,6 +146,7 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
     it('saveSchedule: persiste a logo da instituição no JSON enviado ao banco', async () => {
         const inputData: SetupData = {
             id: '11111111-1111-1111-1111-111111111111',
+            version: 1,
             institution: {
                 name: 'CETI',
                 shift: 'Integral',
@@ -172,19 +173,23 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         const eq = vi.fn().mockReturnThis();
         const select = vi.fn().mockReturnThis();
         const single = vi.fn().mockResolvedValue({
+            data: { data: { institution: inputData.institution }, version: 1 },
+            error: null
+        });
+        const maybeSingle = vi.fn().mockResolvedValue({
             data: {
                 id: inputData.id,
                 created_at: new Date().toISOString(),
-                data: {
-                    institution: inputData.institution
-                }
+                updated_at: new Date().toISOString(),
+                version: 2,
+                data: { institution: inputData.institution }
             },
             error: null
         });
 
         mockFrom.mockImplementation((table: string) => {
             if (table === 'schedules') {
-                return { update, eq, select, single };
+                return { update, eq, select, single, maybeSingle };
             }
             return {};
         });
@@ -192,6 +197,7 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         const result = await scheduleService.saveSchedule(inputData);
 
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            version: 2,
             data: expect.objectContaining({
                 institution: expect.objectContaining({
                     name: 'CETI',
@@ -200,11 +206,13 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
             })
         }));
         expect(result.institution.logo).toBe('data:image/webp;base64,logo-da-escola');
+        expect(result.version).toBe(2);
     });
 
     it('saveSchedule: mantém a logo já gravada quando o cliente não reenvia o campo', async () => {
         const inputData: SetupData = {
             id: '22222222-2222-2222-2222-222222222222',
+            version: 3,
             institution: {
                 name: 'CETI',
                 shift: 'Integral',
@@ -229,29 +237,31 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         const update = vi.fn().mockReturnThis();
         const eq = vi.fn().mockReturnThis();
         const select = vi.fn().mockReturnThis();
-        const single = vi.fn()
-            .mockResolvedValueOnce({
+        const single = vi.fn().mockResolvedValue({
+            data: {
+                version: 3,
                 data: {
-                    data: {
-                        institution: { logo: 'data:image/webp;base64,logo-salva' }
-                    }
-                },
-                error: null
-            })
-            .mockResolvedValueOnce({
+                    institution: { logo: 'data:image/webp;base64,logo-salva' }
+                }
+            },
+            error: null
+        });
+        const maybeSingle = vi.fn().mockResolvedValue({
+            data: {
+                id: inputData.id,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                version: 4,
                 data: {
-                    id: inputData.id,
-                    created_at: new Date().toISOString(),
-                    data: {
-                        institution: { name: 'CETI', logo: 'data:image/webp;base64,logo-salva' }
-                    }
-                },
-                error: null
-            });
+                    institution: { name: 'CETI', logo: 'data:image/webp;base64,logo-salva' }
+                }
+            },
+            error: null
+        });
 
         mockFrom.mockImplementation((table: string) => {
             if (table === 'schedules') {
-                return { update, eq, select, single };
+                return { update, eq, select, single, maybeSingle };
             }
             return {};
         });
@@ -259,12 +269,50 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         await scheduleService.saveSchedule(inputData);
 
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            version: 4,
             data: expect.objectContaining({
                 institution: expect.objectContaining({
                     logo: 'data:image/webp;base64,logo-salva'
                 })
             })
         }));
+    });
+
+    it('saveSchedule: rejeita sobrescrita quando a versão no servidor diverge (OCC)', async () => {
+        const inputData: SetupData = {
+            id: '33333333-3333-3333-3333-333333333333',
+            version: 1,
+            institution: { name: 'CETI', shift: 'Integral', year: '2026', additionalInfo: '' },
+            classes: [],
+            subjects: [],
+            teachers: [],
+            schedule: [],
+            groupingOptions: {
+                minimizeMovement: false,
+                clusterLessons: true,
+                distributionType: 'consecutive',
+                doubleLessons: 'allowed',
+                maxWindows: 0,
+                syncLunch: true
+            },
+            fixedLessons: []
+        };
+
+        const chain = {
+            update: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+                data: { version: 5, data: { institution: {} } },
+                error: null
+            }),
+            maybeSingle: vi.fn()
+        };
+
+        mockFrom.mockImplementation((table: string) => table === 'schedules' ? chain : {});
+
+        await expect(scheduleService.saveSchedule(inputData)).rejects.toThrow(/CONFLICT/);
+        expect(chain.update).not.toHaveBeenCalled();
     });
 
     it('getScheduleSolution: deve invocar RPC get_schedule_solution para resgate seguro da grade', async () => {

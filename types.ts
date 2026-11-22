@@ -103,6 +103,8 @@ export interface SetupData {
   id?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Versão otimista da linha em `schedules` (OCC). */
+  version?: number;
   status?: string;
   currentStep?: number;
   institution: Institution;

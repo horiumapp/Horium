@@ -75,14 +75,14 @@ function makeSetup(overrides: Record<string, unknown> = {}): SetupData {
 }
 
 describe('Soft constraints (qualidade sem quebrar hard)', () => {
-  it('hard constraints continuam válidas com soft ligadas', () => {
-    const result = runGeneratorEngine(makeSetup());
+  it('hard constraints continuam válidas com soft ligadas', async () => {
+    const result = await runGeneratorEngine(makeSetup());
     assertNoDoubleBooking(result.fixedLessons);
     expect(result.failures.length).toBe(0);
     expect(result.fixedLessons.length).toBe(4);
   });
 
-  it('prefere slots D e evita IN quando há alternativa', () => {
+  it('prefere slots D e evita IN quando há alternativa', async () => {
     const availability: Record<string, 'D' | 'IN' | 'ND'> = {};
     // Segunda: slots 0-1 = D, 2-4 = IN. Outros dias todos ND.
     for (let d = 0; d < 5; d++) {
@@ -93,7 +93,7 @@ describe('Soft constraints (qualidade sem quebrar hard)', () => {
       }
     }
 
-    const result = runGeneratorEngine(makeSetup({
+    const result = await runGeneratorEngine(makeSetup({
       teachers: [
         {
           id: 't1',
@@ -126,7 +126,7 @@ describe('Soft constraints (qualidade sem quebrar hard)', () => {
     assertNoDoubleBooking(result.fixedLessons);
   });
 
-  it('ainda usa IN se for a única forma de completar a carga (hard > soft)', () => {
+  it('ainda usa IN se for a única forma de completar a carga (hard > soft)', async () => {
     const availability: Record<string, 'D' | 'IN' | 'ND'> = {};
     for (let d = 0; d < 5; d++) {
       for (let s = 0; s < 5; s++) {
@@ -137,7 +137,7 @@ describe('Soft constraints (qualidade sem quebrar hard)', () => {
       }
     }
 
-    const result = runGeneratorEngine(makeSetup({
+    const result = await runGeneratorEngine(makeSetup({
       teachers: [
         {
           id: 't1',
@@ -169,8 +169,8 @@ describe('Soft constraints (qualidade sem quebrar hard)', () => {
     assertNoDoubleBooking(result.fixedLessons);
   });
 
-  it('distribui matéria em múltiplos dias no modo consecutive', () => {
-    const result = runGeneratorEngine(makeSetup({
+  it('distribui matéria em múltiplos dias no modo consecutive', async () => {
+    const result = await runGeneratorEngine(makeSetup({
       classes: [
         {
           id: 'c1',

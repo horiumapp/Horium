@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "services/enginePreflight.ts",
+    "services/timetableGenerator.ts",
+    "services/scheduleService.ts",
+    "utils/scheduleUtils.ts",
+    "types.ts"
+  ]
+}

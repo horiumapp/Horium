@@ -75,9 +75,10 @@ const App: React.FC = () => {
     // Defesa de paywall: grades sem licença aprovada não persistem a solução (fixedLessons) no navegador
     try {
       const isActuallyLicensed = setupData.isLicensed || activeLicenseStatus === 'Aprovado';
-      const draftToSave = isActuallyLicensed
-        ? setupData
-        : { ...setupData, fixedLessons: [] };
+      const draftToSave = {
+        ...(isActuallyLicensed ? setupData : { ...setupData, fixedLessons: [] }),
+        _draftSavedAt: new Date().toISOString(),
+      };
       localStorage.setItem(`horium_draft_${setupData.id}`, JSON.stringify(draftToSave));
     } catch (e) {
       console.warn('Erro ao salvar rascunho local:', e);
@@ -101,24 +102,48 @@ const App: React.FC = () => {
           try {
             setIsSaving(true);
             setSaveError(null);
-            const saved = await scheduleService.saveSchedule(snapshot);
+            let saved = null as Awaited<ReturnType<typeof scheduleService.saveSchedule>> | null;
+            let lastErr: unknown = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                saved = await scheduleService.saveSchedule(snapshot);
+                lastErr = null;
+                break;
+              } catch (err) {
+                lastErr = err;
+                const msg = err instanceof Error ? err.message : '';
+                if (msg.startsWith('CONFLICT:')) break;
+                if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+              }
+            }
+            if (lastErr) throw lastErr;
+            if (!saved) return;
 
             if (currentSeq !== latestSaveSeq.current) return;
             lastSavedJson.current = JSON.stringify(snapshot);
-            setSchedules(prev => prev.map(s => s.id === saved.id ? {
-              ...saved,
+            setSetupData(prev => prev.id === saved!.id ? {
+              ...prev,
+              version: saved!.version,
+              updatedAt: saved!.updatedAt,
+            } : prev);
+            setSchedules(prev => prev.map(s => s.id === saved!.id ? {
+              ...saved!,
               institution: {
-                ...saved.institution,
-                logo: saved.institution?.logo ?? snapshot.institution?.logo ?? null
+                ...saved!.institution,
+                logo: saved!.institution?.logo ?? snapshot.institution?.logo ?? null
               }
             } : s));
+            try { localStorage.removeItem(`horium_draft_${saved.id}`); } catch { /* ignore */ }
             console.log('Auto-save successful');
-          } catch (err: any) {
+          } catch (err: unknown) {
             if (currentSeq === latestSaveSeq.current) {
               console.error('Auto-save failed:', err);
               if (session && currentView !== AppView.LOGIN) {
+                const msg = err instanceof Error ? err.message : '';
                 setSaveError(
-                  err?.message?.includes('audit_logs')
+                  msg.startsWith('CONFLICT:')
+                    ? 'A grade foi alterada em outra aba. Recarregue para não sobrescrever dados mais recentes.'
+                    : msg.includes('audit_logs')
                     ? 'Erro no Supabase (tabela audit_logs ausente). Seus dados estão preservados localmente.'
                     : 'Erro ao salvar automaticamente. Verifique sua conexão.'
                 );
@@ -206,17 +231,26 @@ const App: React.FC = () => {
                 console.warn('Erro ao recuperar rascunho local:', e);
               }
 
-              let finalSchedule = draftData || lastSchedule;
+              let finalSchedule = lastSchedule || draftData;
               if (draftData && lastSchedule) {
-                const draftHasLogo = Object.prototype.hasOwnProperty.call(draftData.institution || {}, 'logo');
-                finalSchedule = {
-                  ...draftData,
-                  institution: {
-                    ...lastSchedule.institution,
-                    ...draftData.institution,
-                    logo: draftHasLogo ? draftData.institution.logo : lastSchedule.institution?.logo
-                  }
-                };
+                const draftTs = Date.parse(draftData.updatedAt || draftData._draftSavedAt || '') || 0;
+                const serverTs = Date.parse(lastSchedule.updatedAt || lastSchedule.createdAt || '') || 0;
+                const draftIsFresher = draftTs > serverTs;
+                if (draftIsFresher) {
+                  const draftHasLogo = Object.prototype.hasOwnProperty.call(draftData.institution || {}, 'logo');
+                  finalSchedule = {
+                    ...draftData,
+                    version: lastSchedule.version,
+                    updatedAt: lastSchedule.updatedAt,
+                    institution: {
+                      ...lastSchedule.institution,
+                      ...draftData.institution,
+                      logo: draftHasLogo ? draftData.institution.logo : lastSchedule.institution?.logo
+                    }
+                  };
+                } else {
+                  finalSchedule = lastSchedule;
+                }
               }
               if (finalSchedule) {
                 // Se o servidor indicar que a grade NÃO é licenciada e o usuário não é admin, impede que um rascunho local
@@ -366,6 +400,15 @@ const App: React.FC = () => {
   };
 
   const generationAbortRef = React.useRef<AbortController | null>(null);
+  const generationRunIdRef = React.useRef(0);
+
+  React.useEffect(() => {
+    return () => {
+      generationAbortRef.current?.abort();
+      generationAbortRef.current = null;
+      generationRunIdRef.current += 1;
+    };
+  }, []);
 
   const handleSetupComplete = async () => {
     audio.playClick();
@@ -373,6 +416,7 @@ const App: React.FC = () => {
     setGenerationProgress(0);
     setGenerationMessage('Iniciando motor de IA...');
 
+    const runId = ++generationRunIdRef.current;
     const abortController = new AbortController();
     generationAbortRef.current?.abort();
     generationAbortRef.current = abortController;
@@ -389,11 +433,12 @@ const App: React.FC = () => {
       };
 
       const result = await generateTimetable(dataToGenerate, (progress, message) => {
+        if (runId !== generationRunIdRef.current || abortController.signal.aborted) return;
         setGenerationProgress(progress);
         setGenerationMessage(message);
       }, { signal: abortController.signal });
 
-      if (abortController.signal.aborted) return;
+      if (abortController.signal.aborted || runId !== generationRunIdRef.current) return;
 
       // We only update the data here. The actual transition to the RESULT view
       // and the "playSuccess" audio will happen when the user clicks the 
@@ -422,6 +467,7 @@ const App: React.FC = () => {
     audio.playSuccess();
     try {
       setIsSaving(true);
+      latestSaveSeq.current += 1; // invalida autosave em voo com snapshot antigo
       const finalData = { ...setupData, status: 'Finalizado' };
       const saved = await scheduleService.saveSchedule(finalData);
       setSchedules(prev => prev.map(s => s.id === saved.id ? saved : s));

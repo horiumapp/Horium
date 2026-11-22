@@ -9,8 +9,8 @@ export type GenerateTimetableOptions = {
 };
 
 /**
- * Gera a grade. Preferencialmente em Web Worker; fallback na main thread.
- * Aceita AbortSignal para cancelar (terminate do worker / abort do fallback).
+ * Gera a grade. Preferencialmente em Web Worker; fallback cooperativo na main thread.
+ * Aceita AbortSignal para cancelar (terminate do worker / abort cooperativo do fallback).
  */
 export const generateTimetable = async (
     data: SetupData,
@@ -68,8 +68,10 @@ export const generateTimetable = async (
                 signal?.addEventListener('abort', onAbort, { once: true });
 
                 worker.onmessage = (e: MessageEvent) => {
+                    if (isResolved) return;
                     const msg = e.data;
                     if (msg.type === 'PROGRESS') {
+                        if (signal?.aborted) return;
                         if (onProgress) onProgress(msg.progress, msg.message);
                     } else if (msg.type === 'SUCCESS') {
                         finish(() => resolve(msg.result));
@@ -99,9 +101,9 @@ export const generateTimetable = async (
         }
     }
 
-    // Fallback in-thread com yield para não congelar o paint do React
+    // Fallback cooperativo: yield periódico para o AbortSignal poder cancelar sem congelar a UI
     throwIfAborted();
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 0));
     throwIfAborted();
-    return runGeneratorEngine(normalizedData, onProgress);
+    return runGeneratorEngine(normalizedData, onProgress, { signal, yieldEvery: 2 });
 };

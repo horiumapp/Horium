@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runGeneratorEngine } from '../timetableWorker';
 
 describe('runGeneratorEngine benchmark', () => {
-    it('runs with 4 classes and 5 teachers', () => {
+    it('runs with 4 classes and 5 teachers', async () => {
         const dummyData: any = {
             classes: [
                 { id: 'c1', name: '6A', lessonsPerSubject: { 's1': 4, 's2': 4, 's3': 4, 's4': 4, 's5': 4 } },
@@ -31,7 +31,7 @@ describe('runGeneratorEngine benchmark', () => {
         };
 
         const startTime = Date.now();
-        const res = runGeneratorEngine(dummyData, (p, m) => {
+        const res = await runGeneratorEngine(dummyData, (p, m) => {
             console.log(`[TEST] Progress: ${p}% - ${m} (${Date.now() - startTime}ms)`);
         });
         const elapsed = Date.now() - startTime;
