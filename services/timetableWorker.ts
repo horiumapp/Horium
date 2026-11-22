@@ -1,5 +1,6 @@
 import { SetupData, FixedLesson, SchedulingFailure, AvailabilityStatus } from '../types';
 import { ensureScheduleSlots } from '../utils/scheduleUtils';
+import { runPreflightFeasibility } from './enginePreflight';
 
 export interface GroupingRule {
     maxDaily: number;
@@ -165,6 +166,21 @@ export function runGeneratorEngine(
     onProgress?: (progress: number, message: string) => void
 ): { fixedLessons: FixedLesson[]; failures: SchedulingFailure[] } {
     const data = ensureScheduleSlots(rawSetupData);
+
+    // Pré-checagem barata: só aborta cedo em impossibilidade de capacidade (evita ~15s inúteis).
+    // NO_TEACHER sozinho não aborta — o motor ainda pode montar o restante da grade.
+    if (onProgress) onProgress(3, 'Verificando viabilidade das restrições...');
+    const preflight = runPreflightFeasibility(data);
+    const capacityBlocked = preflight.failures.some(f =>
+        f.reason === 'CLASS_LIMIT' || f.reason === 'TEACHER_LIMIT' || f.reason === 'NO_AVAILABILITY'
+    );
+    if (capacityBlocked) {
+        if (onProgress) onProgress(100, 'Restrições impossíveis detectadas antes da geração.');
+        return {
+            fixedLessons: preflight.pinnedLessons,
+            failures: preflight.failures,
+        };
+    }
 
     const originalDays = (data.weekConfig?.activeDays && data.weekConfig.activeDays.length > 0)
         ? data.weekConfig.activeDays
