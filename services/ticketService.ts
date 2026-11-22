@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { SAFE_STORAGE_PATH_REGEX, getSafeHttpsUrl } from './adminLicenseService';
-import { isSupabaseStorageHost, receiptContentType, receiptFileProblem } from '../utils/safeMedia';
+import { isSupabaseStorageHost, receiptContentType, receiptFileProblemAsync } from '../utils/safeMedia';
 
 export interface TicketData {
     id?: string;
@@ -24,7 +24,7 @@ export const ticketService = {
         let storedPath = '';
 
         if (imageFile) {
-            const fileProblem = receiptFileProblem(imageFile, 'anexo');
+            const fileProblem = await receiptFileProblemAsync(imageFile, 'anexo');
             if (fileProblem) throw new Error(fileProblem);
 
             const rawExt = (imageFile.name.split('.').pop() || '').toLowerCase();

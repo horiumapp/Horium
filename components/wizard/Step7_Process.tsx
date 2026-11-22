@@ -42,13 +42,18 @@ export const Step7Process: React.FC<Step7ProcessProps> = ({ progress, message, o
                         <div className="h-full rounded-full bg-primary transition-all duration-300 shadow-lg shadow-primary/40" style={{ width: `${progress}%` }}></div>
                     </div>
 
+                    <p className="text-center text-[11px] text-gray-500 dark:text-gray-400">
+                        O processamento costuma terminar em até 45 segundos.
+                    </p>
+
                     {onBack && (
-                        <div className="text-center pt-4">
+                        <div className="text-center pt-2">
                             <button
+                                type="button"
                                 onClick={onBack}
                                 className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline font-semibold transition-colors"
                             >
-                                Voltar para as Opções
+                                Cancelar geração e voltar
                             </button>
                         </div>
                     )}

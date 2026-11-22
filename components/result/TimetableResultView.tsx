@@ -227,23 +227,27 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
         switch (failure.reason) {
             case 'TEACHER_LIMIT':
                 explanation = explanation || `O professor ${teacher?.name} atingiu o limite de ${slotsPerDay} aulas em um único dia.`;
-                suggestion = "Tente aumentar o limite diário de aulas do professor ou reduzir sua carga horária total.";
+                suggestion = failure.suggestions?.[0] || "Tente aumentar o limite diário de aulas do professor ou reduzir sua carga horária total.";
                 break;
             case 'NO_AVAILABILITY':
                 explanation = explanation || `Não há horários livres que coincidam entre a turma e o professor ${teacher?.name}.`;
-                suggestion = "Revise a grade de disponibilidade do professor e os horários de início da turma.";
+                suggestion = failure.suggestions?.[0] || "Revise a grade de disponibilidade do professor e os horários de início da turma.";
                 break;
             case 'CLASS_LIMIT':
                 explanation = explanation || "A turma atingiu o limite máximo de aulas desta matéria no mesmo dia.";
-                suggestion = "Verifique se a carga horária semanal não ultrapassa a capacidade de dias da semana.";
+                suggestion = failure.suggestions?.[0] || "Verifique se a carga horária semanal não ultrapassa a capacidade de dias da semana.";
                 break;
             case 'CONFLICT':
                 explanation = explanation || "O professor já possui outra aula alocada neste mesmo horário.";
-                suggestion = "Tente redistribuir as turmas ou verificar a carga horária do professor.";
+                suggestion = failure.suggestions?.[0] || "Tente redistribuir as turmas ou verificar a carga horária do professor.";
+                break;
+            case 'NO_TEACHER':
+                explanation = explanation || `Não há professor elegível para esta disciplina na turma ${classroom?.name}.`;
+                suggestion = failure.suggestions?.[0] || "Atribua um professor como OBRIGATORIAMENTE ou PODERÁ para esta disciplina.";
                 break;
             default:
                 explanation = explanation || "Ocorreu um conflito inesperado de horários.";
-                suggestion = "Tente regerar a grade para buscar uma nova combinação aleatória.";
+                suggestion = failure.suggestions?.[0] || "Tente regerar a grade para buscar uma nova combinação aleatória.";
         }
 
         return { title, explanation, suggestion };
@@ -344,11 +348,18 @@ export const TimetableResultView: React.FC<TimetableResultViewProps> = ({
                                         ? 'limite de aulas da turma'
                                         : failure.reason === 'CONFLICT'
                                             ? 'choque de horário'
-                                            : 'sem horário disponível';
+                                            : failure.reason === 'NO_TEACHER'
+                                                ? 'sem professor elegível'
+                                                : 'sem horário disponível';
                                 return (
                                     <li key={`${failure.classId}-${failure.subjectId}-${index}`} className="text-[11px] text-amber-900 dark:text-amber-100">
                                         <strong>{className}</strong> · {subjectName} · {teacherName}: {reasonLabel}
                                         {failure.details ? `. ${failure.details}` : ''}
+                                        {failure.suggestions?.length ? (
+                                            <span className="block text-amber-700 dark:text-amber-200/90 mt-0.5">
+                                                Sugestão: {failure.suggestions[0]}
+                                            </span>
+                                        ) : null}
                                     </li>
                                 );
                             })}

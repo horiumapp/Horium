@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { isSupabaseStorageHost, receiptFileProblem, safeInstitutionLogo } from '../safeMedia';
+import { isSupabaseStorageHost, receiptFileProblem, receiptFileProblemAsync, safeInstitutionLogo } from '../safeMedia';
 
-const file = (name: string, type: string, size = 1024) => new File([new Uint8Array(size)], name, { type });
+const file = (name: string, type: string, size = 1024, content?: Uint8Array) =>
+  new File([content || new Uint8Array(size)], name, { type });
 
 describe('safeMedia', () => {
     it('aceita comprovante png, jpg, webp e pdf dentro do limite', () => {
@@ -28,5 +29,12 @@ describe('safeMedia', () => {
         expect(isSupabaseStorageHost('https://abcd.supabase.co/storage/v1/object/sign/receipts/a.pdf?token=1')).toBe(true);
         expect(isSupabaseStorageHost('https://evil.example/storage/v1/object/sign/receipts/a.pdf')).toBe(false);
         expect(isSupabaseStorageHost('https://supabase.co.evil.example/a.pdf')).toBe(false);
+    });
+
+    it('receiptFileProblemAsync valida magic bytes reais', async () => {
+        const png = file('pix.png', 'image/png', 16, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0]));
+        const fakePng = file('pix.png', 'image/png', 16, new Uint8Array(16).fill(0));
+        expect(await receiptFileProblemAsync(png)).toBeNull();
+        expect(await receiptFileProblemAsync(fakePng)).toMatch(/não corresponde/);
     });
 });

@@ -50,7 +50,7 @@ const ProcessingPage: React.FC<ProcessingPageProps> = ({ onComplete, isMuted = f
           </div>
           <div className="flex items-center gap-2 text-[#617289] dark:text-gray-400 text-sm">
             <span className="material-symbols-outlined text-sm">info</span>
-            <p>Isso pode levar alguns minutos. Por favor, não feche o navegador.</p>
+            <p>Isso costuma levar até 45 segundos. Por favor, não feche o navegador.</p>
           </div>
         </div>
         <div className="w-full max-w-[520px]">

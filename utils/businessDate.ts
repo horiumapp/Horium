@@ -16,15 +16,18 @@ export function businessToday(): string {
 
 /**
  * Soma meses a uma data civil YYYY-MM-DD preservando o calendário (sem UTC drift).
+ * Dias inválidos (ex.: 31/jan + 1 mês) são clampados no último dia do mês destino.
  */
 export function addBusinessMonths(isoDate: string, months: number): string {
   const [y, m, d] = isoDate.split('-').map(Number);
-  const base = new Date(Date.UTC(y, m - 1, d));
-  base.setUTCMonth(base.getUTCMonth() + months);
-  const yy = base.getUTCFullYear();
-  const mm = String(base.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(base.getUTCDate()).padStart(2, '0');
-  return `${yy}-${mm}-${dd}`;
+  const targetMonthIndex = (m - 1) + months;
+  const targetYear = y + Math.floor(targetMonthIndex / 12);
+  const normalizedMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+  const day = Math.min(d, lastDay);
+  const mm = String(normalizedMonth + 1).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${targetYear}-${mm}-${dd}`;
 }
 
 /** Infere duração do plano a partir do preço unitário oficial (R$ 15 / 25 / 50). */

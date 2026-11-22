@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button';
 import { supabase } from '../services/supabaseClient';
 import { pricingService, PLAN_OPTIONS, PlanDuration } from '../services/pricingService';
 import { toPublicError } from '../utils/publicError';
-import { receiptContentType, receiptFileProblem } from '../utils/safeMedia';
+import { receiptContentType, receiptFileProblem, receiptFileProblemAsync } from '../utils/safeMedia';
 
 const DURATION_OPTIONS = PLAN_OPTIONS;
 const FULL_PRICE_TABLE = pricingService.generatePriceTable();
@@ -102,7 +102,7 @@ const PlansPage: React.FC<PlansPageProps> = ({
         return;
       }
 
-      const receiptProblem = receiptFileProblem(receiptFile);
+      const receiptProblem = await receiptFileProblemAsync(receiptFile);
       if (receiptProblem) {
         alert(receiptProblem);
         setPaymentStatus('upload_receipt');

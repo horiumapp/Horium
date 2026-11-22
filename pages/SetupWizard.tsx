@@ -28,6 +28,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
   const [genProgress, setGenProgress] = useState(0);
   const [genMessage, setGenMessage] = useState('');
   const isProcessingRef = React.useRef(false);
+  const generationAbortRef = React.useRef<AbortController | null>(null);
+  const generationRunIdRef = React.useRef(0);
 
   // Sync local step with prop data
   React.useEffect(() => {
@@ -140,6 +142,16 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
     handleStepChange(Math.max(1, step - 1));
   };
 
+  const cancelGeneration = () => {
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = null;
+    generationRunIdRef.current += 1;
+    isProcessingRef.current = false;
+    setGenProgress(0);
+    setGenMessage('');
+    handleStepChange(6);
+  };
+
   const handleRegenerateIntelligence = async () => {
     if (isProcessingRef.current) return;
 
@@ -149,6 +161,11 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
       onLicenseNeeded?.();
       return;
     }
+
+    const runId = ++generationRunIdRef.current;
+    const abortController = new AbortController();
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = abortController;
 
     try {
       isProcessingRef.current = true;
@@ -170,9 +187,12 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
       };
 
       const result = await generateTimetable(resultData, (p, m) => {
+        if (runId !== generationRunIdRef.current) return;
         setGenProgress(p);
         setGenMessage(m);
-      });
+      }, { signal: abortController.signal });
+
+      if (runId !== generationRunIdRef.current || abortController.signal.aborted) return;
 
       const finalData = {
         ...resultData,
@@ -184,6 +204,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
       // Salva os dados no banco
       await scheduleService.saveSchedule(finalData);
 
+      if (runId !== generationRunIdRef.current) return;
+
       setData(prev => ({
         ...prev,
         fixedLessons: result.fixedLessons,
@@ -193,12 +215,16 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
 
       audio.playSuccess();
       handleStepChange(8);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || runId !== generationRunIdRef.current) return;
       console.error('Erro na geração de horários:', err);
       alert('Ocorreu um erro ao gerar os horários. Tente novamente.');
       handleStepChange(6);
     } finally {
-      isProcessingRef.current = false;
+      if (runId === generationRunIdRef.current) {
+        isProcessingRef.current = false;
+        generationAbortRef.current = null;
+      }
     }
   };
 
@@ -282,7 +308,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ data, setData, activeLicenseS
           <Step7Process
             progress={genProgress}
             message={genMessage}
-            onBack={() => handleStepChange(6)}
+            onBack={cancelGeneration}
           />
         );
       case 8:

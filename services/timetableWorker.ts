@@ -1850,17 +1850,28 @@ export function runGeneratorEngine(
         };
 
         const rematchClass = (classId: string): boolean => {
+            const pinnedForClass = currentFixed.filter(lesson =>
+                lesson.classId === classId &&
+                pinnedSlots.has(`${lesson.classId}|${lesson.day}|${lesson.slotIndex}`)
+            );
             const needed: { teacherId: string; subjectId: string }[] = [];
             for (const asg of assignments) {
                 if (asg.classId !== classId || asg.lessons <= 0) continue;
-                for (let n = 0; n < asg.lessons; n++) needed.push({ teacherId: asg.teacherId, subjectId: asg.subjectId });
+                const alreadyPinned = pinnedForClass.filter(
+                    p => p.teacherId === asg.teacherId && p.subjectId === asg.subjectId
+                ).length;
+                for (let n = alreadyPinned; n < asg.lessons; n++) {
+                    needed.push({ teacherId: asg.teacherId, subjectId: asg.subjectId });
+                }
             }
             const ci = classIdx.get(classId);
-            if (ci === undefined || needed.length === 0) return false;
+            if (ci === undefined) return false;
+            if (needed.length === 0) return true;
             const spots: { day: string; di: number; slot: number }[] = [];
             for (let di = 0; di < nDays; di++) {
                 for (let slot = 0; slot < slotsPerDay; slot++) {
                     if (classNd[cOff(ci, di)] & (1 << slot)) continue;
+                    if (pinnedSlots.has(`${classId}|${originalDays[di]}|${slot}`)) continue;
                     spots.push({ day: originalDays[di], di, slot });
                 }
             }
@@ -1871,14 +1882,6 @@ export function runGeneratorEngine(
                 lesson.classId === classId &&
                 !pinnedSlots.has(`${lesson.classId}|${lesson.day}|${lesson.slotIndex}`)
             );
-            const pinnedCount = currentFixed.filter(lesson =>
-                lesson.classId === classId &&
-                pinnedSlots.has(`${lesson.classId}|${lesson.day}|${lesson.slotIndex}`)
-            ).length;
-            const unitsToPlace = Math.max(0, needed.length - pinnedCount);
-            if (spots.filter(s => !pinnedSlots.has(`${classId}|${s.day}|${s.slot}`)).length < unitsToPlace) {
-                return false;
-            }
             for (const lesson of removed) {
                 const idx = currentFixed.indexOf(lesson);
                 if (idx >= 0) currentFixed.splice(idx, 1);

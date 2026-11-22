@@ -381,7 +381,7 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         expect(schedules[0].fixedLessons).toEqual(approvedLessons);
     });
 
-    it('getSchedules: deve liberar a grade quando o administrador aprovou licença global/usuário (schedule_id nulo)', async () => {
+    it('getSchedules: licença legada (schedule_id nulo) só libera se o cupo de turmas cobrir a grade', async () => {
         const approvedLessons: FixedLesson[] = [
             { classId: 'c1', subjectId: 's1', teacherId: 't1', day: 'Segunda', slotIndex: 0 }
         ];
@@ -393,6 +393,7 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
             created_at: '2026-10-02T12:00:00Z',
             data: {
                 institution: { name: 'Centro Esperança' },
+                classes: [{ id: 'c1', name: '8A' }],
                 fixedLessons: approvedLessons
             }
         };
@@ -407,7 +408,7 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         const mockLicensesChain = {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockResolvedValue({
-                data: [{ schedule_id: null, payment_status: 'Aprovado', valid_until: '2027-04-02' }],
+                data: [{ schedule_id: null, payment_status: 'Aprovado', valid_until: '2027-04-02', classes_amount: 1 }],
                 error: null
             })
         };
@@ -424,6 +425,45 @@ describe('scheduleService - Paywall e Segregação de fixedLessons', () => {
         expect(schedules[0].isLicensed).toBe(true);
         expect(schedules[0].licenseStatus).toBe('Aprovado');
         expect(schedules[0].fixedLessons).toEqual(approvedLessons);
+    });
+
+    it('getSchedules: licença legada com cupo insuficiente não libera a grade', async () => {
+        const rawSchedule = {
+            id: 'schedule-many-classes',
+            user_id: 'test-user-id',
+            is_licensed: false,
+            created_at: '2026-10-02T12:00:00Z',
+            data: {
+                institution: { name: 'Centro Esperança' },
+                classes: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }],
+                fixedLessons: []
+            }
+        };
+
+        const mockSchedulesChain = {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            is: vi.fn().mockReturnThis(),
+            order: vi.fn().mockResolvedValue({ data: [rawSchedule], error: null })
+        };
+
+        const mockLicensesChain = {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockResolvedValue({
+                data: [{ schedule_id: null, payment_status: 'Aprovado', valid_until: '2027-04-02', classes_amount: 1 }],
+                error: null
+            })
+        };
+
+        mockFrom.mockImplementation((table: string) => {
+            if (table === 'schedules') return mockSchedulesChain;
+            if (table === 'licenses') return mockLicensesChain;
+            return {};
+        });
+
+        const schedules = await scheduleService.getSchedules();
+        expect(schedules[0].isLicensed).toBe(false);
+        expect(schedules[0].fixedLessons).toEqual([]);
     });
 
     it('getSchedules: deve manter grade bloqueada enquanto aguarda aprovação do administrador', async () => {
