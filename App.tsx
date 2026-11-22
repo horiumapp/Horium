@@ -365,11 +365,17 @@ const App: React.FC = () => {
     setView(AppView.LICENSES);
   };
 
+  const generationAbortRef = React.useRef<AbortController | null>(null);
+
   const handleSetupComplete = async () => {
     audio.playClick();
     setView(AppView.PROCESSING);
     setGenerationProgress(0);
     setGenerationMessage('Iniciando motor de IA...');
+
+    const abortController = new AbortController();
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = abortController;
 
     try {
       const manualFixed = (setupData.pinnedLessons && setupData.pinnedLessons.length > 0)
@@ -385,7 +391,9 @@ const App: React.FC = () => {
       const result = await generateTimetable(dataToGenerate, (progress, message) => {
         setGenerationProgress(progress);
         setGenerationMessage(message);
-      });
+      }, { signal: abortController.signal });
+
+      if (abortController.signal.aborted) return;
 
       // We only update the data here. The actual transition to the RESULT view
       // and the "playSuccess" audio will happen when the user clicks the 
@@ -396,10 +404,15 @@ const App: React.FC = () => {
         fixedLessons: result.fixedLessons,
         failures: result.failures
       }));
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
       console.error('Erro na geração de horários:', err);
       alert('Ocorreu um erro ao gerar os horários. Tente novamente.');
       setView(AppView.SETUP);
+    } finally {
+      if (generationAbortRef.current === abortController) {
+        generationAbortRef.current = null;
+      }
     }
   };
 
