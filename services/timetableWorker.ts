@@ -1,4 +1,4 @@
-import { SetupData, FixedLesson, SchedulingFailure } from '../types';
+import { SetupData, FixedLesson, SchedulingFailure, AvailabilityStatus } from '../types';
 import { ensureScheduleSlots } from '../utils/scheduleUtils';
 
 export interface GroupingRule {
@@ -268,68 +268,136 @@ export function runGeneratorEngine(
         return rule;
     };
 
+    // Soft preferences (nunca bloqueiam alocação; só desempatam tentativas).
+    const softOpts = data.groupingOptions || {
+        minimizeMovement: true,
+        clusterLessons: true,
+        distributionType: 'consecutive' as const,
+        doubleLessons: 'allowed' as const,
+        maxWindows: 2,
+        syncLunch: false,
+    };
+    const maxWindowsSoft = Number.isFinite(softOpts.maxWindows) ? Math.max(0, softOpts.maxWindows) : 2;
+
+    const teacherAvailabilityAt = (teacherId: string, day: string, slotIndex: number): AvailabilityStatus | undefined => {
+        const di = dayIndex.get(day);
+        if (di === undefined) return undefined;
+        return teacherById.get(teacherId)?.availability?.[`${di}-${slotIndex}`];
+    };
+
     const calculateScore = (fixed: FixedLesson[], fails: SchedulingFailure[]) => {
-        // Falhas não alocadas têm penalidade massiva: a prioridade absoluta é garantir 100% da carga horária!
-        let score = (data.classes.length * 100) - (fails.reduce((acc, f) => acc + (data.classes.find(c => c.id === f.classId)?.lessonsPerSubject[f.subjectId] || 1), 0) * 100000);
+        // Hard: falhas não alocadas. Cada failure já é 1 aula; não multiplicar pela carga semanal.
+        let score = (data.classes.length * 100) - (fails.length * 100000);
         score += fixed.length * 500;
 
         const teacherLessons: Record<string, FixedLesson[]> = {};
-        const classLessons: Record<string, FixedLesson[]> = {};
+        const classDayLessons: Record<string, FixedLesson[]> = {};
+        const classSubjectDayLessons: Record<string, FixedLesson[]> = {};
         const teacherClassDayLessons: Record<string, FixedLesson[]> = {};
+        const teacherDayLoad: Record<string, number[]> = {};
+        const classDayLoad: Record<string, number[]> = {};
 
         fixed.forEach(f => {
             const tKey = `${f.teacherId}|${f.day}`;
-            const cKey = `${f.classId}|${f.day}|${f.subjectId}`;
+            const cdKey = `${f.classId}|${f.day}`;
+            const csdKey = `${f.classId}|${f.day}|${f.subjectId}`;
             const tcKey = `${f.teacherId}|${f.classId}|${f.day}`;
 
             if (!teacherLessons[tKey]) teacherLessons[tKey] = [];
-            if (!classLessons[cKey]) classLessons[cKey] = [];
+            if (!classDayLessons[cdKey]) classDayLessons[cdKey] = [];
+            if (!classSubjectDayLessons[csdKey]) classSubjectDayLessons[csdKey] = [];
             if (!teacherClassDayLessons[tcKey]) teacherClassDayLessons[tcKey] = [];
 
             teacherLessons[tKey].push(f);
-            classLessons[cKey].push(f);
+            classDayLessons[cdKey].push(f);
+            classSubjectDayLessons[csdKey].push(f);
             teacherClassDayLessons[tcKey].push(f);
-        });
 
-        // Penalidade por janelas (gaps) nos professores
-        Object.values(teacherLessons).forEach(lessons => {
-            lessons.sort((a, b) => a.slotIndex - b.slotIndex);
-            for (let i = 1; i < lessons.length; i++) {
-                const gap = lessons[i].slotIndex - lessons[i - 1].slotIndex - 1;
-                if (gap > 0) score -= (gap * 400);
+            if (!teacherDayLoad[f.teacherId]) teacherDayLoad[f.teacherId] = Array(nDays).fill(0);
+            if (!classDayLoad[f.classId]) classDayLoad[f.classId] = Array(nDays).fill(0);
+            const di = dayIndex.get(f.day);
+            if (di !== undefined) {
+                teacherDayLoad[f.teacherId][di]++;
+                classDayLoad[f.classId][di]++;
+            }
+
+            // Soft: horários indesejados (IN) — disponíveis, mas preferimos evitar.
+            if (teacherAvailabilityAt(f.teacherId, f.day, f.slotIndex) === 'IN') {
+                score -= 350;
             }
         });
 
-        // Validação e penalização estrita de limites de agrupamento e tempos seguidos
-        Object.entries(classLessons).forEach(([cKey, lessons]) => {
+        // Soft: janelas (gaps) nos professores + respeito a maxWindows
+        Object.values(teacherLessons).forEach(lessons => {
+            lessons.sort((a, b) => a.slotIndex - b.slotIndex);
+            let windows = 0;
+            for (let i = 1; i < lessons.length; i++) {
+                const gap = lessons[i].slotIndex - lessons[i - 1].slotIndex - 1;
+                if (gap > 0) {
+                    windows += gap;
+                    score -= gap * 400;
+                }
+            }
+            if (windows > maxWindowsSoft) {
+                score -= (windows - maxWindowsSoft) * 600;
+            }
+        });
+
+        // Soft: buracos na grade da turma (janelas entre a primeira e a última aula do dia)
+        Object.values(classDayLessons).forEach(lessons => {
+            if (lessons.length < 2) return;
+            lessons.sort((a, b) => a.slotIndex - b.slotIndex);
+            for (let i = 1; i < lessons.length; i++) {
+                const gap = lessons[i].slotIndex - lessons[i - 1].slotIndex - 1;
+                if (gap > 0) score -= gap * 250;
+            }
+        });
+
+        // Soft: balancear carga ao longo da semana (turma e professor)
+        const penalizeImbalance = (loads: number[], weight: number) => {
+            const active = loads.filter(n => n > 0);
+            if (active.length < 2) return;
+            const max = Math.max(...loads);
+            const min = Math.min(...active);
+            if (max - min > 1) score -= (max - min - 1) * weight;
+        };
+        Object.values(teacherDayLoad).forEach(loads => penalizeImbalance(loads, 180));
+        Object.values(classDayLoad).forEach(loads => penalizeImbalance(loads, 220));
+
+        // Soft: sobrecarga consecutiva do professor (qualquer turma/disciplina)
+        Object.values(teacherLessons).forEach(lessons => {
+            const streak = getMaxConsecutiveStreak(lessons.map(l => l.slotIndex));
+            if (streak > 3) score -= (streak - 3) * 300;
+        });
+
+        // Agrupamento pedagógico (já tratado como hard na colocação; score só reforça ranking)
+        Object.entries(classSubjectDayLessons).forEach(([cKey, lessons]) => {
             if (lessons.length === 0) return;
             const [classId, , subjectId] = cKey.split('|');
             const rule = getEffectiveGroupingRule(lessons[0].teacherId, classId, subjectId);
 
-            // 1. Violação de limite diário da matéria na turma
             if (lessons.length > rule.maxDaily) {
                 score -= (lessons.length - rule.maxDaily) * 60000;
             }
 
             const streak = getMaxConsecutiveStreak(lessons.map(l => l.slotIndex));
 
-            // 2. Violação grave: Mais tempos seguidos do que o permitido
             if (streak > rule.maxConsecutive) {
                 score -= (streak - rule.maxConsecutive) * 80000;
             }
 
-            // 3. Violação de aulas intercaladas
             if (!rule.allowConsecutive && streak > 1) {
                 score -= streak * 50000;
             }
 
-            // 4. Bônus para agrupamento perfeito (aulas duplas quando permitidas)
-            if (rule.allowConsecutive && rule.maxConsecutive === 2 && lessons.length === 2 && streak === 2) {
+            // Soft/cluster: bônus para blocos consecutivos quando permitido
+            if (softOpts.clusterLessons !== false && rule.allowConsecutive && streak === lessons.length && lessons.length >= 2) {
+                score += 200 * lessons.length;
+            } else if (rule.allowConsecutive && rule.maxConsecutive === 2 && lessons.length === 2 && streak === 2) {
                 score += 500;
             }
         });
 
-        // Penalidade por professor ter mais de 2 tempos seguidos na mesma turma (a menos que a matéria permita mais)
         Object.entries(teacherClassDayLessons).forEach(([tcKey, lessons]) => {
             if (lessons.length > 2) {
                 const [teacherId, classId] = tcKey.split('|');
@@ -344,18 +412,40 @@ export function runGeneratorEngine(
             }
         });
 
-        // Penalidade por sair e voltar para a mesma sala no mesmo dia
+        // Soft: sair e voltar para a mesma sala no mesmo dia
         Object.values(teacherClassDayLessons).forEach(lessons => {
             if (lessons.length > 1) {
                 lessons.sort((a, b) => a.slotIndex - b.slotIndex);
                 for (let i = 1; i < lessons.length; i++) {
                     const gap = lessons[i].slotIndex - lessons[i - 1].slotIndex - 1;
                     if (gap > 0) {
-                        score -= (gap * 1500);
+                        score -= gap * (softOpts.minimizeMovement === false ? 800 : 1500);
                     }
                 }
             }
         });
+
+        // Soft: distribuição densa vs espalhada
+        if (softOpts.distributionType === 'dense') {
+            Object.values(classSubjectDayLessons).forEach(lessons => {
+                if (lessons.length >= 2) score += 80;
+            });
+        } else if (softOpts.distributionType === 'random') {
+            // leve ruído já vem da aleatorização das tentativas; não força padrão
+        } else {
+            // consecutive (default): favorece matéria espalhada em dias distintos
+            const subjectDays = new Map<string, Set<string>>();
+            fixed.forEach(f => {
+                const key = `${f.classId}|${f.subjectId}`;
+                if (!subjectDays.has(key)) subjectDays.set(key, new Set());
+                subjectDays.get(key)!.add(f.day);
+            });
+            subjectDays.forEach((daysUsed, key) => {
+                const [classId, subjectId] = key.split('|');
+                const total = classById.get(classId)?.lessonsPerSubject?.[subjectId] || 0;
+                if (total >= 3 && daysUsed.size >= Math.min(total, 3)) score += 120;
+            });
+        }
 
         return score;
     };
@@ -886,11 +976,19 @@ export function runGeneratorEngine(
 
         const orderedDays = (block: Block): number[] => {
             const ti = teacherIdx.get(block.assignment.teacherId);
+            const ci = classIdx.get(block.assignment.classId);
             const ranked: { di: number; score: number }[] = [];
             for (let di = 0; di < nDays; di++) {
                 let score = Math.random() * 0.8;
                 if (ti !== undefined && teacherMask[tOff(ti, di)]) score += 6;
-                if (subjectMask.get(`${block.assignment.classId}|${block.assignment.subjectId}|${di}`)) score -= 1.5;
+                const subjectDayMask = subjectMask.get(`${block.assignment.classId}|${block.assignment.subjectId}|${di}`) || 0;
+                if (subjectDayMask) {
+                    // consecutive/default: espalha matéria; dense: concentra no mesmo dia
+                    score += softOpts.distributionType === 'dense' ? 2.5 : -1.5;
+                }
+                // Soft balance: preferir dias com menos carga na turma/professor
+                if (ci !== undefined) score -= popcount(classMask[cOff(ci, di)]) * 0.35;
+                if (ti !== undefined) score -= popcount(teacherMask[tOff(ti, di)]) * 0.25;
                 ranked.push({ di, score });
             }
             ranked.sort((a, b) => b.score - a.score);
@@ -900,6 +998,7 @@ export function runGeneratorEngine(
         const orderedStarts = (block: Block, di: number): number[] => {
             const ti = teacherIdx.get(block.assignment.teacherId);
             const ci = classIdx.get(block.assignment.classId);
+            const teacher = teacherById.get(block.assignment.teacherId);
             const tMask = ti !== undefined ? teacherMask[tOff(ti, di)] : 0;
             const cMask = ci !== undefined ? classMask[cOff(ci, di)] : 0;
             let minS = 99;
@@ -917,6 +1016,24 @@ export function runGeneratorEngine(
                 let score = (touchesTeacher ? 2 : 0) + (touchesClass ? 1 : 0);
                 const end = start + block.size - 1;
                 if (tMask && start >= minS && end <= maxS) score += 4;
+
+                // Soft: preferir D; evitar IN; ND já é hard via teacherNd/fitsBlock
+                let inCount = 0;
+                for (let s = start; s <= end; s++) {
+                    const status = teacher?.availability?.[`${di}-${s}`];
+                    if (status === 'IN') inCount++;
+                    else if (status === 'D' || status === undefined) score += 0.35;
+                }
+                score -= inCount * 1.8;
+
+                // Soft: clusterLessons empurra bloco para colar no mesmo subject no dia
+                if (softOpts.clusterLessons !== false) {
+                    const subjectBit = subjectMask.get(`${block.assignment.classId}|${block.assignment.subjectId}|${di}`) || 0;
+                    if ((start > 0 && (subjectBit & (1 << (start - 1)))) || (subjectBit & (1 << (start + block.size)))) {
+                        score += 1.5;
+                    }
+                }
+
                 score -= start * 0.05;
                 score += Math.random() * 0.25;
                 ranked.push({ start, score });
