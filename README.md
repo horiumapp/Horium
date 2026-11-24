@@ -86,10 +86,11 @@ Em produção, aplique **apenas** o próximo arquivo em `db/migrations/`, na ord
 3. `0003_close_open_policies_and_migration_ledger.sql`
 4. `0004_audit_payload_license_revocation.sql`
 5. `0005_security_hardening.sql` ← bypass anônimo, grants, escopo de licença, storage DELETE
+6. `0006_schedules_version_occ.sql` ← coluna `schedules.version` para OCC / auto-save
 
 **Não** rode `schema.sql` inteiro de novo em um banco já existente.
 
-Após aplicar `0005`, confirme no SQL Editor:
+Após aplicar as migrations, confirme no SQL Editor:
 
 ```sql
 SELECT version FROM public.schema_migrations ORDER BY version;
@@ -121,7 +122,9 @@ O workflow `.github/workflows/ci.yml` executa:
 | Expiração “um dia antes” | Data em UTC no frontend antigo | Usar `businessToday()` / aplicar 0004+ |
 | Worker timeout | Restrições impossíveis / grade grande | Simplificar ND/aulas fixas; ver diagnósticos |
 | Upload de comprovante falha | MIME/magic inválido ou >5 MB | PNG/JPG/WEBP/PDF reais |
+| Auto-save falha (400 em `version=eq.…`) | Coluna `schedules.version` ausente | Aplicar `0006_schedules_version_occ.sql` |
 | Auto-save falha | Rede ou tabela `audit_logs` | Rascunho fica em `localStorage` (`horium_draft_*`) |
+| CSP bloqueia script / tema | Script inline sem hash atualizado | Usar `/theme-init.js` (sem inline) |
 
 ## Documentação adicional
 
