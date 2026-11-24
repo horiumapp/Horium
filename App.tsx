@@ -68,6 +68,27 @@ const App: React.FC = () => {
   const lastSavedJson = React.useRef('');
   setupDataRef.current = setupData;
 
+  /** Conteúdo relevante para dirty-check (ignora metadados de OCC/persistência). */
+  const stableSetupJson = (data: SetupData) => {
+    const { version: _v, updatedAt: _u, createdAt: _c, ...rest } = data;
+    return JSON.stringify(rest);
+  };
+
+  const markSetupAsSaved = (data: SetupData) => {
+    lastSavedJson.current = stableSetupJson(data);
+  };
+
+  const syncLocalScheduleVersion = (id: string, version?: number, updatedAt?: string) => {
+    if (typeof version !== 'number') return;
+    setSetupData(prev => {
+      if (prev.id !== id) return prev;
+      if (prev.version === version && prev.updatedAt === updatedAt) return prev;
+      const next = { ...prev, version, updatedAt };
+      setupDataRef.current = next;
+      return next;
+    });
+  };
+
   // Debounced Auto-save com proteção contra race conditions e backup local
   useEffect(() => {
     if (!setupData.id || loading || currentView === AppView.PROCESSING || currentView === AppView.LOGIN || !session) return;
@@ -90,7 +111,7 @@ const App: React.FC = () => {
       }
     }
 
-    const pendingJson = JSON.stringify(setupData);
+    const pendingJson = stableSetupJson(setupData);
     if (pendingJson === lastSavedJson.current) return;
 
     const currentSeq = ++latestSaveSeq.current;
@@ -99,13 +120,15 @@ const App: React.FC = () => {
         .catch(() => undefined)
         .then(async () => {
           if (currentSeq !== latestSaveSeq.current) return;
-          const snapshot = setupDataRef.current;
           try {
             setIsSaving(true);
             setSaveError(null);
             let saved = null as Awaited<ReturnType<typeof scheduleService.saveSchedule>> | null;
             let lastErr: unknown = null;
             for (let attempt = 0; attempt < 3; attempt++) {
+              // Sempre ler o ref no momento do save: a versão pode ter sido
+              // sincronizada por um save anterior ainda na cadeia.
+              const snapshot = setupDataRef.current;
               try {
                 saved = await scheduleService.saveSchedule(snapshot);
                 lastErr = null;
@@ -120,22 +143,25 @@ const App: React.FC = () => {
             if (lastErr) throw lastErr;
             if (!saved) return;
 
-            if (currentSeq !== latestSaveSeq.current) return;
-            lastSavedJson.current = JSON.stringify(snapshot);
-            setSetupData(prev => prev.id === saved!.id ? {
-              ...prev,
+            // Sempre sincroniza a versão local — mesmo se já houver um save mais novo
+            // na fila — para o próximo OCC não usar versão stale.
+            syncLocalScheduleVersion(saved.id!, saved.version, saved.updatedAt);
+            setSchedules(prev => prev.map(s => s.id === saved!.id ? {
+              ...s,
+              ...saved!,
               version: saved!.version,
               updatedAt: saved!.updatedAt,
-            } : prev);
-            setSchedules(prev => prev.map(s => s.id === saved!.id ? {
-              ...saved!,
               institution: {
                 ...saved!.institution,
-                logo: saved!.institution?.logo ?? snapshot.institution?.logo ?? null
+                logo: saved!.institution?.logo ?? setupDataRef.current.institution?.logo ?? null
               }
             } : s));
-            try { localStorage.removeItem(`horium_draft_${saved.id}`); } catch { /* ignore */ }
-            console.log('Auto-save successful');
+
+            if (currentSeq === latestSaveSeq.current) {
+              lastSavedJson.current = stableSetupJson(setupDataRef.current);
+              try { localStorage.removeItem(`horium_draft_${saved.id}`); } catch { /* ignore */ }
+              console.log('Auto-save successful');
+            }
           } catch (err: unknown) {
             if (currentSeq === latestSaveSeq.current) {
               console.error('Auto-save failed:', err);
@@ -253,7 +279,7 @@ const App: React.FC = () => {
                   finalSchedule = lastSchedule;
                 }
               }
-              if (finalSchedule) {
+                if (finalSchedule) {
                 // Se o servidor indicar que a grade NÃO é licenciada e o usuário não é admin, impede que um rascunho local
                 // reidrate fixedLessons ou force isLicensed como true
                 const isAdmin = await adminLicenseService.isCurrentUserAdmin().catch(() => false);
@@ -271,6 +297,9 @@ const App: React.FC = () => {
                     finalSchedule = { ...finalSchedule, fixedLessons: solution };
                   }
                 }
+                // Só marca limpo se não estamos reidratando um rascunho local mais novo.
+                const restoringDraft = !!(draftData && lastSchedule && (Date.parse(draftData.updatedAt || draftData._draftSavedAt || '') || 0) > (Date.parse(lastSchedule.updatedAt || lastSchedule.createdAt || '') || 0));
+                if (!restoringDraft) markSetupAsSaved(finalSchedule);
                 setSetupData(finalSchedule);
                 setView(savedView);
               } else {
@@ -387,6 +416,7 @@ const App: React.FC = () => {
       const newSchedule = { ...INITIAL_SETUP, createdAt: new Date().toISOString() };
       const saved = await scheduleService.saveSchedule(newSchedule);
       setSchedules(prev => [saved, ...prev]);
+      markSetupAsSaved(saved);
       setSetupData(saved);
       setView(AppView.SETUP);
     } catch (err) {
@@ -481,6 +511,7 @@ const App: React.FC = () => {
       const finalData = { ...setupData, status: 'Finalizado' };
       const saved = await scheduleService.saveSchedule(finalData);
       setSchedules(prev => prev.map(s => s.id === saved.id ? saved : s));
+      markSetupAsSaved(saved);
       setSetupData(saved);
 
       if (activeLicenseStatus !== 'Aprovado') {
@@ -507,6 +538,7 @@ const App: React.FC = () => {
       const newSchedule = { ...INITIAL_SETUP, createdAt: new Date().toISOString() };
       const saved = await scheduleService.saveSchedule(newSchedule);
       setSchedules(prev => [saved, ...prev]);
+      markSetupAsSaved(saved);
       setSetupData(saved);
       setView(AppView.SETUP);
     } catch (err) {
@@ -523,6 +555,7 @@ const App: React.FC = () => {
         next = { ...schedule, fixedLessons: solution };
       }
     }
+    markSetupAsSaved(next);
     setSetupData(next);
     setView(AppView.SETUP);
   };
@@ -568,6 +601,7 @@ const App: React.FC = () => {
   };
 
   const handleViewSolutions = (schedule: SetupData) => {
+    markSetupAsSaved(schedule);
     setSetupData(schedule);
     const isLicensed = schedule.isLicensed || activeLicenseStatus === 'Aprovado';
     if (!isLicensed) {
