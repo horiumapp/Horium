@@ -147,8 +147,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-900 dark:text-gray-100 bg-background-light dark:bg-background-dark transition-colors duration-300">
-      <header className="no-print sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl transition-colors dark:border-slate-800 dark:bg-[#101822]/90">
-        <div className="mx-auto flex min-h-[72px] w-full max-w-[1600px] items-center gap-5 px-4 sm:px-6 xl:px-8">
+      <header className="no-print sticky top-0 z-[70]">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl transition-colors dark:border-slate-800 dark:bg-[#101822]/90"
+        />
+        <div className="relative mx-auto flex min-h-[72px] w-full max-w-[1600px] items-center gap-5 px-4 sm:px-6 xl:px-8">
         <div
           className={`flex shrink-0 items-center gap-3 ${hideNav || currentView === AppView.LOGIN ? 'cursor-default' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
           onClick={hideNav || currentView === AppView.LOGIN ? undefined : () => setView(AppView.DASHBOARD)}
@@ -224,7 +228,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                 </button>
 
                 {/* Dropdown Card */}
-                <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 group-focus-within:scale-100 z-50">
+                <div className="invisible absolute right-0 top-full z-[80] pt-2 opacity-0 transition-all duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div className="w-56 origin-top-right scale-95 rounded-xl border border-gray-100 bg-white p-2 shadow-xl transition-transform duration-150 group-hover:scale-100 group-focus-within:scale-100 dark:border-gray-800 dark:bg-gray-900">
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-2">
                     <p className="text-sm font-bold truncate">Opções do Sistema</p>
                   </div>
@@ -246,6 +251,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     </div>
                   </button>
                 </div>
+                </div>
               </div>
               {/* Notification Dropdown */}
               <div className="relative group">
@@ -261,7 +267,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                 </button>
 
                 {/* Dropdown Card */}
-                <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-0 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 group-focus-within:scale-100 z-50 overflow-hidden">
+                <div className="invisible absolute right-0 top-full z-[80] pt-2 opacity-0 transition-all duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div className="w-80 max-w-[calc(100vw-1.5rem)] origin-top-right scale-95 overflow-hidden rounded-xl border border-gray-100 bg-white p-0 shadow-xl transition-transform duration-150 group-hover:scale-100 group-focus-within:scale-100 dark:border-gray-800 dark:bg-gray-900">
                   <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
                     <p className="text-sm font-bold">Notificações</p>
                     {unreadCount > 0 && (
@@ -310,6 +317,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     )}
                   </div>
                 </div>
+                </div>
               </div>
               <div className="group relative ml-1 border-l border-slate-200 pl-2 dark:border-slate-700">
                 <button type="button" aria-label={`Conta de ${userEmail}`} className="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-cyan-500 p-[2px] shadow-sm transition-shadow hover:shadow-md hover:shadow-primary/25">
@@ -322,7 +330,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                   />
                 </button>
 
-                <div className="invisible absolute right-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-1.5rem)] origin-top-right scale-95 rounded-2xl border border-slate-200 bg-white p-2 opacity-0 shadow-xl shadow-slate-900/10 transition-all group-hover:visible group-hover:scale-100 group-hover:opacity-100 group-focus-within:visible group-focus-within:scale-100 group-focus-within:opacity-100 dark:border-slate-700 dark:bg-slate-900">
+                <div className="invisible absolute right-0 top-full z-[80] pt-2 opacity-0 transition-all duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div className="w-64 max-w-[calc(100vw-1.5rem)] origin-top-right scale-95 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10 transition-transform duration-150 group-hover:scale-100 group-focus-within:scale-100 dark:border-slate-700 dark:bg-slate-900">
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-2">
                     <p className="text-sm font-bold truncate" title={userEmail}>{userEmail}</p>
                     <p className="text-xs text-gray-500 truncate">Sessão Ativa</p>
@@ -335,6 +344,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, hideNav
                     <span className="material-symbols-outlined text-[18px]">logout</span>
                     Sair da Conta
                   </button>
+                </div>
                 </div>
               </div>
             </div>

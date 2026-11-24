@@ -494,7 +494,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({ onBack }) => {
 
             {/* Approval Modal */}
             {selectedLicense && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95">
                         <div className="bg-green-600 p-5 text-white flex justify-between items-center">
                             <h2 className="text-xl font-bold flex items-center gap-2">
